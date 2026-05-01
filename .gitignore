@@ -1,0 +1,7 @@
+# Ignore in backend
+backend/node_modules/
+backend/.env
+
+# Ignore in frontend
+frontend/node_modules/
+frontend/.env
