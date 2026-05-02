@@ -67,8 +67,14 @@ class FeesService {
       structure = await FeeStructure.findOne({ classId, academicYearId }).sort({ createdAt: -1 });
     }
     if (!structure) {
-      // No fee structure — create a zero invoice (will be updated when structure added)
-      structure = { _id: null, totalAmount: 0, installments: [] };
+      throw new AppError(
+        'Fee structure not found for this class and academic year. Please create it in Setup → Fee Setup.',
+        400
+      );
+
+    }
+    if (!structure.totalAmount || structure.totalAmount <= 0) {
+      throw new AppError('Invalid fee structure: totalAmount must be greater than 0', 400);
     }
 
     // Build feeItems from installments
