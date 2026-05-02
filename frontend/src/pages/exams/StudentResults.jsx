@@ -169,6 +169,17 @@ const StudentResults = () => {
                   </Text>
                 </div>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  {r.grade && (
+                    <Tag
+                      color={{
+                        'A+': 'green', A: 'green', 'B+': 'blue', B: 'blue',
+                        C: 'orange', D: 'orange', F: 'red',
+                      }[r.grade] || 'default'}
+                      style={{ fontSize: 14, padding: '2px 10px', fontWeight: 600 }}
+                    >
+                      {r.grade}
+                    </Tag>
+                  )}
                   <Tag color={r.result === 'Pass' ? 'green' : 'red'} style={{ fontSize: 13, padding: '2px 12px' }}>
                     {r.result === 'Pass' ? <CheckCircleFilled /> : <CloseCircleFilled />}{' '}
                     {r.result}

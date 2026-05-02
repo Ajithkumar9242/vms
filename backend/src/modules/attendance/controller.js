@@ -8,7 +8,6 @@ const ApiResponse = require('../../utils/apiResponse');
 class AttendanceController {
   /**
    * GET /api/attendance/health
-   * Module health check.
    */
   static async health(req, res, next) {
     try {
@@ -20,15 +19,29 @@ class AttendanceController {
   }
 
   /**
+   * GET /api/attendance/sessions
+   * Get configured sessions from AttendanceConfig.
+   */
+  static async getSessions(req, res, next) {
+    try {
+      const sessions = await AttendanceService.getSessions();
+      return ApiResponse.success(res, sessions, 'Sessions fetched');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * POST /api/attendance
-   * Mark attendance in bulk for a class on a given date.
-   * Body: { records: [{ studentId, classId, sectionId?, date, status }] }
+   * Mark attendance in bulk.
+   * Body: { records: [{ studentId, classId, sectionId?, date, status, session? }] }
    */
   static async markAttendance(req, res, next) {
     try {
       const { records } = req.body;
       const markedBy = req.user?._id || null;
-      const result = await AttendanceService.markAttendance(records, markedBy);
+      const userRole = req.user?.role || 'faculty';
+      const result = await AttendanceService.markAttendance(records, markedBy, userRole);
       return ApiResponse.created(res, result, 'Attendance saved successfully');
     } catch (error) {
       next(error);
@@ -36,18 +49,29 @@ class AttendanceController {
   }
 
   /**
+   * POST /api/attendance/lock
+   * Lock attendance for a class + date + session (admin only).
+   * Body: { classId, date, session? }
+   */
+  static async lockAttendance(req, res, next) {
+    try {
+      const { classId, date, session } = req.body;
+      const result = await AttendanceService.lockAttendance({ classId, date, session });
+      return ApiResponse.success(res, result, 'Attendance locked successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/attendance
-   * Get attendance records.
-   * Query: ?classId=xxx&sectionId=xxx&date=2026-04-30
+   * Get attendance records for a date.
+   * Query: ?classId=xxx&date=yyyy-mm-dd&sectionId=xxx&session=Morning
    */
   static async getAttendance(req, res, next) {
     try {
-      const { classId, sectionId, date } = req.query;
-      const records = await AttendanceService.getAttendanceByDate({
-        classId,
-        sectionId,
-        date,
-      });
+      const { classId, sectionId, date, session } = req.query;
+      const records = await AttendanceService.getAttendanceByDate({ classId, sectionId, date, session });
       return ApiResponse.success(res, records, 'Attendance records fetched');
     } catch (error) {
       next(error);
@@ -56,18 +80,14 @@ class AttendanceController {
 
   /**
    * GET /api/attendance/report
-   * Get aggregated attendance report for a class.
-   * Query: ?classId=xxx&dateFrom=xxx&dateTo=xxx
+   * Aggregated report.
+   * Query: ?classId=xxx&dateFrom=xxx&dateTo=xxx&session=xxx
    */
   static async getReport(req, res, next) {
     try {
-      const { classId, dateFrom, dateTo } = req.query;
-      const report = await AttendanceService.getAttendanceReport({
-        classId,
-        dateFrom,
-        dateTo,
-      });
-      return ApiResponse.success(res, report, 'Attendance report generated');
+      const { classId, dateFrom, dateTo, session } = req.query;
+      const data = await AttendanceService.getAttendanceReport({ classId, dateFrom, dateTo, session });
+      return ApiResponse.success(res, data, 'Attendance report generated');
     } catch (error) {
       next(error);
     }

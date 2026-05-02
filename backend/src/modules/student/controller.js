@@ -35,6 +35,19 @@ class StudentController {
       next(error);
     }
   }
+
+  /**
+   * POST /api/students
+   * Directly create a student (admin flow, no admission).
+   */
+  static async create(req, res, next) {
+    try {
+      const student = await StudentService.createStudent(req.body);
+      return ApiResponse.created(res, { student }, 'Student created successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = StudentController;

@@ -17,7 +17,25 @@ class ExamService {
     return { module: 'exam', status: 'Exam module is operational' };
   }
 
-  // ═══════════════════════════════════════════════════════════
+  /**
+   * Get subjects configured for a class via ClassConfig.
+   * Falls back to all subjects if ClassConfig not set up.
+   * @param {string} classId
+   * @returns {Array} subject documents
+   */
+  static async getSubjectsForClass(classId) {
+    const ClassConfig = require('../../models/ClassConfig');
+    const Subject = require('../../models/Subject');
+
+    const config = await ClassConfig.findOne({ classId }).sort({ createdAt: -1 });
+    if (config && config.subjects && config.subjects.length > 0) {
+      return Subject.find({ _id: { $in: config.subjects } }).select('name code').sort({ name: 1 });
+    }
+    // Fallback: return all subjects
+    return Subject.find().select('name code').sort({ name: 1 }).limit(100);
+  }
+
+
   //  EXAMS
   // ═══════════════════════════════════════════════════════════
 
@@ -34,9 +52,20 @@ class ExamService {
     // Validate class is configured for this year (graceful)
     await SetupService.validateClassForYear(data.classId, data.academicYearId);
 
-    // Validate subjects belong to this class (graceful)
+    // Normalize subjects: accept both plain IDs and {subjectId, maxMarks, passingMarks} objects
     if (data.subjects && data.subjects.length > 0) {
-      const subjectIds = data.subjects.map((s) => s.subjectId || s);
+      const globalMax = data.maxMarks || 100;
+      const globalPassing = data.passingMarks || 0;
+      data.subjects = data.subjects.map((s) => {
+        if (typeof s === 'string' || (s && !s.subjectId)) {
+          // Plain MongoId string or bare object — wrap to schema shape
+          return { subjectId: s.toString ? s.toString() : s, maxMarks: globalMax, passingMarks: globalPassing };
+        }
+        // Already { subjectId, maxMarks, passingMarks }
+        return { subjectId: s.subjectId, maxMarks: s.maxMarks || globalMax, passingMarks: s.passingMarks ?? globalPassing };
+      });
+
+      const subjectIds = data.subjects.map((s) => s.subjectId);
       await SetupService.validateSubjectsForClass(subjectIds, data.classId, data.academicYearId);
     }
 
@@ -214,7 +243,7 @@ class ExamService {
     }
 
     // Build results array
-    const results = Object.values(examMap).map((entry) => {
+    const results = await Promise.all(Object.values(examMap).map(async (entry) => {
       const percentage = entry.totalMax > 0
         ? Math.round((entry.totalObtained / entry.totalMax) * 100 * 10) / 10
         : 0;
@@ -224,13 +253,15 @@ class ExamService {
       const globalPassing = entry.exam.passingMarks || 0;
 
       const passed = entry.subjects.every((s) => {
-        // Try to find per-subject passingMarks from exam config
         const examSubjectConfig = examSubjects.find(
           (es) => es.subjectId && s.subject && es.subjectId.toString() === s.subject._id.toString()
         );
         const passingThreshold = examSubjectConfig ? (examSubjectConfig.passingMarks || globalPassing) : globalPassing;
         return s.marksObtained >= passingThreshold;
       });
+
+      // Dynamic overall grade based on percentage
+      const overallGrade = await ExamService._computeGradeDynamic(entry.totalObtained, entry.totalMax);
 
       return {
         exam: {
@@ -243,9 +274,10 @@ class ExamService {
         totalObtained: entry.totalObtained,
         totalMax: entry.totalMax,
         percentage,
+        grade: overallGrade,
         result: passed ? 'Pass' : 'Fail',
       };
-    });
+    }));
 
     return { student, results };
   }
@@ -253,7 +285,40 @@ class ExamService {
   // ─── Helpers ──────────────────────────────────────────────
 
   /**
-   * Compute grade from marks percentage.
+   * Compute grade using dynamic GradeConfig from Setup.
+   * Falls back to hardcoded tiers if no GradeConfig records exist.
+   * @param {number} obtained
+   * @param {number} max
+   * @returns {string} grade label
+   */
+  static async _computeGradeDynamic(obtained, max) {
+    if (max <= 0) return 'N/A';
+    const pct = (obtained / max) * 100;
+    try {
+      const GradeConfig = require('../../models/GradeConfig');
+      const grades = await GradeConfig.find().sort({ minMarks: -1 }); // highest first
+      if (grades.length > 0) {
+        // GradeConfig stores absolute marks; convert pct to percentage-based match
+        // minMarks and maxMarks in GradeConfig are percentage thresholds (0-100)
+        const matched = grades.find((g) => pct >= g.minMarks && pct <= g.maxMarks);
+        return matched ? matched.name : 'F';
+      }
+    } catch (e) {
+      // GradeConfig not available — fall through to defaults
+    }
+    // Default fallback
+    if (pct >= 90) return 'A+';
+    if (pct >= 80) return 'A';
+    if (pct >= 70) return 'B+';
+    if (pct >= 60) return 'B';
+    if (pct >= 50) return 'C';
+    if (pct >= 35) return 'D';
+    return 'F';
+  }
+
+  /**
+   * Synchronous grade compute (used in saveMarks bulkWrite context).
+   * Uses hardcoded fallback only — async version used in results.
    */
   static _computeGrade(obtained, max) {
     if (max <= 0) return 'N/A';

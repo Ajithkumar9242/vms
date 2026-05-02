@@ -1,127 +1,114 @@
 const router = require('express').Router();
 const FeesController = require('./controller');
-const { protect } = require('../../middlewares/auth');
+const { protect, authorize } = require('../../middlewares/auth');
 const { validate, body, mongoIdParam } = require('../../utils/validators');
 const idempotency = require('../../middlewares/idempotency');
 
-// ─── All fees routes require authentication ─────────────────
 router.use(protect);
 
-/**
- * @route   GET /api/fees/health
- * @desc    Module health check
- * @access  Private
- */
 router.get('/health', FeesController.health);
 
-// ═══════════════════════════════════════════════════════════
-//  FEE STRUCTURE
-// ═══════════════════════════════════════════════════════════
-
-/**
- * @route   POST /api/fees/structure
- * @desc    Create or update fee structure for a class
- * @access  Private
- */
+// ─── FEE STRUCTURE ───────────────────────────────────────────
 router.post(
   '/structure',
   idempotency(),
   [
     body('classId').isMongoId().withMessage('Valid class ID is required'),
-    body('academicYear')
-      .notEmpty()
-      .withMessage('Academic year is required')
-      .trim(),
-    body('totalAmount')
-      .isFloat({ min: 0 })
-      .withMessage('Total amount must be a non-negative number'),
-    body('installments')
-      .optional()
-      .isArray()
-      .withMessage('Installments must be an array'),
-    body('installments.*.name')
-      .notEmpty()
-      .withMessage('Installment name is required'),
-    body('installments.*.amount')
-      .isFloat({ min: 0 })
-      .withMessage('Installment amount must be non-negative'),
-    body('installments.*.dueDate')
-      .isISO8601()
-      .withMessage('Valid due date is required'),
+    body('academicYear').optional().trim(),
+    body('academicYearId').optional().isMongoId(),
+    body('totalAmount').isFloat({ min: 0 }).withMessage('Total amount must be a non-negative number'),
+    body('installments').optional().isArray().withMessage('Installments must be an array'),
+    body('installments.*.name').optional().notEmpty(),
+    body('installments.*.amount').optional().isFloat({ min: 0 }),
+    body('installments.*.dueDate').optional().isISO8601(),
   ],
   validate,
   FeesController.createStructure
 );
 
-/**
- * @route   GET /api/fees/structure
- * @desc    Get all fee structures (?classId=xxx&academicYear=xxx)
- * @access  Private
- */
 router.get('/structure', FeesController.getStructures);
 
-// ═══════════════════════════════════════════════════════════
-//  FEE PAYMENTS
-// ═══════════════════════════════════════════════════════════
+// ─── INVOICE ─────────────────────────────────────────────────
+router.post(
+  '/invoice/generate',
+  authorize('admin', 'super_admin'),
+  [body('studentId').isMongoId().withMessage('Valid student ID is required')],
+  validate,
+  FeesController.generateInvoice
+);
 
-/**
- * @route   POST /api/fees/pay
- * @desc    Record a fee payment
- * @access  Private
- */
+router.get(
+  '/invoice/:studentId',
+  mongoIdParam('studentId'),
+  validate,
+  FeesController.getInvoice
+);
+
+// ─── DUE LIST ────────────────────────────────────────────────
+router.get('/due', FeesController.getDueList);
+
+// ─── PAYMENTS ────────────────────────────────────────────────
 router.post(
   '/pay',
   idempotency(),
   [
     body('studentId').isMongoId().withMessage('Valid student ID is required'),
-    body('amount')
-      .isFloat({ min: 1 })
-      .withMessage('Payment amount must be at least 1'),
+    body('amount').isFloat({ min: 1 }).withMessage('Payment amount must be at least 1'),
     body('paymentMode')
       .isIn(['cash', 'upi', 'online', 'razorpay'])
       .withMessage('Payment mode must be cash, upi, online, or razorpay'),
-    body('transactionId')
-      .optional({ nullable: true })
-      .isString()
-      .withMessage('Transaction ID must be a string'),
+    body('transactionId').optional({ nullable: true }).isString(),
+    body('invoiceId').optional({ nullable: true }).isMongoId(),
   ],
   validate,
   FeesController.recordPayment
 );
 
-/**
- * @route   GET /api/fees/student/:studentId
- * @desc    Get fee details + payment history for a student
- * @access  Private
- */
-router.get(
-  '/student/:studentId',
-  mongoIdParam('studentId'),
+router.get('/student/:studentId', mongoIdParam('studentId'), validate, FeesController.getStudentFees);
+
+// ─── APPLY STRUCTURE (bulk) ──────────────────────────────────
+router.post(
+  '/apply-structure',
+  authorize('admin', 'super_admin'),
+  [body('classId').isMongoId().withMessage('Valid class ID is required')],
   validate,
-  FeesController.getStudentFees
+  FeesController.applyStructure
 );
 
-// ═══════════════════════════════════════════════════════════
-//  FEE OVERVIEW
-// ═══════════════════════════════════════════════════════════
+// ─── MANUAL PAYMENT FLOW ─────────────────────────────────────
+router.post(
+  '/manual-payment',
+  [
+    body('studentId').isMongoId().withMessage('Valid student ID is required'),
+    body('amount').isFloat({ min: 1 }),
+    body('transactionId').optional().isString(),
+    body('proofUrl').optional().isURL().withMessage('proofUrl must be a valid URL'),
+    body('invoiceId').optional({ nullable: true }).isMongoId(),
+  ],
+  validate,
+  FeesController.manualPayment
+);
 
-/**
- * @route   GET /api/fees/overview
- * @desc    Fee overview for all students (?classId=xxx)
- * @access  Private
- */
+router.get('/payments/pending', authorize('admin', 'super_admin'), FeesController.getPendingPayments);
+
+router.put(
+  '/payment/:id/approve',
+  authorize('admin', 'super_admin'),
+  mongoIdParam('id'), validate,
+  FeesController.approvePayment
+);
+
+router.put(
+  '/payment/:id/reject',
+  authorize('admin', 'super_admin'),
+  mongoIdParam('id'), validate,
+  FeesController.rejectPayment
+);
+
+// ─── OVERVIEW ────────────────────────────────────────────────
 router.get('/overview', FeesController.getOverview);
 
-/**
- * @route   GET /api/fees/:id/receipt
- * @desc    Generate PDF receipt for a fee payment
- * @access  Private
- */
-router.get(
-  '/:id/receipt',
-  mongoIdParam('id'),
-  validate,
-  FeesController.generateReceipt
-);
+// ─── RECEIPT (PDF) ───────────────────────────────────────────
+router.get('/:id/receipt', mongoIdParam('id'), validate, FeesController.generateReceipt);
 
 module.exports = router;

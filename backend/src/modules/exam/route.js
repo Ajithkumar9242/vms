@@ -15,6 +15,18 @@ router.use(protect);
 router.get('/health', ExamController.health);
 
 /**
+ * @route   GET /api/exams/subjects-for-class
+ * @desc    Get subjects configured for a class (from ClassConfig, falls back to all subjects)
+ * @access  Private
+ */
+router.get(
+  '/subjects-for-class',
+  [query('classId').isMongoId().withMessage('Valid classId required')],
+  validate,
+  ExamController.getSubjectsForClass
+);
+
+/**
  * @route   GET /api/exams/results/:studentId
  * @desc    Get all results for a student
  * @access  Private
@@ -43,15 +55,30 @@ router.post(
   [
     body('name').notEmpty().withMessage('Exam name is required').trim(),
     body('classId').isMongoId().withMessage('Valid class ID is required'),
-    body('academicYear').notEmpty().withMessage('Academic year is required').trim(),
+    // academicYearId optional — auto-resolved to active year in service
+    body('academicYearId').optional({ values: 'null' }).isMongoId().withMessage('Invalid academicYearId'),
     body('subjects')
       .isArray({ min: 1 })
       .withMessage('At least one subject is required'),
-    body('subjects.*').isMongoId().withMessage('Valid subject ID is required'),
+    // subjects can be either plain MongoIds or objects { subjectId, maxMarks, passingMarks }
+    body('subjects.*.subjectId')
+      .optional()
+      .isMongoId()
+      .withMessage('Valid subject ID is required'),
+    body('subjects.*.maxMarks')
+      .optional()
+      .isFloat({ min: 1 })
+      .withMessage('Max marks must be at least 1'),
+    body('subjects.*.passingMarks')
+      .optional()
+      .isFloat({ min: 0 })
+      .withMessage('Passing marks cannot be negative'),
     body('maxMarks')
+      .optional()
       .isFloat({ min: 1 })
       .withMessage('Max marks must be at least 1'),
     body('passingMarks')
+      .optional()
       .isFloat({ min: 0 })
       .withMessage('Passing marks cannot be negative'),
     body('examDate')

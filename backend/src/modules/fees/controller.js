@@ -66,34 +66,81 @@ class FeesController {
    */
   static async recordPayment(req, res, next) {
     try {
-      const { studentId, amount, paymentMode, transactionId } = req.body;
-      const payment = await FeesService.recordPayment({
-        studentId,
-        amount,
-        paymentMode,
-        transactionId,
+      const { studentId, amount, paymentMode, transactionId, invoiceId } = req.body;
+      const result = await FeesService.recordPayment({
+        studentId, amount, paymentMode, transactionId, invoiceId,
       });
 
-      // Fetch student to get contact details for notifications
-      const Student = require('../../models/Student');
-      const student = await Student.findById(studentId).populate('parentId');
-      
-      if (student) {
-        // Send Email Receipt
-        const EmailService = require('../../utils/emailService');
-        EmailService.sendFeeReceiptEmail(student, payment).catch(e => 
-          console.error('Fee receipt email failed:', e.message)
-        );
-
-        // Fallback SMS
-        const phone = student.parentPhone || (student.parentId && student.parentId.phone);
-        if (phone) {
-          const NotificationService = require('../notification/service');
-          NotificationService.sendSMS(phone, `Received fee payment of ₹${payment.amountPaid} for ${student.name}. Receipt: ${payment.receiptNumber}`).catch(e => console.error('SMS fallback failed:', e.message));
+      // Non-blocking: email receipt
+      try {
+        const Student = require('../../models/Student');
+        const student = await Student.findById(studentId).populate('parentId');
+        if (student) {
+          const EmailService = require('../../utils/emailService');
+          EmailService.sendFeeReceiptEmail(student, result.payment).catch(() => {});
+          const phone = student.parentPhone || student.parentId?.phone;
+          if (phone) {
+            const NotificationService = require('../notification/service');
+            NotificationService.sendSMS(
+              phone,
+              `Received fee payment of ₹${amount} for ${student.name}. Receipt: ${result.payment.receiptNumber}`
+            ).catch(() => {});
+          }
         }
-      }
+      } catch { /* non-critical */ }
 
-      return ApiResponse.created(res, payment, 'Payment recorded successfully');
+      return ApiResponse.created(res, result, 'Payment recorded successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/fees/invoice/:studentId
+   * Get fee invoice for a student.
+   */
+  static async getInvoice(req, res, next) {
+    try {
+      const { studentId } = req.params;
+      const { academicYearId } = req.query;
+      const invoice = await FeesService.getInvoice(studentId, academicYearId);
+      return ApiResponse.success(res, invoice, 'Invoice fetched');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/fees/invoice/generate
+   * Manually generate invoice for a student (admin tool).
+   */
+  static async generateInvoice(req, res, next) {
+    try {
+      const { studentId } = req.body;
+      const Student = require('../../models/Student');
+      const student = await Student.findById(studentId);
+      if (!student) { const AppError = require('../../utils/AppError'); throw new AppError('Student not found', 404); }
+      const invoice = await FeesService.generateInvoice({
+        studentId: student._id,
+        classId: student.classId,
+        academicYearId: student.academicYearId,
+        feeStructureId: student.feeStructureId,
+      });
+      return ApiResponse.created(res, invoice, 'Invoice generated');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/fees/due
+   * Get students with unpaid or partial fees.
+   */
+  static async getDueList(req, res, next) {
+    try {
+      const { classId, status } = req.query;
+      const data = await FeesService.getDueList({ classId, status });
+      return ApiResponse.success(res, data, 'Due list fetched');
     } catch (error) {
       next(error);
     }
@@ -212,6 +259,48 @@ class FeesController {
       next(error);
     }
   }
+
+  // ─── Apply fee structure to class (bulk invoice) ──────────
+  static async applyStructure(req, res, next) {
+    try {
+      const { classId, academicYearId, sectionId } = req.body;
+      const result = await FeesService.applyStructureToClass({ classId, academicYearId, sectionId });
+      return ApiResponse.success(res, result, `Fee structure applied: ${result.generated} invoices generated, ${result.skipped} skipped`);
+    } catch (error) { next(error); }
+  }
+
+  // ─── Manual payment flow ───────────────────────────────────
+  static async manualPayment(req, res, next) {
+    try {
+      const { studentId, amount, paymentMode, transactionId, proofUrl, invoiceId } = req.body;
+      const payment = await FeesService.recordManualPayment({ studentId, amount, paymentMode, transactionId, proofUrl, invoiceId });
+      return ApiResponse.created(res, payment, 'Manual payment submitted. Awaiting admin approval.');
+    } catch (error) { next(error); }
+  }
+
+  static async approvePayment(req, res, next) {
+    try {
+      const payment = await FeesService.approvePayment(req.params.id, req.user._id);
+      return ApiResponse.success(res, payment, 'Payment approved and invoice updated');
+    } catch (error) { next(error); }
+  }
+
+  static async rejectPayment(req, res, next) {
+    try {
+      const { reason } = req.body;
+      const payment = await FeesService.rejectPayment(req.params.id, reason);
+      return ApiResponse.success(res, payment, 'Payment rejected');
+    } catch (error) { next(error); }
+  }
+
+  static async getPendingPayments(req, res, next) {
+    try {
+      const { classId } = req.query;
+      const data = await FeesService.getPendingPayments({ classId });
+      return ApiResponse.success(res, data, 'Pending payments fetched');
+    } catch (error) { next(error); }
+  }
 }
 
 module.exports = FeesController;
+

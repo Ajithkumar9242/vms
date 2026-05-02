@@ -74,21 +74,18 @@ const Exams = () => {
       render: (_, r) => r.classId?.name || '—',
     },
     {
-      title: 'Academic Year',
-      dataIndex: 'academicYear',
-      key: 'academicYear',
-      width: 120,
-    },
-    {
       title: 'Subjects',
       key: 'subjects',
-      width: 250,
+      width: 280,
       render: (_, r) =>
-        (r.subjects || []).map((s) => (
-          <Tag color="blue" key={s._id} style={{ marginBottom: 2 }}>
-            {s.code || s.name}
-          </Tag>
-        )),
+        (r.subjects || []).map((se) => {
+          const sub = se.subjectId || {};
+          return (
+            <Tag color="blue" key={String(sub._id || se._id)} style={{ marginBottom: 2 }}>
+              {sub.name || sub.code || '—'} ({se.maxMarks})
+            </Tag>
+          );
+        }),
     },
     {
       title: 'Max Marks',

@@ -79,6 +79,16 @@ class AdmissionService {
     // Validate class is configured for this academic year (graceful — skips if not set up)
     await SetupService.validateClassForYear(data.classId, data.academicYearId);
 
+    // Validate section belongs to the specified class (if section is provided)
+    if (data.sectionId) {
+      const Section = require('../../models/Section');
+      const section = await Section.findById(data.sectionId);
+      if (!section) throw new AppError('Section not found', 404);
+      if (section.classId.toString() !== data.classId.toString()) {
+        throw new AppError('Section does not belong to the selected class', 400);
+      }
+    }
+
     // Auto-generate application number
     data.applicationNo = await AdmissionService.generateApplicationNo();
 
@@ -216,6 +226,24 @@ class AdmissionService {
     // 4. Generate roll number for the new student
     const rollNo = await AdmissionService.generateRollNo(admission.classId);
 
+    // 4a. Resolve academic year from admission (fallback to active)
+    const SetupService = require('../setup/service');
+    const resolvedAcademicYearId = admission.academicYearId
+      || (await SetupService.resolveAcademicYearId(null));
+
+    // 4b. Look up fee structure for this class + academic year (non-blocking if missing)
+    let feeStructureId = null;
+    try {
+      const FeeStructure = require('../../models/FeeStructure');
+      const feeDoc = await FeeStructure.findOne({
+        classId: admission.classId,
+        academicYearId: resolvedAcademicYearId,
+      }).select('_id');
+      if (feeDoc) feeStructureId = feeDoc._id;
+    } catch (e) {
+      console.error('Fee structure lookup failed:', e.message);
+    }
+
     // 5. Create Student from admission data
     const student = await Student.create({
       admissionId: admission._id,
@@ -225,11 +253,26 @@ class AdmissionService {
       gender: admission.gender,
       classId: admission.classId,
       sectionId: admission.sectionId,
+      academicYearId: resolvedAcademicYearId,
+      feeStructureId,
       parentName: admission.parentName,
       parentPhone: admission.parentPhone,
       parentEmail: admission.parentEmail,
       address: admission.address,
     });
+
+    // 5a. Auto-generate fee invoice for the new student (non-blocking)
+    try {
+      const FeesService = require('../fees/service');
+      await FeesService.generateInvoice({
+        studentId: student._id,
+        classId: student.classId,
+        academicYearId: resolvedAcademicYearId,
+        feeStructureId,
+      });
+    } catch (e) {
+      console.error('Auto invoice generation failed (non-critical):', e.message);
+    }
 
     // 6. Auto-create or reuse Parent + link student + create User
     let parentDoc = null;
@@ -312,11 +355,17 @@ class AdmissionService {
       metadata: { admissionId: admission._id, studentId: student._id },
     }).catch((e) => console.error('Notification trigger failed:', e.message));
 
-    // Send Email to Parent
-    const EmailService = require('../../utils/emailService');
-    EmailService.sendAdmissionApprovedEmail(admission, student).catch((e) => 
-      console.error('Email notification failed:', e.message)
-    );
+    // Send Email to Parent (guarded — emailService may not be configured)
+    try {
+      const EmailService = require('../../utils/emailService');
+      if (typeof EmailService.sendAdmissionApprovedEmail === 'function') {
+        EmailService.sendAdmissionApprovedEmail(admission, student).catch((e) =>
+          console.error('Email notification failed:', e.message)
+        );
+      }
+    } catch (e) {
+      console.error('EmailService unavailable:', e.message);
+    }
 
     // Fallback SMS
     if (admission.parentPhone) {

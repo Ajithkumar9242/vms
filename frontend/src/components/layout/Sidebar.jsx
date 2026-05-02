@@ -16,6 +16,7 @@ import {
   MedicineBoxOutlined,
   WarningOutlined,
   ScheduleOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
@@ -28,6 +29,12 @@ const allMenuItems = [
     key: '/',
     icon: <DashboardOutlined />,
     label: 'Dashboard',
+    roles: ['super_admin', 'admin', 'principal', 'faculty', 'parent'],
+  },
+  {
+    key: '/setup',
+    icon: <SettingOutlined />,
+    label: 'Setup Module',
     roles: ['super_admin', 'admin', 'principal', 'faculty', 'parent'],
   },
   {
@@ -124,6 +131,17 @@ const allMenuItems = [
     label: 'Activity Logs',
     roles: ['super_admin', 'admin', 'principal'],
   },
+  // ─── Admin Setup ───────────────────────────────────────
+  {
+    type: 'divider',
+    roles: ['super_admin', 'admin'],
+  },
+  {
+    key: '/setup',
+    icon: <SettingOutlined />,
+    label: 'Setup',
+    roles: ['super_admin', 'admin'],
+  },
 ];
 
 const Sidebar = ({ collapsed, onCollapse }) => {
@@ -207,7 +225,7 @@ const Sidebar = ({ collapsed, onCollapse }) => {
               whiteSpace: 'nowrap',
             }}
           >
-            VMS ERP
+            VSS ERP
           </span>
         )}
       </div>

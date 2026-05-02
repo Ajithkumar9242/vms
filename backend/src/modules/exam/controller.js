@@ -19,7 +19,20 @@ class ExamController {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
+  /**
+   * GET /api/exams/subjects-for-class?classId=xxx
+   * Get subjects for a class (from ClassConfig or all subjects).
+   */
+  static async getSubjectsForClass(req, res, next) {
+    try {
+      const subjects = await ExamService.getSubjectsForClass(req.query.classId);
+      return ApiResponse.success(res, subjects, 'Subjects fetched');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+
   //  EXAMS
   // ═══════════════════════════════════════════════════════════
 

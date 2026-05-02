@@ -32,6 +32,11 @@ const feeStructureSchema = new mongoose.Schema(
       ref: 'AcademicYear',
       default: null,
     },
+    feeGroupId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FeeGroup',
+      default: null,
+    },
     totalAmount: {
       type: Number,
       required: [true, 'Total amount is required'],

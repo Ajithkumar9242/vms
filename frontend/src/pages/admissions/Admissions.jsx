@@ -2,9 +2,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   Table, Typography, Tag, Button, Space, Drawer,
   Descriptions, Row, Col, Select, App, Popconfirm, Empty,
+  Modal, Form, Input, DatePicker,
 } from 'antd';
 import {
-  CheckCircleOutlined, CloseCircleOutlined, EyeOutlined,
+  CheckCircleOutlined, CloseCircleOutlined, EyeOutlined, PlusOutlined,
 } from '@ant-design/icons';
 import { admissionAPI, schoolAPI } from '@/services/api';
 import StatusTag from '@/components/common/StatusTag';
@@ -24,9 +25,17 @@ const Admissions = () => {
   const [filters, setFilters] = useState({ status: undefined, classId: undefined });
 
   // Action states
-  const [actionLoading, setActionLoading] = useState(null); // stores the _id being acted on
+  const [actionLoading, setActionLoading] = useState(null);
   const [rejectModal, setRejectModal] = useState({ open: false, id: null });
   const [viewDrawer, setViewDrawer] = useState({ open: false, record: null });
+
+  // New Admission modal
+  const [newModal, setNewModal] = useState(false);
+  const [admForm] = Form.useForm();
+  const [admSaving, setAdmSaving] = useState(false);
+  const [allSections, setAllSections] = useState([]);
+  const [modalSections, setModalSections] = useState([]);
+  const [modalClassId, setModalClassId] = useState(null);
 
   // ─── Fetch admissions ─────────────────────────────────────
   const fetchAdmissions = useCallback(async (page = 1, pageSize = 20) => {
@@ -61,6 +70,9 @@ const Admissions = () => {
       }
     };
     loadClasses();
+    schoolAPI.getSections()
+      .then((res) => setAllSections(res.data || []))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -78,6 +90,38 @@ const Admissions = () => {
       message.error(err.message || 'Failed to approve');
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  // ─── New Admission handlers ───────────────────────────────
+  const handleModalClassChange = (classId) => {
+    setModalClassId(classId);
+    admForm.setFieldValue('sectionId', undefined);
+    setModalSections(allSections.filter((s) => {
+      const sid = s.classId?._id || s.classId;
+      return sid === classId || sid?.toString() === classId;
+    }));
+  };
+
+  const onCreateAdmission = async (values) => {
+    setAdmSaving(true);
+    try {
+      const payload = {
+        ...values,
+        dateOfBirth: values.dateOfBirth?.toISOString(),
+        mode: 'offline',
+      };
+      await admissionAPI.create(payload);
+      message.success('Admission created successfully');
+      setNewModal(false);
+      admForm.resetFields();
+      setModalClassId(null);
+      setModalSections([]);
+      fetchAdmissions(1, pagination.pageSize);
+    } catch (err) {
+      message.error(err.message || 'Failed to create admission');
+    } finally {
+      setAdmSaving(false);
     }
   };
 
@@ -228,13 +272,14 @@ const Admissions = () => {
   return (
     <div className="page-container">
       {/* Header */}
-      <div className="page-header">
-        <Title level={4} className="page-title" style={{ margin: 0 }}>
-          Admissions
-        </Title>
-        <Text type="secondary">
-          Manage admission applications
-        </Text>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <Title level={4} className="page-title" style={{ margin: 0 }}>Admissions</Title>
+          <Text type="secondary">Manage admission applications</Text>
+        </div>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setNewModal(true)} id="new-admission-btn">
+          New Admission
+        </Button>
       </div>
 
       {/* Filters */}
@@ -361,6 +406,97 @@ const Admissions = () => {
           </Descriptions>
         )}
       </Drawer>
+
+      {/* ─── New Admission Modal ─────────────────────────── */}
+      <Modal
+        title="New Admission Application"
+        open={newModal}
+        onCancel={() => { setNewModal(false); admForm.resetFields(); setModalClassId(null); setModalSections([]); }}
+        footer={null}
+        width={600}
+        destroyOnHidden
+      >
+        <Form form={admForm} layout="vertical" onFinish={onCreateAdmission} style={{ marginTop: 16 }}>
+          <Row gutter={12}>
+            <Col span={14}>
+              <Form.Item label="Student Name" name="studentName" rules={[{ required: true }]}>
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col span={10}>
+              <Form.Item label="Gender" name="gender" rules={[{ required: true }]}>
+                <Select>
+                  <Select.Option value="male">Male</Select.Option>
+                  <Select.Option value="female">Female</Select.Option>
+                  <Select.Option value="other">Other</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item label="Date of Birth" name="dateOfBirth" rules={[{ required: true }]}>
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Admission Type" name="type">
+                <Select defaultValue="day-boarding">
+                  <Select.Option value="day-boarding">Day Boarding</Select.Option>
+                  <Select.Option value="residential">Residential</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item label="Class" name="classId" rules={[{ required: true, message: 'Class is required' }]}>
+                <Select
+                  placeholder="Select class"
+                  onChange={handleModalClassChange}
+                  options={classes.map((c) => ({ label: c.name, value: c._id }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Section" name="sectionId">
+                <Select
+                  placeholder="Select section"
+                  allowClear
+                  disabled={!modalClassId}
+                  options={modalSections.map((s) => ({ label: s.name, value: s._id }))}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item label="Parent / Guardian Name" name="parentName" rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item label="Parent Phone" name="parentPhone" rules={[{ required: true }]}>
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Parent Email" name="parentEmail" rules={[{ type: 'email', message: 'Invalid email' }]}>
+                <Input />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item label="Address" name="address">
+            <Input.TextArea rows={2} />
+          </Form.Item>
+          <Form.Item label="Previous School" name="previousSchool">
+            <Input />
+          </Form.Item>
+          <Form.Item style={{ marginBottom: 0 }}>
+            <Button type="primary" htmlType="submit" loading={admSaving} block>
+              Submit Application
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

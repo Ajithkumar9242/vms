@@ -24,6 +24,19 @@ const HealthRecordsPage = React.lazy(() => import('@/pages/health/HealthRecords'
 const IncidentsPage = React.lazy(() => import('@/pages/incidents/Incidents'));
 const DutyAssignmentPage = React.lazy(() => import('@/pages/duty/DutyAssignment'));
 
+// ─── Setup Module ───────────────────────────────────────────
+const SetupDashboard = React.lazy(() => import('@/pages/setup/SetupDashboard'));
+const SchoolSettingsPage = React.lazy(() => import('@/pages/setup/SchoolSettings'));
+const AcademicYearPage = React.lazy(() => import('@/pages/setup/AcademicYear'));
+const AcademicTermPage = React.lazy(() => import('@/pages/setup/AcademicTerm'));
+const ClassesPage = React.lazy(() => import('@/pages/setup/Classes'));
+const SectionsPage = React.lazy(() => import('@/pages/setup/Sections'));
+const FeeSetupPage = React.lazy(() => import('@/pages/setup/FeeSetup'));
+const GradeSetupPage = React.lazy(() => import('@/pages/setup/GradeSetup'));
+const AttendanceConfigPage = React.lazy(() => import('@/pages/setup/AttendanceConfig'));
+const PaymentSettingsPage = React.lazy(() => import('@/pages/setup/PaymentSettings'));
+const ClassGroupsPage = React.lazy(() => import('@/pages/setup/ClassGroups'));
+
 // ─── Public Pages (no auth) ────────────────────────────────
 const OnlineAdmissionPage = React.lazy(() => import('@/pages/admissions/OnlineAdmission'));
 const ApplicationStatusPage = React.lazy(() => import('@/pages/admissions/ApplicationStatus'));
@@ -75,6 +88,19 @@ const AppRouter = () => {
             <Route path="/health" element={<RoleRoute roles={STAFF_ROLES}><HealthRecordsPage /></RoleRoute>} />
             <Route path="/incidents" element={<RoleRoute roles={STAFF_ROLES}><IncidentsPage /></RoleRoute>} />
             <Route path="/duty" element={<RoleRoute roles={ADMIN_ROLES}><DutyAssignmentPage /></RoleRoute>} />
+
+            {/* ─── Setup Module (admin only) ─────────────────── */}
+            <Route path="/setup" element={<RoleRoute roles={['super_admin', 'admin']}><SetupDashboard /></RoleRoute>} />
+            <Route path="/setup/school-settings" element={<RoleRoute roles={['super_admin', 'admin']}><SchoolSettingsPage /></RoleRoute>} />
+            <Route path="/setup/academic-year" element={<RoleRoute roles={['super_admin', 'admin']}><AcademicYearPage /></RoleRoute>} />
+            <Route path="/setup/academic-term" element={<RoleRoute roles={['super_admin', 'admin']}><AcademicTermPage /></RoleRoute>} />
+            <Route path="/setup/classes" element={<RoleRoute roles={['super_admin', 'admin']}><ClassesPage /></RoleRoute>} />
+            <Route path="/setup/sections" element={<RoleRoute roles={['super_admin', 'admin']}><SectionsPage /></RoleRoute>} />
+            <Route path="/setup/fee-setup" element={<RoleRoute roles={['super_admin', 'admin']}><FeeSetupPage /></RoleRoute>} />
+            <Route path="/setup/grade-setup" element={<RoleRoute roles={['super_admin', 'admin']}><GradeSetupPage /></RoleRoute>} />
+            <Route path="/setup/attendance-config" element={<RoleRoute roles={['super_admin', 'admin']}><AttendanceConfigPage /></RoleRoute>} />
+            <Route path="/setup/payment-settings" element={<RoleRoute roles={['super_admin', 'admin']}><PaymentSettingsPage /></RoleRoute>} />
+            <Route path="/setup/class-groups" element={<RoleRoute roles={['super_admin', 'admin']}><ClassGroupsPage /></RoleRoute>} />
           </Route>
 
           {/* Catch-all redirect */}

@@ -17,36 +17,98 @@ class AttendanceService {
   }
 
   // ═══════════════════════════════════════════════════════════
+  //  SESSIONS (from AttendanceConfig)
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Get sessions for the active academic year from AttendanceConfig.
+   * Falls back to ['Morning'] if not configured.
+   * @returns {string[]} sessions array
+   */
+  static async getSessions() {
+    try {
+      const AttendanceConfig = require('../../models/AttendanceConfig');
+      const SetupService = require('../setup/service');
+      const academicYearId = await SetupService.resolveAcademicYearId(null);
+      if (academicYearId) {
+        const config = await AttendanceConfig.findOne({ academicYearId });
+        if (config && config.sessions && config.sessions.length > 0) {
+          return config.sessions;
+        }
+      }
+      // Fallback: any config at all
+      const anyConfig = await AttendanceConfig.findOne().sort({ createdAt: -1 });
+      if (anyConfig && anyConfig.sessions && anyConfig.sessions.length > 0) {
+        return anyConfig.sessions;
+      }
+    } catch (e) {
+      console.error('AttendanceConfig fetch failed:', e.message);
+    }
+    return ['Morning'];
+  }
+
+  // ═══════════════════════════════════════════════════════════
   //  MARK ATTENDANCE (bulk)
   // ═══════════════════════════════════════════════════════════
 
   /**
-   * Save attendance records for a list of students on a given date.
-   * Uses bulkWrite with upsert so re-submitting for the same date
-   * updates instead of throwing a duplicate error.
+   * Save attendance records for a list of students on a given date + session.
+   * Uses bulkWrite with upsert — idempotent re-submission.
    *
-   * @param {Array} records – [{ studentId, classId, sectionId, date, status }]
-   * @param {string} markedBy – userId of the teacher/admin
-   * @returns {{ saved: number, updated: number }}
+   * Lock check:
+   *   - If a record is locked AND user is not admin/super_admin → throws 403
+   *   - Admin can always override locked attendance
+   *
+   * @param {Array} records – [{ studentId, classId, sectionId, date, status, session?, remarks? }]
+   * @param {string} markedBy – userId
+   * @param {string} userRole – 'admin' | 'super_admin' | 'faculty' | etc.
+   * @returns {{ saved, updated, total }}
    */
-  static async markAttendance(records, markedBy) {
+  static async markAttendance(records, markedBy, userRole = 'faculty') {
     if (!records || !records.length) {
       throw new AppError('No attendance records provided', 400);
     }
 
+    const session = records[0]?.session || 'Morning';
+    const date = new Date(records[0]?.date);
+    const classId = records[0]?.classId;
+
+    // Lock check — if this class+date+session has locked records and caller is not admin
+    if (userRole !== 'admin' && userRole !== 'super_admin') {
+      const lockedCount = await Attendance.countDocuments({
+        classId,
+        date,
+        session,
+        isLocked: true,
+      });
+      if (lockedCount > 0) {
+        throw new AppError(
+          'Attendance for this class/date/session is locked. Only admin can modify it.',
+          403
+        );
+      }
+    }
+
     const ops = records.map((r) => ({
       updateOne: {
-        filter: { studentId: r.studentId, date: new Date(r.date) },
+        filter: {
+          studentId: r.studentId,
+          date: new Date(r.date),
+          session: r.session || 'Morning',
+        },
         update: {
           $set: {
             studentId: r.studentId,
             classId: r.classId,
             sectionId: r.sectionId || null,
             date: new Date(r.date),
+            session: r.session || 'Morning',
             status: r.status,
             markedBy: markedBy || null,
             remarks: r.remarks || null,
+            // Preserve existing lock (don't unlock via mark)
           },
+          $setOnInsert: { isLocked: false },
         },
         upsert: true,
       },
@@ -54,16 +116,12 @@ class AttendanceService {
 
     const result = await Attendance.bulkWrite(ops);
 
-    // Activity log — one entry per batch (non-blocking)
+    // Activity log (non-blocking)
     ActivityService.log({
-      action: `Attendance marked for ${records.length} students`,
+      action: `Attendance marked — ${records.length} students | Session: ${session}`,
       module: 'attendance',
       performedBy: markedBy || null,
-      metadata: {
-        classId: records[0]?.classId,
-        date: records[0]?.date,
-        count: records.length,
-      },
+      metadata: { classId, date, session, count: records.length },
     }).catch((e) => console.error('Activity log failed:', e.message));
 
     return {
@@ -74,17 +132,51 @@ class AttendanceService {
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  GET ATTENDANCE — for a class/date
+  //  LOCK ATTENDANCE
   // ═══════════════════════════════════════════════════════════
 
   /**
-   * Get attendance records for a specific date + class (+ optional section).
-   * Returns populated student data.
+   * Lock attendance for a class + date + session.
+   * Once locked, only admin can re-mark.
+   * @param {{ classId, date, session }} params
+   * @returns {{ locked: number, summary: { present, absent, total } }}
    */
-  static async getAttendanceByDate({ classId, sectionId, date }) {
-    const query = { date: new Date(date) };
+  static async lockAttendance({ classId, date, session }) {
+    if (!classId || !date) throw new AppError('classId and date are required', 400);
+
+    const query = {
+      classId,
+      date: new Date(date),
+      session: session || 'Morning',
+    };
+
+    const result = await Attendance.updateMany(query, { $set: { isLocked: true } });
+
+    // Build summary
+    const records = await Attendance.find(query).lean();
+    const present = records.filter((r) => r.status === 'present').length;
+    const absent = records.filter((r) => r.status === 'absent').length;
+
+    return {
+      locked: result.modifiedCount,
+      summary: { total: records.length, present, absent },
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  GET ATTENDANCE — for a class/date/session
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Get attendance records for a specific date + class + session.
+   * Returns populated student data + lock status.
+   */
+  static async getAttendanceByDate({ classId, sectionId, date, session }) {
+    const query = {};
+    if (date) query.date = new Date(date);
     if (classId) query.classId = classId;
     if (sectionId) query.sectionId = sectionId;
+    if (session) query.session = session;
 
     const records = await Attendance.find(query)
       .populate('studentId', 'name rollNo')
@@ -100,10 +192,10 @@ class AttendanceService {
 
   /**
    * Get aggregated attendance summary for students.
-   * Filters: classId (required), dateFrom, dateTo
-   * Returns per-student: totalPresent, totalAbsent, percentage
+   * Filters: classId (required), dateFrom, dateTo, session (optional)
+   * Returns per-student: totalPresent, totalAbsent, totalLate, totalDays, percentage
    */
-  static async getAttendanceReport({ classId, dateFrom, dateTo }) {
+  static async getAttendanceReport({ classId, dateFrom, dateTo, session }) {
     if (!classId) {
       throw new AppError('Class filter is required for attendance report', 400);
     }
@@ -112,13 +204,13 @@ class AttendanceService {
       throw new AppError('Invalid class ID format', 400);
     }
 
-    // Build date filter
     const dateFilter = {};
     if (dateFrom) dateFilter.$gte = new Date(dateFrom);
     if (dateTo) dateFilter.$lte = new Date(dateTo);
 
-    const matchStage = { classId: require('mongoose').Types.ObjectId.createFromHexString(classId) };
+    const matchStage = { classId: new mongoose.Types.ObjectId(classId) };
     if (Object.keys(dateFilter).length) matchStage.date = dateFilter;
+    if (session) matchStage.session = session;
 
     const pipeline = [
       { $match: matchStage },
@@ -173,7 +265,15 @@ class AttendanceService {
     ];
 
     const report = await Attendance.aggregate(pipeline);
-    return report;
+
+    // Append overall stats
+    const totalPresent = report.reduce((s, r) => s + r.totalPresent, 0);
+    const totalAbsent = report.reduce((s, r) => s + r.totalAbsent, 0);
+    const avgPercentage = report.length
+      ? Math.round((report.reduce((s, r) => s + r.percentage, 0) / report.length) * 10) / 10
+      : 0;
+
+    return { report, stats: { totalPresent, totalAbsent, avgPercentage, studentCount: report.length } };
   }
 }
 

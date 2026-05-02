@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const StudentController = require('./controller');
-const { protect } = require('../../middlewares/auth');
-const { validate, query, mongoIdParam, paginationQuery } = require('../../utils/validators');
+const { protect, authorize } = require('../../middlewares/auth');
+const { body, validate, query, mongoIdParam, paginationQuery } = require('../../utils/validators');
 
 // ─── All student routes require authentication ──────────────
 router.use(protect);
@@ -35,5 +35,24 @@ router.get(
  */
 router.get('/:id', mongoIdParam('id'), validate, StudentController.getById);
 
-module.exports = router;
+/**
+ * @route   POST /api/students
+ * @desc    Directly create a student (admin flow — no admission needed)
+ * @access  Private (admin, super_admin)
+ */
+const createStudentValidation = [
+  body('name').trim().notEmpty().withMessage('Student name is required'),
+  body('dateOfBirth').notEmpty().isISO8601().withMessage('Valid date of birth is required'),
+  body('gender').isIn(['male', 'female', 'other']).withMessage('Gender must be male, female, or other'),
+  body('classId').notEmpty().isMongoId().withMessage('Valid class ID is required'),
+  body('sectionId').optional({ values: 'null' }).isMongoId().withMessage('Invalid section ID'),
+  body('parentName').trim().notEmpty().withMessage('Parent name is required'),
+  body('parentPhone').trim().notEmpty().withMessage('Parent phone is required'),
+  body('parentEmail').optional().isEmail().withMessage('Invalid email'),
+  body('address').optional().trim(),
+  body('bloodGroup').optional().trim(),
+  validate,
+];
+router.post('/', authorize('admin', 'super_admin'), createStudentValidation, StudentController.create);
 
+module.exports = router;

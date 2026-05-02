@@ -152,6 +152,7 @@ export const admissionAPI = {
 export const studentAPI = {
   getAll: (params) => api.get('/students', { params }),
   getById: (id) => api.get(`/students/${id}`),
+  create: (data) => api.post('/students', data),
 };
 
 // ─── Fees ───────────────────────────────────────────────────
@@ -161,11 +162,21 @@ export const feesAPI = {
   pay: (data) => api.post('/fees/pay', data),
   getStudentFees: (studentId) => api.get(`/fees/student/${studentId}`),
   getOverview: (params) => api.get('/fees/overview', { params }),
+  getInvoice: (studentId) => api.get(`/fees/invoice/${studentId}`),
+  generateInvoice: (studentId) => api.post('/fees/invoice/generate', { studentId }),
+  getDueList: (params) => api.get('/fees/due', { params }),
+  applyStructure: (data) => api.post('/fees/apply-structure', data),
+  manualPayment: (data) => api.post('/fees/manual-payment', data),
+  approvePayment: (id) => api.put(`/fees/payment/${id}/approve`),
+  rejectPayment: (id, reason) => api.put(`/fees/payment/${id}/reject`, { reason }),
+  getPendingPayments: (params) => api.get('/fees/payments/pending', { params }),
 };
 
 // ─── Attendance ─────────────────────────────────────────────
 export const attendanceAPI = {
+  getSessions: () => api.get('/attendance/sessions'),
   mark: (data) => api.post('/attendance', data),
+  lock: (data) => api.post('/attendance/lock', data),
   getByDate: (params) => api.get('/attendance', { params }),
   getReport: (params) => api.get('/attendance/report', { params }),
 };
@@ -178,6 +189,7 @@ export const examAPI = {
   saveMarks: (examId, data) => api.post(`/exams/${examId}/marks`, data),
   getMarks: (examId) => api.get(`/exams/${examId}/marks`),
   getStudentResults: (studentId) => api.get(`/exams/results/${studentId}`),
+  getSubjectsForClass: (classId) => api.get('/exams/subjects-for-class', { params: { classId } }),
 };
 
 // ─── Faculty ────────────────────────────────────────────────
@@ -203,6 +215,7 @@ export const notificationAPI = {
   getUnreadCount: () => api.get('/notifications/unread-count'),
   markRead: (id) => api.patch(`/notifications/${id}/read`),
   markAllRead: () => api.patch('/notifications/read-all'),
+  broadcast: (data) => api.post('/notifications/broadcast', data),
 };
 
 // ─── Activity / Timeline ────────────────────────────────────
@@ -298,6 +311,63 @@ export const publicUploadAPI = {
       timeout: 30000,
     });
   },
+};
+
+// ─── Setup / Admin Foundation ────────────────────────────────
+export const setupAPI = {
+  // School Setting
+  getSchoolSetting: () => api.get('/setup/school-setting'),
+  saveSchoolSetting: (data) => api.put('/setup/school-setting', data),
+  uploadLogo: (file) => {
+    const fd = new FormData();
+    fd.append('logo', file);
+    return api.post('/setup/school-setting/logo', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+
+  // Academic Year
+  getAcademicYears: () => api.get('/setup/academic-years'),
+  getActiveYear: () => api.get('/setup/academic-years/active'),
+  createAcademicYear: (data) => api.post('/setup/academic-years', data),
+  updateAcademicYear: (id, data) => api.put(`/setup/academic-years/${id}`, data),
+
+  // Academic Terms
+  getTerms: (params) => api.get('/setup/terms', { params }),
+  createTerm: (data) => api.post('/setup/terms', data),
+  updateTerm: (id, data) => api.put(`/setup/terms/${id}`, data),
+  deleteTerm: (id) => api.delete(`/setup/terms/${id}`),
+
+  // Class Config
+  getClassConfigs: (params) => api.get('/setup/class-configs', { params }),
+  saveClassConfig: (data) => api.post('/setup/class-configs', data),
+
+  // Class Groups
+  getClassGroups: (params) => api.get('/setup/class-groups', { params }),
+  createClassGroup: (data) => api.post('/setup/class-groups', data),
+  updateClassGroup: (id, data) => api.put(`/setup/class-groups/${id}`, data),
+  deleteClassGroup: (id) => api.delete(`/setup/class-groups/${id}`),
+
+  // Fee Groups
+  getFeeGroups: () => api.get('/setup/fee-groups'),
+  createFeeGroup: (data) => api.post('/setup/fee-groups', data),
+  updateFeeGroup: (id, data) => api.put(`/setup/fee-groups/${id}`, data),
+
+  // Fee Structures (admin config)
+  getFeeStructures: (params) => api.get('/setup/fee-structures', { params }),
+  saveFeeStructure: (data) => api.post('/setup/fee-structures', data),
+
+  // Grade Config
+  getGradeConfigs: () => api.get('/setup/grades'),
+  createGradeConfig: (data) => api.post('/setup/grades', data),
+  updateGradeConfig: (id, data) => api.put(`/setup/grades/${id}`, data),
+  deleteGradeConfig: (id) => api.delete(`/setup/grades/${id}`),
+
+  // Attendance Config
+  getAttendanceConfig: (params) => api.get('/setup/attendance-config', { params }),
+  saveAttendanceConfig: (data) => api.put('/setup/attendance-config', data),
+
+  // Payment Settings
+  getPaymentSettings: () => api.get('/setup/payment-settings'),
+  savePaymentSettings: (data) => api.put('/setup/payment-settings', data),
 };
 
 export default api;

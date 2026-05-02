@@ -18,12 +18,25 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Notification message is required'],
       trim: true,
-      maxlength: 500,
+      maxlength: 1000,
     },
+    // Severity/color type
     type: {
       type: String,
       enum: ['info', 'success', 'warning', 'error'],
       default: 'info',
+    },
+    // Content format (for rich notifications)
+    contentType: {
+      type: String,
+      enum: ['text', 'image', 'file', 'link'],
+      default: 'text',
+    },
+    // Optional URL for image/file/link notifications
+    contentUrl: {
+      type: String,
+      trim: true,
+      default: null,
     },
     isRead: {
       type: Boolean,

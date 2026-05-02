@@ -1,77 +1,77 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  Typography,
-  Select,
-  DatePicker,
-  Row,
-  Col,
-  Table,
-  Button,
-  Switch,
-  Tag,
-  Tabs,
-  Card,
-  Statistic,
-  Empty,
-  App,
+  Typography, Select, DatePicker, Row, Col, Table, Button,
+  Switch, Tag, Tabs, Card, Statistic, Empty, App, Modal, Divider, Badge,
 } from 'antd';
 import {
-  SaveOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  PercentageOutlined,
-  CalendarOutlined,
+  SaveOutlined, CheckCircleOutlined, CloseCircleOutlined,
+  PercentageOutlined, CalendarOutlined, LockOutlined, UnlockOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { studentAPI, schoolAPI, attendanceAPI } from '@/services/api';
+import useAuthStore from '@/store/authStore';
 
 const { Title, Text } = Typography;
 
 const Attendance = () => {
-  const { message } = App.useApp();
 
-  // ─── Shared state ─────────────────────────────────────────
+  const { message, modal } = App.useApp();
+  const { user: authUser } = useAuthStore();
+  const isAdmin = authUser?.role === 'admin' || authUser?.role === 'super_admin';
+  useEffect(() => {
+    if (!authUser) {
+      console.warn("❌ No user in store");
+    } else {
+      console.log("✅ Logged in as:", authUser.role);
+    }
+  }, [authUser]);
+  // ─── Shared ───────────────────────────────────────────────
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
+  const [sessions, setSessions] = useState(['Morning']);
 
-  // ─── Mark tab state ───────────────────────────────────────
+  // ─── Mark tab ─────────────────────────────────────────────
   const [markClassId, setMarkClassId] = useState(undefined);
   const [markSectionId, setMarkSectionId] = useState(undefined);
   const [markDate, setMarkDate] = useState(dayjs());
+  const [markSession, setMarkSession] = useState('Morning');
   const [students, setStudents] = useState([]);
   const [attendanceMap, setAttendanceMap] = useState({});
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [locking, setLocking] = useState(false);
+  const [isLocked, setIsLocked] = useState(false); // whether current view is locked
   const [existingLoaded, setExistingLoaded] = useState(false);
 
-  // ─── View tab state ──────────────────────────────────────
+  // ─── Report tab ───────────────────────────────────────────
   const [viewClassId, setViewClassId] = useState(undefined);
   const [viewDateFrom, setViewDateFrom] = useState(null);
   const [viewDateTo, setViewDateTo] = useState(null);
+  const [viewSession, setViewSession] = useState(undefined);
   const [report, setReport] = useState([]);
+  const [reportStats, setReportStats] = useState(null);
   const [loadingReport, setLoadingReport] = useState(false);
 
-  // ─── Load classes on mount ────────────────────────────────
+  // ─── Load classes + sessions on mount ────────────────────
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await schoolAPI.getClasses({ limit: 50 });
-        setClasses(res.data || []);
-      } catch { /* non-critical */ }
-    };
-    load();
+    schoolAPI.getClasses({ limit: 50 })
+      .then((res) => setClasses(res.data || []))
+      .catch(() => { });
+    attendanceAPI.getSessions()
+      .then((res) => {
+        const s = res.data || ['Morning'];
+        setSessions(s);
+        setMarkSession(s[0]);
+      })
+      .catch(() => { });
   }, []);
 
-  // ─── Load sections when class changes (mark tab) ─────────
+  // ─── Load sections when class changes ────────────────────
   useEffect(() => {
     if (!markClassId) { setSections([]); return; }
-    const load = async () => {
-      try {
-        const res = await schoolAPI.getSections({ classId: markClassId, limit: 50 });
-        setSections(res.data || []);
-      } catch { /* non-critical */ }
-    };
-    load();
+    schoolAPI.getSections({ classId: markClassId, limit: 50 })
+      .then((res) => setSections(res.data || []))
+      .catch(() => { });
     setMarkSectionId(undefined);
   }, [markClassId]);
 
@@ -83,58 +83,79 @@ const Attendance = () => {
     if (!markClassId || !markDate) return;
     setLoadingStudents(true);
     setExistingLoaded(false);
+    setIsLocked(false);
     try {
-      // 1. Load students for this class/section
       const params = { classId: markClassId, limit: 200 };
       if (markSectionId) params.sectionId = markSectionId;
       const res = await studentAPI.getAll(params);
       const studs = res.data || [];
       setStudents(studs);
 
-      // 2. Load existing attendance for this date (if any)
+      // Load existing attendance for this date + session
       const dateStr = markDate.format('YYYY-MM-DD');
       const attRes = await attendanceAPI.getByDate({
         classId: markClassId,
         sectionId: markSectionId || undefined,
         date: dateStr,
+        session: markSession,
       });
       const existing = attRes.data || [];
 
-      // Build map: studentId → status
+      // Build map: studentId → status, default present
       const map = {};
-      studs.forEach((s) => {
-        map[s._id] = 'present'; // default to present
-      });
+      studs.forEach((s) => { map[s._id] = 'present'; });
       existing.forEach((r) => {
         const sid = r.studentId?._id || r.studentId;
         map[sid] = r.status;
       });
-
       setAttendanceMap(map);
       setExistingLoaded(existing.length > 0);
+
+      // Check if locked
+      const locked = existing.some((r) => r.isLocked);
+      setIsLocked(locked);
     } catch (err) {
       message.error(err.message || 'Failed to load students');
     } finally {
       setLoadingStudents(false);
     }
-  }, [markClassId, markSectionId, markDate, message]);
+  }, [markClassId, markSectionId, markDate, markSession, message]);
 
-  // ─── Load students when filters change ────────────────────
   useEffect(() => {
     if (markClassId && markDate) fetchStudents();
-  }, [markClassId, markSectionId, markDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [markClassId, markSectionId, markDate, markSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Toggle attendance for a student ──────────────────────
+  // ─── Toggle individual student ────────────────────────────
   const toggleStatus = (studentId) => {
+    if (isLocked && !isAdmin) { message.warning('Attendance is locked. Contact admin to override.'); return; }
     setAttendanceMap((prev) => ({
       ...prev,
       [studentId]: prev[studentId] === 'present' ? 'absent' : 'present',
     }));
   };
 
+  // ─── Bulk actions ─────────────────────────────────────────
+  const markAllPresent = () => {
+    if (isLocked && !isAdmin) { message.warning('Attendance is locked.'); return; }
+    const map = {};
+    students.forEach((s) => { map[s._id] = 'present'; });
+    setAttendanceMap(map);
+  };
+
+
+  const markAllAbsent = () => {
+    if (isLocked && !isAdmin) { message.warning('Attendance is locked.'); return; }
+    const map = {};
+    students.forEach((s) => { map[s._id] = 'absent'; });
+    setAttendanceMap(map);
+  };
+
+
   // ─── Save attendance ──────────────────────────────────────
   const handleSave = async () => {
     if (!students.length) return;
+    // Admin can always override locked attendance; faculty cannot
+    if (isLocked && !isAdmin) { message.error('Cannot save — attendance is locked.'); return; }
     setSaving(true);
     try {
       const dateStr = markDate.format('YYYY-MM-DD');
@@ -143,14 +164,13 @@ const Attendance = () => {
         classId: markClassId,
         sectionId: markSectionId || null,
         date: dateStr,
+        session: markSession,
         status: attendanceMap[s._id] || 'present',
       }));
 
       const res = await attendanceAPI.mark({ records });
       const info = res.data;
-      message.success(
-        `Attendance saved — ${info.total} students (${info.saved} new, ${info.updated} updated)`
-      );
+      message.success(`Attendance saved — ${info.total} students (${info.saved} new, ${info.updated} updated)`);
       setExistingLoaded(true);
     } catch (err) {
       message.error(err.message || 'Failed to save attendance');
@@ -159,34 +179,64 @@ const Attendance = () => {
     }
   };
 
-  // ─── Mark tab columns ─────────────────────────────────────
+  // ─── Lock confirmation + submit ───────────────────────────
+  const handleLock = () => {
+    const presentCount = Object.values(attendanceMap).filter((v) => v === 'present').length;
+    const absentCount = students.length - presentCount;
+
+    modal.confirm({
+      title: 'Lock Attendance',
+      icon: <LockOutlined style={{ color: '#F59E0B' }} />,
+      content: (
+        <div style={{ marginTop: 12 }}>
+          <p>Once locked, faculty cannot edit this attendance. Only admin can override.</p>
+          <div style={{ background: '#F8FAFC', borderRadius: 8, padding: '10px 14px', marginTop: 8 }}>
+            <div><Text type="secondary">Total Students:</Text> <Text strong>{students.length}</Text></div>
+            <div><Text type="secondary">Present:</Text> <Text strong style={{ color: '#22C55E' }}>{presentCount}</Text></div>
+            <div><Text type="secondary">Absent:</Text> <Text strong style={{ color: '#EF4444' }}>{absentCount}</Text></div>
+            <div><Text type="secondary">Session:</Text> <Text strong>{markSession}</Text></div>
+            <div><Text type="secondary">Date:</Text> <Text strong>{markDate?.format('DD MMM YYYY')}</Text></div>
+          </div>
+        </div>
+      ),
+      okText: 'Lock Attendance',
+      okButtonProps: { danger: false, style: { background: '#F59E0B', borderColor: '#F59E0B' } },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        setLocking(true);
+        try {
+          await attendanceAPI.lock({
+            classId: markClassId,
+            date: markDate.format('YYYY-MM-DD'),
+            session: markSession,
+          });
+          message.success('Attendance locked successfully');
+          setIsLocked(true);
+        } catch (err) {
+          message.error(err.message || 'Failed to lock attendance');
+        } finally {
+          setLocking(false);
+        }
+      },
+    });
+  };
+
+  // ─── Derived counts ───────────────────────────────────────
   const presentCount = Object.values(attendanceMap).filter((v) => v === 'present').length;
   const absentCount = students.length - presentCount;
 
+  // ─── Mark tab columns ─────────────────────────────────────
   const markColumns = [
+    { title: '#', key: 'index', width: 48, render: (_, __, i) => i + 1 },
+    { title: 'Roll No', dataIndex: 'rollNo', key: 'rollNo', width: 100 },
     {
-      title: '#',
-      key: 'index',
-      width: 50,
-      render: (_, __, i) => i + 1,
-    },
-    {
-      title: 'Roll No',
-      dataIndex: 'rollNo',
-      key: 'rollNo',
-      width: 110,
-    },
-    {
-      title: 'Student Name',
-      dataIndex: 'name',
-      key: 'name',
-      width: 200,
+      title: 'Student Name', dataIndex: 'name', key: 'name', width: 200,
       render: (text) => <Text strong>{text}</Text>,
     },
     {
       title: 'Status',
       key: 'status',
-      width: 140,
+      width: 150,
       render: (_, record) => {
         const isPresent = attendanceMap[record._id] === 'present';
         return (
@@ -195,9 +245,8 @@ const Attendance = () => {
             onChange={() => toggleStatus(record._id)}
             checkedChildren="Present"
             unCheckedChildren="Absent"
-            style={{
-              backgroundColor: isPresent ? '#22C55E' : '#EF4444',
-            }}
+            disabled={isLocked && !isAdmin}
+            style={{ backgroundColor: isPresent ? '#22C55E' : '#EF4444' }}
           />
         );
       },
@@ -205,7 +254,7 @@ const Attendance = () => {
     {
       title: '',
       key: 'tag',
-      width: 80,
+      width: 60,
       render: (_, record) => {
         const status = attendanceMap[record._id];
         return status === 'present'
@@ -216,7 +265,7 @@ const Attendance = () => {
   ];
 
   // ═══════════════════════════════════════════════════════════
-  //  VIEW ATTENDANCE TAB
+  //  REPORT TAB
   // ═══════════════════════════════════════════════════════════
 
   const fetchReport = useCallback(async () => {
@@ -226,89 +275,69 @@ const Attendance = () => {
       const params = { classId: viewClassId };
       if (viewDateFrom) params.dateFrom = viewDateFrom.format('YYYY-MM-DD');
       if (viewDateTo) params.dateTo = viewDateTo.format('YYYY-MM-DD');
+      if (viewSession) params.session = viewSession;
 
       const res = await attendanceAPI.getReport(params);
-      setReport(res.data || []);
+      // New service returns { report, stats }
+      const data = res.data;
+      if (data && data.report) {
+        setReport(data.report);
+        setReportStats(data.stats);
+      } else {
+        // Backward compat if array returned
+        setReport(Array.isArray(data) ? data : []);
+        setReportStats(null);
+      }
     } catch (err) {
       message.error(err.message || 'Failed to load report');
     } finally {
       setLoadingReport(false);
     }
-  }, [viewClassId, viewDateFrom, viewDateTo, message]);
+  }, [viewClassId, viewDateFrom, viewDateTo, viewSession, message]);
 
   useEffect(() => {
     if (viewClassId) fetchReport();
-  }, [viewClassId, viewDateFrom, viewDateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [viewClassId, viewDateFrom, viewDateTo, viewSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const viewColumns = [
+    { title: '#', key: 'index', width: 48, render: (_, __, i) => i + 1 },
+    { title: 'Roll No', dataIndex: 'rollNo', key: 'rollNo', width: 100 },
     {
-      title: '#',
-      key: 'index',
-      width: 50,
-      render: (_, __, i) => i + 1,
-    },
-    {
-      title: 'Roll No',
-      dataIndex: 'rollNo',
-      key: 'rollNo',
-      width: 110,
-    },
-    {
-      title: 'Student Name',
-      dataIndex: 'studentName',
-      key: 'studentName',
-      width: 200,
+      title: 'Student Name', dataIndex: 'studentName', key: 'studentName', width: 200,
       render: (text) => <Text strong>{text}</Text>,
     },
     {
-      title: 'Present',
-      dataIndex: 'totalPresent',
-      key: 'totalPresent',
-      width: 100,
+      title: 'Present', dataIndex: 'totalPresent', key: 'totalPresent', width: 90,
       align: 'center',
       render: (val) => <Tag color="green">{val}</Tag>,
     },
     {
-      title: 'Absent',
-      dataIndex: 'totalAbsent',
-      key: 'totalAbsent',
-      width: 100,
+      title: 'Absent', dataIndex: 'totalAbsent', key: 'totalAbsent', width: 90,
       align: 'center',
       render: (val) => <Tag color="red">{val}</Tag>,
     },
     {
-      title: 'Total Days',
-      dataIndex: 'totalDays',
-      key: 'totalDays',
-      width: 100,
+      title: 'Late', dataIndex: 'totalLate', key: 'totalLate', width: 80,
+      align: 'center',
+      render: (val) => val > 0 ? <Tag color="orange">{val}</Tag> : <Tag>0</Tag>,
+    },
+    {
+      title: 'Total Days', dataIndex: 'totalDays', key: 'totalDays', width: 100,
       align: 'center',
     },
     {
-      title: 'Percentage',
-      dataIndex: 'percentage',
-      key: 'percentage',
-      width: 120,
+      title: 'Attendance %', dataIndex: 'percentage', key: 'percentage', width: 120,
       align: 'center',
+      sorter: (a, b) => a.percentage - b.percentage,
       render: (val) => {
-        let color = '#22C55E';
-        if (val < 75) color = '#EF4444';
-        else if (val < 85) color = '#F59E0B';
-        return (
-          <Text strong style={{ color }}>
-            {val}%
-          </Text>
-        );
+        const color = val >= 85 ? '#22C55E' : val >= 75 ? '#F59E0B' : '#EF4444';
+        return <Text strong style={{ color }}>{val}%</Text>;
       },
     },
   ];
 
-  // ─── Derived report stats ─────────────────────────────────
-  const avgPercentage = report.length
-    ? (report.reduce((s, r) => s + r.percentage, 0) / report.length).toFixed(1)
-    : 0;
-
   // ═══════════════════════════════════════════════════════════
-  //  RENDER
+  //  TAB ITEMS
   // ═══════════════════════════════════════════════════════════
 
   const tabItems = [
@@ -319,7 +348,7 @@ const Attendance = () => {
         <>
           {/* Filters */}
           <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-            <Col xs={24} sm={8} md={6}>
+            <Col xs={24} sm={8} md={5}>
               <Select
                 placeholder="Select class"
                 style={{ width: '100%' }}
@@ -330,7 +359,7 @@ const Attendance = () => {
                 id="mark-class-select"
               />
             </Col>
-            <Col xs={24} sm={8} md={6}>
+            <Col xs={24} sm={8} md={5}>
               <Select
                 placeholder="Select section"
                 style={{ width: '100%' }}
@@ -342,7 +371,7 @@ const Attendance = () => {
                 id="mark-section-select"
               />
             </Col>
-            <Col xs={24} sm={8} md={6}>
+            <Col xs={24} sm={8} md={5}>
               <DatePicker
                 style={{ width: '100%' }}
                 value={markDate}
@@ -352,7 +381,31 @@ const Attendance = () => {
                 id="mark-date-picker"
               />
             </Col>
+            <Col xs={24} sm={8} md={5}>
+              <Select
+                placeholder="Session"
+                style={{ width: '100%' }}
+                value={markSession}
+                onChange={(val) => setMarkSession(val)}
+                options={sessions.map((s) => ({ label: s, value: s }))}
+                id="mark-session-select"
+              />
+            </Col>
           </Row>
+
+          {/* Lock banner */}
+          {isLocked && (
+            <div style={{
+              background: '#FEF9C3', border: '1px solid #FDE047',
+              borderRadius: 8, padding: '8px 14px', marginBottom: 12,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <LockOutlined style={{ color: '#CA8A04' }} />
+              <Text style={{ color: '#92400E', fontWeight: 500 }}>
+                Attendance is LOCKED for this session. Only admin can modify.
+              </Text>
+            </div>
+          )}
 
           {/* Stats bar */}
           {students.length > 0 && (
@@ -390,7 +443,19 @@ const Attendance = () => {
             </Row>
           )}
 
-          {/* Table + Save */}
+          {/* Bulk actions */}
+          {students.length > 0 && !isLocked && (
+            <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+              <Button size="small" onClick={markAllPresent} style={{ color: '#22C55E', borderColor: '#22C55E' }}>
+                ✓ All Present
+              </Button>
+              <Button size="small" onClick={markAllAbsent} style={{ color: '#EF4444', borderColor: '#EF4444' }}>
+                ✗ All Absent
+              </Button>
+            </div>
+          )}
+
+          {/* Table */}
           {!markClassId ? (
             <Empty description="Select a class to load students" style={{ marginTop: 40 }} />
           ) : (
@@ -408,21 +473,39 @@ const Attendance = () => {
                 locale={{ emptyText: 'No students found for this class' }}
               />
               {students.length > 0 && (
-                <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <Button
-                    type="primary"
-                    icon={<SaveOutlined />}
-                    size="large"
-                    onClick={handleSave}
-                    loading={saving}
-                    disabled={saving}
-                    id="save-attendance-btn"
-                  >
-                    {existingLoaded ? 'Update Attendance' : 'Save Attendance'}
-                  </Button>
+                <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  {/* Save button: hidden when locked AND not admin */}
+                  {(!isLocked || isAdmin) && (
+                    <Button
+                      type="primary"
+                      icon={<SaveOutlined />}
+                      size="large"
+                      onClick={handleSave}
+                      loading={saving}
+                      disabled={saving}
+                      id="save-attendance-btn"
+                    >
+                      {existingLoaded ? (isLocked ? 'Override (Admin)' : 'Update Attendance') : 'Save Attendance'}
+                    </Button>
+                  )}
+                  {/* Lock button: visible to both admin and faculty */}
+                  {existingLoaded && !isLocked && (
+                    <Button
+                      icon={<LockOutlined />}
+                      size="large"
+                      loading={locking}
+                      onClick={handleLock}
+                      style={{ background: '#F59E0B', borderColor: '#F59E0B', color: '#FFF' }}
+                      id="lock-attendance-btn"
+                    >
+                      Lock Attendance
+                    </Button>
+                  )}
                   {existingLoaded && (
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                      ⚠ Attendance already exists for this date — saving will update it.
+                      {isLocked
+                        ? '🔒 Locked — only admin can modify'
+                        : '⚠ Attendance already saved — saving will update it.'}
                     </Text>
                   )}
                 </div>
@@ -434,12 +517,12 @@ const Attendance = () => {
     },
     {
       key: 'view',
-      label: 'View Attendance',
+      label: 'View Report',
       children: (
         <>
           {/* Filters */}
           <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-            <Col xs={24} sm={8} md={6}>
+            <Col xs={24} sm={8} md={5}>
               <Select
                 placeholder="Select class"
                 style={{ width: '100%' }}
@@ -450,7 +533,7 @@ const Attendance = () => {
                 id="view-class-select"
               />
             </Col>
-            <Col xs={24} sm={8} md={6}>
+            <Col xs={24} sm={8} md={5}>
               <DatePicker
                 style={{ width: '100%' }}
                 value={viewDateFrom}
@@ -460,7 +543,7 @@ const Attendance = () => {
                 id="view-date-from"
               />
             </Col>
-            <Col xs={24} sm={8} md={6}>
+            <Col xs={24} sm={8} md={5}>
               <DatePicker
                 style={{ width: '100%' }}
                 value={viewDateTo}
@@ -470,34 +553,57 @@ const Attendance = () => {
                 id="view-date-to"
               />
             </Col>
+            <Col xs={24} sm={8} md={5}>
+              <Select
+                placeholder="All sessions"
+                style={{ width: '100%' }}
+                value={viewSession}
+                onChange={(val) => setViewSession(val)}
+                options={[{ label: 'All Sessions', value: undefined }, ...sessions.map((s) => ({ label: s, value: s }))]}
+                allowClear
+                id="view-session-select"
+              />
+            </Col>
           </Row>
 
-          {/* Report stats */}
-          {report.length > 0 && (
+          {/* Stats cards */}
+          {reportStats && (
             <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-              <Col xs={12} sm={8}>
+              <Col xs={12} sm={6}>
                 <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
                   <Statistic
                     title={<span style={{ fontSize: 12, color: '#64748B' }}>Students</span>}
-                    value={report.length}
-                    styles={{ content: { fontSize: 20, fontWeight: 700, color: '#1B3A5C' } }}
+                    value={reportStats.studentCount}
+                    styles={{ content: { fontSize: 20, fontWeight: 700 } }}
                   />
                 </Card>
               </Col>
-              <Col xs={12} sm={8}>
+              <Col xs={12} sm={6}>
+                <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                  <Statistic
+                    title={<span style={{ fontSize: 12, color: '#64748B' }}>Total Present</span>}
+                    value={reportStats.totalPresent}
+                    styles={{ content: { fontSize: 20, fontWeight: 700, color: '#22C55E' } }}
+                  />
+                </Card>
+              </Col>
+              <Col xs={12} sm={6}>
+                <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                  <Statistic
+                    title={<span style={{ fontSize: 12, color: '#64748B' }}>Total Absent</span>}
+                    value={reportStats.totalAbsent}
+                    styles={{ content: { fontSize: 20, fontWeight: 700, color: '#EF4444' } }}
+                  />
+                </Card>
+              </Col>
+              <Col xs={12} sm={6}>
                 <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
                   <Statistic
                     title={<span style={{ fontSize: 12, color: '#64748B' }}>Avg Attendance</span>}
-                    value={avgPercentage}
+                    value={reportStats.avgPercentage}
                     suffix="%"
                     prefix={<PercentageOutlined style={{ color: '#3B82F6' }} />}
-                    styles={{
-                      content: {
-                        fontSize: 20,
-                        fontWeight: 700,
-                        color: avgPercentage >= 75 ? '#22C55E' : '#EF4444',
-                      },
-                    }}
+                    styles={{ content: { fontSize: 20, fontWeight: 700, color: reportStats.avgPercentage >= 75 ? '#22C55E' : '#EF4444' } }}
                   />
                 </Card>
               </Col>
@@ -513,12 +619,8 @@ const Attendance = () => {
               dataSource={report}
               rowKey="_id"
               loading={loadingReport}
-              pagination={{
-                showSizeChanger: true,
-                showTotal: (total) => `Total ${total} students`,
-                pageSize: 20,
-              }}
-              scroll={{ x: 780 }}
+              pagination={{ showSizeChanger: true, showTotal: (t) => `Total ${t} students`, pageSize: 20 }}
+              scroll={{ x: 840 }}
               size="middle"
               bordered={false}
               style={{ background: '#FFF', borderRadius: 8 }}
@@ -536,7 +638,7 @@ const Attendance = () => {
         <Title level={4} className="page-title" style={{ margin: 0 }}>
           Attendance Management
         </Title>
-        <Text type="secondary">Mark and track student attendance</Text>
+        <Text type="secondary">Mark, lock, and track student attendance by session</Text>
       </div>
 
       <Tabs

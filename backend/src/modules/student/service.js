@@ -68,6 +68,72 @@ class StudentService {
 
     return student;
   }
+  /**
+   * Directly create a student (admin flow — no admission required).
+   * @param {Object} data - student data
+   * @returns {Object} created student
+   */
+  static async createStudent(data) {
+    const Class = require('../../models/Class');
+    const Section = require('../../models/Section');
+    const FeeStructure = require('../../models/FeeStructure');
+    const SetupService = require('../setup/service');
+    const AdmissionService = require('../admission/service');
+
+    // Validate class
+    const classDoc = await Class.findById(data.classId);
+    if (!classDoc) throw new AppError('Class not found', 404);
+
+    // Validate section belongs to class (if provided)
+    if (data.sectionId) {
+      const section = await Section.findById(data.sectionId);
+      if (!section) throw new AppError('Section not found', 404);
+      if (section.classId.toString() !== data.classId.toString()) {
+        throw new AppError('Section does not belong to the selected class', 400);
+      }
+    }
+
+    // Resolve academic year
+    const academicYearId = await SetupService.resolveAcademicYearId(data.academicYearId);
+
+    // Auto-generate roll number
+    const rollNo = await AdmissionService.generateRollNo(data.classId);
+
+    // Look up fee structure (graceful — non-blocking)
+    let feeStructureId = null;
+    try {
+      const feeDoc = await FeeStructure.findOne({ classId: data.classId, academicYearId }).select('_id');
+      if (feeDoc) feeStructureId = feeDoc._id;
+    } catch (e) {
+      console.error('Fee structure lookup failed:', e.message);
+    }
+
+    const student = await Student.create({
+      ...data,
+      rollNo,
+      academicYearId,
+      feeStructureId,
+      admissionId: null,
+    });
+
+    // Auto-generate fee invoice (non-blocking — student creation succeeds regardless)
+    try {
+      const FeesService = require('../fees/service');
+      await FeesService.generateInvoice({
+        studentId: student._id,
+        classId: student.classId,
+        academicYearId: student.academicYearId,
+        feeStructureId: student.feeStructureId,
+      });
+    } catch (e) {
+      console.error('Auto invoice generation failed (non-critical):', e.message);
+    }
+
+    return Student.findById(student._id)
+      .populate('classId', 'name code')
+      .populate('sectionId', 'name')
+      .populate('academicYearId', 'name');
+  }
 }
 
 module.exports = StudentService;

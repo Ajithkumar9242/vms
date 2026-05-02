@@ -76,6 +76,18 @@ const studentSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // ─── Academic context ────────────────────────────────────
+    academicYearId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AcademicYear',
+      default: null,
+    },
+    // Fee structure assigned at admission time (for quick lookup)
+    feeStructureId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FeeStructure',
+      default: null,
+    },
   },
   { timestamps: true }
 );

@@ -41,6 +41,17 @@ class NotificationController {
       next(error);
     }
   }
+
+  static async broadcast(req, res, next) {
+    try {
+      const { target, classId, studentId, title, message, type, contentType, contentUrl, metadata } = req.body;
+      const result = await NotificationService.broadcast({ target, classId, studentId, title, message, type, contentType, contentUrl, metadata });
+      return ApiResponse.success(res, result, `Notification sent to ${result.sent} users`);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = NotificationController;
+

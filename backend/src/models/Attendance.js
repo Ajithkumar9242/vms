@@ -20,10 +20,21 @@ const attendanceSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
+    // Session from AttendanceConfig (e.g. "Morning", "P1")
+    session: {
+      type: String,
+      default: 'Morning',
+      trim: true,
+    },
     status: {
       type: String,
       enum: ['present', 'absent', 'late', 'excused'],
       required: true,
+    },
+    // Lock prevents non-admin edits after submission
+    isLocked: {
+      type: Boolean,
+      default: false,
     },
     remarks: {
       type: String,
@@ -37,6 +48,9 @@ const attendanceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-attendanceSchema.index({ studentId: 1, date: 1 }, { unique: true });
+// Unique per student per date per session
+attendanceSchema.index({ studentId: 1, date: 1, session: 1 }, { unique: true });
+// Fast lookups for class+date+session bulk fetch
+attendanceSchema.index({ classId: 1, date: 1, session: 1 });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

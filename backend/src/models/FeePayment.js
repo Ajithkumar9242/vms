@@ -25,6 +25,25 @@ const feePaymentSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
+    // Link to FeeInvoice (optional — backward compat with old payments)
+    invoiceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FeeInvoice',
+      default: null,
+    },
+    // Manual payment proof (screenshot / receipt image)
+    proofUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    // approval status — 'approved' by default for admin-recorded payments
+    // manual payments start as 'pending' and require admin approval
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'approved',
+    },
     paidAt: {
       type: Date,
       default: Date.now,

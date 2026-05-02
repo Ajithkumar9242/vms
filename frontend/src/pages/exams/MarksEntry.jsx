@@ -1,24 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  Typography,
-  Select,
-  Row,
-  Col,
-  Table,
-  Button,
-  InputNumber,
-  Tag,
-  Empty,
-  App,
-  Divider,
+  Typography, Select, Row, Col, Table, Button,
+  InputNumber, Tag, Empty, App,
 } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import { examAPI, studentAPI } from '@/services/api';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 /**
- * MarksEntry — select an exam, load students, enter marks per subject, bulk save.
+ * MarksEntry — select exam → load students → subject-wise marks entry.
+ * Handles the Exam.subjects schema: [{ subjectId: { _id, name, code }, maxMarks, passingMarks }]
  */
 const MarksEntry = () => {
   const { message } = App.useApp();
@@ -27,42 +19,37 @@ const MarksEntry = () => {
   const [selectedExamId, setSelectedExamId] = useState(undefined);
   const [exam, setExam] = useState(null);
   const [students, setStudents] = useState([]);
-  const [marksMap, setMarksMap] = useState({}); // { `${studentId}_${subjectId}`: marks }
+  const [marksMap, setMarksMap] = useState({}); // { `${studentId}_${subjectId}`: value }
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // ─── Load exams list ──────────────────────────────────────
+  // ─── Load exam list ───────────────────────────────────────
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await examAPI.getAll();
-        setExams(res.data || []);
-      } catch { /* non-critical */ }
-    };
-    load();
+    examAPI.getAll()
+      .then((res) => setExams(res.data || []))
+      .catch(() => {});
   }, []);
 
-  // ─── Load exam detail + students + existing marks ─────────
+  // ─── Load exam + students + existing marks ────────────────
   const loadExamData = useCallback(async () => {
     if (!selectedExamId) return;
     setLoading(true);
     try {
-      // Fetch exam detail
-      const examRes = await examAPI.getById(selectedExamId);
+      const [examRes, marksRes] = await Promise.all([
+        examAPI.getById(selectedExamId),
+        examAPI.getMarks(selectedExamId),
+      ]);
       const examData = examRes.data;
       setExam(examData);
 
       // Fetch students for this class
-      const stuRes = await studentAPI.getAll({ classId: examData.classId._id, limit: 200 });
+      const classId = examData.classId?._id || examData.classId;
+      const stuRes = await studentAPI.getAll({ classId, limit: 200 });
       setStudents(stuRes.data || []);
 
-      // Fetch existing marks
-      const marksRes = await examAPI.getMarks(selectedExamId);
-      const existingMarks = marksRes.data?.marks || [];
-
-      // Build marks map
+      // Build marks map from existing entries
       const map = {};
-      existingMarks.forEach((m) => {
+      (marksRes.data?.marks || []).forEach((m) => {
         const sid = m.studentId?._id || m.studentId;
         const subId = m.subjectId?._id || m.subjectId;
         map[`${sid}_${subId}`] = m.marksObtained;
@@ -79,12 +66,9 @@ const MarksEntry = () => {
     if (selectedExamId) loadExamData();
   }, [selectedExamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Update marks ─────────────────────────────────────────
+  // ─── Update a mark ────────────────────────────────────────
   const updateMark = (studentId, subjectId, value) => {
-    setMarksMap((prev) => ({
-      ...prev,
-      [`${studentId}_${subjectId}`]: value,
-    }));
+    setMarksMap((prev) => ({ ...prev, [`${studentId}_${subjectId}`]: value }));
   };
 
   // ─── Save marks ───────────────────────────────────────────
@@ -94,13 +78,15 @@ const MarksEntry = () => {
     try {
       const marks = [];
       students.forEach((student) => {
-        exam.subjects.forEach((subject) => {
-          const key = `${student._id}_${subject._id}`;
+        (exam.subjects || []).forEach((subjectEntry) => {
+          // After populate: subjectEntry.subjectId = { _id, name, code }
+          const subId = subjectEntry.subjectId?._id || subjectEntry.subjectId;
+          const key = `${student._id}_${subId}`;
           const val = marksMap[key];
           if (val !== undefined && val !== null) {
             marks.push({
               studentId: student._id,
-              subjectId: subject._id,
+              subjectId: subId,
               marksObtained: val,
             });
           }
@@ -123,60 +109,54 @@ const MarksEntry = () => {
     }
   };
 
-  // ─── Build dynamic columns based on exam subjects ─────────
-  const columns = [
-    {
-      title: '#',
-      key: 'index',
-      width: 50,
-      fixed: 'left',
-      render: (_, __, i) => i + 1,
-    },
-    {
-      title: 'Roll No',
-      dataIndex: 'rollNo',
-      key: 'rollNo',
-      width: 100,
-      fixed: 'left',
-    },
-    {
-      title: 'Student Name',
-      dataIndex: 'name',
-      key: 'name',
-      width: 180,
-      fixed: 'left',
-      render: (text) => <Text strong>{text}</Text>,
-    },
-    // Subject columns — dynamic
-    ...(exam?.subjects || []).map((subject) => ({
+  // ─── Dynamic columns ──────────────────────────────────────
+  const subjectColumns = (exam?.subjects || []).map((subjectEntry) => {
+    // After DB populate: subjectEntry = { subjectId: {_id, name, code}, maxMarks, passingMarks }
+    const subDoc = subjectEntry.subjectId || {};
+    const subId = subDoc._id || subjectEntry.subjectId;
+    const maxM = subjectEntry.maxMarks || 100;
+    const passingM = subjectEntry.passingMarks || 0;
+
+    return {
       title: (
         <span>
-          {subject.name}
+          <Text strong>{subDoc.name || subDoc.code || 'Subject'}</Text>
           <br />
-          <Text type="secondary" style={{ fontSize: 11 }}>
-            Max: {exam.maxMarks}
+          <Text type="secondary" style={{ fontSize: 10 }}>
+            Max: {maxM} | Pass: {passingM}
           </Text>
         </span>
       ),
-      key: subject._id,
-      width: 120,
+      key: String(subId),
+      width: 130,
       align: 'center',
       render: (_, record) => {
-        const key = `${record._id}_${subject._id}`;
+        const key = `${record._id}_${subId}`;
+        const val = marksMap[key] ?? null;
+        const isFail = val !== null && passingM > 0 && val < passingM;
         return (
           <InputNumber
             min={0}
-            max={exam.maxMarks}
-            value={marksMap[key] ?? null}
-            onChange={(val) => updateMark(record._id, subject._id, val)}
+            max={maxM}
+            value={val}
+            onChange={(v) => updateMark(record._id, String(subId), v)}
             size="small"
-            style={{ width: 80 }}
+            style={{ width: 80, borderColor: isFail ? '#EF4444' : undefined }}
             placeholder="—"
           />
         );
       },
-    })),
-    // Total column
+    };
+  });
+
+  const columns = [
+    { title: '#', key: 'idx', width: 48, fixed: 'left', render: (_, __, i) => i + 1 },
+    { title: 'Roll No', dataIndex: 'rollNo', key: 'rollNo', width: 100, fixed: 'left' },
+    {
+      title: 'Student Name', dataIndex: 'name', key: 'name', width: 180, fixed: 'left',
+      render: (text) => <Text strong>{text}</Text>,
+    },
+    ...subjectColumns,
     {
       title: 'Total',
       key: 'total',
@@ -184,10 +164,16 @@ const MarksEntry = () => {
       align: 'center',
       render: (_, record) => {
         let total = 0;
-        (exam?.subjects || []).forEach((s) => {
-          total += marksMap[`${record._id}_${s._id}`] || 0;
+        (exam?.subjects || []).forEach((se) => {
+          const subId = se.subjectId?._id || se.subjectId;
+          total += marksMap[`${record._id}_${subId}`] || 0;
         });
-        return <Text strong>{total}</Text>;
+        const totalMax = (exam?.subjects || []).reduce((sum, se) => sum + (se.maxMarks || 0), 0);
+        return (
+          <Text strong style={{ color: total > 0 ? '#1D4ED8' : undefined }}>
+            {total}/{totalMax}
+          </Text>
+        );
       },
     },
   ];
@@ -195,14 +181,14 @@ const MarksEntry = () => {
   return (
     <>
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={24} sm={12} md={8}>
+        <Col xs={24} sm={14} md={10}>
           <Select
             placeholder="Select exam"
             style={{ width: '100%' }}
             value={selectedExamId}
             onChange={(val) => setSelectedExamId(val)}
             options={exams.map((e) => ({
-              label: `${e.name} — ${e.classId?.name || ''} (${e.academicYear})`,
+              label: `${e.name} — ${e.classId?.name || ''}`,
               value: e._id,
             }))}
             allowClear
@@ -213,24 +199,30 @@ const MarksEntry = () => {
         </Col>
       </Row>
 
+      {/* Exam info banner */}
       {exam && (
-        <div
-          style={{
-            background: '#F0F5FF',
-            border: '1px solid #D6E4FF',
-            borderRadius: 8,
-            padding: '10px 16px',
-            marginBottom: 16,
-            display: 'flex',
-            gap: 24,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-          }}
-        >
+        <div style={{
+          background: '#EFF6FF',
+          border: '1px solid #BFDBFE',
+          borderRadius: 8,
+          padding: '10px 16px',
+          marginBottom: 16,
+          display: 'flex',
+          gap: 24,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}>
           <span><Text type="secondary">Class:</Text> <Text strong>{exam.classId?.name}</Text></span>
-          <span><Text type="secondary">Max Marks:</Text> <Text strong>{exam.maxMarks}</Text></span>
-          <span><Text type="secondary">Passing:</Text> <Text strong>{exam.passingMarks}</Text></span>
-          <span><Text type="secondary">Subjects:</Text> {exam.subjects?.map((s) => <Tag key={s._id} color="blue">{s.code}</Tag>)}</span>
+          <span><Text type="secondary">Subjects:</Text>{' '}
+            {(exam.subjects || []).map((se) => {
+              const sub = se.subjectId || {};
+              return (
+                <Tag key={String(sub._id || se.subjectId)} color="blue" style={{ marginRight: 4 }}>
+                  {sub.name || sub.code || '—'} ({se.maxMarks})
+                </Tag>
+              );
+            })}
+          </span>
         </div>
       )}
 
@@ -244,11 +236,11 @@ const MarksEntry = () => {
             rowKey="_id"
             loading={loading}
             pagination={false}
-            scroll={{ x: 400 + (exam?.subjects?.length || 0) * 120 }}
+            scroll={{ x: 330 + (exam?.subjects?.length || 0) * 130 }}
             size="middle"
             bordered
             style={{ background: '#FFF', borderRadius: 8 }}
-            locale={{ emptyText: 'No students found' }}
+            locale={{ emptyText: 'No students found in this class' }}
           />
           {students.length > 0 && (
             <div style={{ marginTop: 16 }}>
