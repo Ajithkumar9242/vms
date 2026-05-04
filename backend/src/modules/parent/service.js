@@ -77,6 +77,26 @@ class ParentService {
 
     return Parent.findById(parentId).populate('linkedStudents', 'name rollNo');
   }
+
+  /**
+   * Update a parent's own profile (self-service).
+   * Only allows editing: phone, email, address, occupation.
+   * @param {string} userId — logged-in user._id
+   * @param {Object} updates
+   */
+  static async updateMyProfile(userId, updates) {
+    const parent = await Parent.findOne({ userId });
+    if (!parent) throw new AppError('Parent profile not found for this account', 404);
+
+    // Whitelist editable fields only
+    const allowed = ['phone', 'email', 'address', 'occupation'];
+    allowed.forEach((field) => {
+      if (updates[field] !== undefined) parent[field] = updates[field];
+    });
+
+    await parent.save();
+    return parent;
+  }
 }
 
 module.exports = ParentService;

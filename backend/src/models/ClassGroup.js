@@ -13,7 +13,12 @@ const classGroupSchema = new mongoose.Schema(
       ref: 'Section',
       required: [true, 'Section is required'],
     },
-    name: { type: String, required: [true, 'Group name is required'], trim: true },
+    name: {
+      type: String,
+      required: [true, 'Group name is required'],
+      trim: true,
+    },
+    // Kept as 'classTeacherId' for backward compat — also aliased as teacherId in API
     classTeacherId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Faculty',

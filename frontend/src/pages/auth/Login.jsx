@@ -12,18 +12,25 @@ const Login = () => {
   const { message } = App.useApp();
   const { login, loading, isAuthenticated } = useAuthStore();
 
-  // Redirect if already logged in
+  const { user } = useAuthStore();
+
+  // Role-aware redirect if already logged in
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/', { replace: true });
+    if (isAuthenticated && user) {
+      if (user.role === 'parent') navigate('/parent/dashboard', { replace: true });
+      else if (user.role === 'faculty') navigate('/faculty/attendance', { replace: true });
+      else navigate('/', { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user, navigate]);
 
   const onFinish = async (values) => {
     const result = await login(values.email, values.password);
     if (result.success) {
       message.success('Login successful');
-      navigate('/', { replace: true });
+      const u = useAuthStore.getState().user;
+      if (u?.role === 'parent') navigate('/parent/dashboard', { replace: true });
+      else if (u?.role === 'faculty') navigate('/faculty/attendance', { replace: true });
+      else navigate('/', { replace: true });
     } else {
       message.error(result.message || 'Login failed');
     }

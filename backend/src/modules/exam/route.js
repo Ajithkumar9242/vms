@@ -1,162 +1,101 @@
 const router = require('express').Router();
-const ExamController = require('./controller');
+const C = require('./controller');
 const { protect, authorize } = require('../../middlewares/auth');
 const { validate, body, query, mongoIdParam } = require('../../utils/validators');
 const idempotency = require('../../middlewares/idempotency');
 
-// ─── All exam routes require authentication ─────────────────
+const admin  = authorize('admin', 'super_admin');
+const staff  = authorize('admin', 'super_admin', 'faculty');
+const reader = authorize('admin', 'super_admin', 'faculty', 'parent');
+
 router.use(protect);
 
-/**
- * @route   GET /api/exams/health
- * @desc    Module health check
- * @access  Private
- */
-router.get('/health', ExamController.health);
-
-/**
- * @route   GET /api/exams/subjects-for-class
- * @desc    Get subjects configured for a class (from ClassConfig, falls back to all subjects)
- * @access  Private
- */
+// ── Utility / Lookup ──────────────────────────────────────
+router.get('/health', C.health);
 router.get(
   '/subjects-for-class',
   [query('classId').isMongoId().withMessage('Valid classId required')],
   validate,
-  ExamController.getSubjectsForClass
+  C.getSubjectsForClass
 );
 
-/**
- * @route   GET /api/exams/results/:studentId
- * @desc    Get all results for a student
- * @access  Private
- * NOTE: Must be defined BEFORE /:id to avoid route collision
- */
-router.get(
-  '/results/:studentId',
-  mongoIdParam('studentId'),
-  validate,
-  ExamController.getStudentResults
-);
+// ── Student results — must be BEFORE /:id ─────────────────
+router.get('/results/:studentId', reader, mongoIdParam('studentId'), validate, C.getStudentResults);
 
-// ═══════════════════════════════════════════════════════════
-//  EXAM CRUD
-// ═══════════════════════════════════════════════════════════
-
-/**
- * @route   POST /api/exams
- * @desc    Create a new exam
- * @access  Private (admin, super_admin)
- */
+// ── EXAM CRUD ─────────────────────────────────────────────
 router.post(
   '/',
-  authorize('admin', 'super_admin'),
-  idempotency(),
+  admin, idempotency(),
   [
-    body('name').notEmpty().withMessage('Exam name is required').trim(),
-    body('classId').isMongoId().withMessage('Valid class ID is required'),
-    // academicYearId optional — auto-resolved to active year in service
-    body('academicYearId').optional({ values: 'null' }).isMongoId().withMessage('Invalid academicYearId'),
-    body('subjects')
-      .isArray({ min: 1 })
-      .withMessage('At least one subject is required'),
-    // subjects can be either plain MongoIds or objects { subjectId, maxMarks, passingMarks }
-    body('subjects.*.subjectId')
-      .optional()
-      .isMongoId()
-      .withMessage('Valid subject ID is required'),
-    body('subjects.*.maxMarks')
-      .optional()
-      .isFloat({ min: 1 })
-      .withMessage('Max marks must be at least 1'),
-    body('subjects.*.passingMarks')
-      .optional()
-      .isFloat({ min: 0 })
-      .withMessage('Passing marks cannot be negative'),
-    body('maxMarks')
-      .optional()
-      .isFloat({ min: 1 })
-      .withMessage('Max marks must be at least 1'),
-    body('passingMarks')
-      .optional()
-      .isFloat({ min: 0 })
-      .withMessage('Passing marks cannot be negative'),
-    body('examDate')
-      .optional({ nullable: true })
-      .isISO8601()
-      .withMessage('Valid exam date required'),
+    body('examName').optional().trim(),
+    body('name').optional().trim(),
+    body('classId').isMongoId().withMessage('classId required'),
+    body('academicYearId').optional({ values: 'null' }).isMongoId(),
+    body('maxMarks').isFloat({ min: 1 }).withMessage('maxMarks >= 1'),
+    body('passingMarks').optional().isFloat({ min: 0 }),
+    body('startDate').optional({ nullable: true }).isISO8601(),
+    body('endDate').optional({ nullable: true }).isISO8601(),
+    body('examDate').optional({ nullable: true }).isISO8601(),
+    body('subjects').optional().isArray(),
+    body('subjects.*').optional().isMongoId(),
   ],
-  validate,
-  ExamController.createExam
+  validate, C.createExam
 );
 
-/**
- * @route   GET /api/exams
- * @desc    List all exams (?classId=xxx&academicYear=xxx)
- * @access  Private
- */
 router.get(
   '/',
   [
-    query('classId')
-      .optional({ values: 'falsy' })
-      .isMongoId()
-      .withMessage('Invalid classId'),
-    query('academicYear').optional().trim(),
+    query('classId').optional({ values: 'falsy' }).isMongoId(),
+    query('academicYearId').optional({ values: 'falsy' }).isMongoId(),
+    query('status').optional(),
   ],
-  validate,
-  ExamController.getExams
+  validate, C.getExams
 );
 
-/**
- * @route   GET /api/exams/:id
- * @desc    Get exam details
- * @access  Private
- */
-router.get('/:id', mongoIdParam('id'), validate, ExamController.getExamById);
+router.get('/:id', reader, mongoIdParam('id'), validate, C.getExamById);
 
-// ═══════════════════════════════════════════════════════════
-//  MARKS
-// ═══════════════════════════════════════════════════════════
+router.put(
+  '/:id',
+  admin,
+  [
+    mongoIdParam('id'),
+    body('examName').optional().trim(),
+    body('name').optional().trim(),
+    body('maxMarks').optional().isFloat({ min: 1 }),
+    body('passingMarks').optional().isFloat({ min: 0 }),
+    body('startDate').optional({ nullable: true }).isISO8601(),
+    body('endDate').optional({ nullable: true }).isISO8601(),
+    body('subjects').optional().isArray(),
+  ],
+  validate, C.updateExam
+);
 
-/**
- * @route   POST /api/exams/:examId/marks
- * @desc    Bulk save marks for an exam
- * @access  Private (admin, super_admin)
- */
+router.delete('/:id', admin, mongoIdParam('id'), validate, C.deleteExam);
+
+// ── Lifecycle ─────────────────────────────────────────────
+router.patch('/:id/publish', admin, mongoIdParam('id'), validate, C.publishExam);
+router.patch('/:id/lock',    admin, mongoIdParam('id'), validate, C.lockExam);
+
+// ── Marks ─────────────────────────────────────────────────
 router.post(
   '/:examId/marks',
-  authorize('admin', 'super_admin'),
-  idempotency({ windowMs: 3000 }),
+  staff, idempotency({ windowMs: 3000 }),
   [
     mongoIdParam('examId'),
-    body('marks')
-      .isArray({ min: 1 })
-      .withMessage('Marks array is required'),
-    body('marks.*.studentId')
-      .isMongoId()
-      .withMessage('Valid student ID is required'),
-    body('marks.*.subjectId')
-      .isMongoId()
-      .withMessage('Valid subject ID is required'),
-    body('marks.*.marksObtained')
-      .isFloat({ min: 0 })
-      .withMessage('Marks obtained must be non-negative'),
+    body('marks').isArray({ min: 1 }).withMessage('marks[] required'),
+    body('marks.*.studentId').isMongoId(),
+    body('marks.*.subjectId').isMongoId(),
+    body('marks.*.marksObtained').isFloat({ min: 0 }),
   ],
-  validate,
-  ExamController.saveMarks
+  validate, C.saveMarks
 );
 
-/**
- * @route   GET /api/exams/:examId/marks
- * @desc    Get all marks for an exam
- * @access  Private
- */
-router.get(
-  '/:examId/marks',
-  mongoIdParam('examId'),
-  validate,
-  ExamController.getExamMarks
-);
+router.get('/:examId/marks', mongoIdParam('examId'), validate, C.getExamMarks);
+
+// ── Results per exam ──────────────────────────────────────
+router.get('/:examId/results', reader, mongoIdParam('examId'), validate, C.getExamResults);
+
+// ── PDF Download ──────────────────────────────────────────
+router.get('/:examId/results/pdf', admin, mongoIdParam('examId'), validate, C.getResultsPdf);
 
 module.exports = router;

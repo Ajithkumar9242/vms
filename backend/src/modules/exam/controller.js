@@ -1,126 +1,106 @@
 const ExamService = require('./service');
 const ApiResponse = require('../../utils/apiResponse');
 
-/**
- * Exam Controller — handles HTTP request/response.
- * Delegates all business logic to ExamService.
- */
 class ExamController {
-  /**
-   * GET /api/exams/health
-   * Module health check.
-   */
   static async health(req, res, next) {
     try {
-      const data = await ExamService.getModuleStatus();
-      return ApiResponse.success(res, data, 'Exam module operational');
-    } catch (error) {
-      next(error);
-    }
+      return ApiResponse.success(res, await ExamService.getModuleStatus());
+    } catch (e) { next(e); }
   }
 
-  /**
-   * GET /api/exams/subjects-for-class?classId=xxx
-   * Get subjects for a class (from ClassConfig or all subjects).
-   */
   static async getSubjectsForClass(req, res, next) {
     try {
       const subjects = await ExamService.getSubjectsForClass(req.query.classId);
       return ApiResponse.success(res, subjects, 'Subjects fetched');
-    } catch (error) {
-      next(error);
-    }
+    } catch (e) { next(e); }
   }
 
+  // ── EXAM CRUD ──────────────────────────────────────────────
 
-  //  EXAMS
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * POST /api/exams
-   * Create a new exam.
-   */
   static async createExam(req, res, next) {
     try {
       const exam = await ExamService.createExam(req.body);
-      return ApiResponse.created(res, exam, 'Exam created successfully');
-    } catch (error) {
-      next(error);
-    }
+      return ApiResponse.created(res, exam, 'Exam created');
+    } catch (e) { next(e); }
   }
 
-  /**
-   * GET /api/exams
-   * List all exams (optional ?classId=xxx&academicYear=xxx).
-   */
   static async getExams(req, res, next) {
     try {
-      const { classId, academicYear, academicYearId } = req.query;
-      const exams = await ExamService.getExams({ classId, academicYearId: academicYearId || academicYear });
+      const { classId, academicYearId, academicYear, status } = req.query;
+      const exams = await ExamService.getExams({
+        classId,
+        academicYearId: academicYearId || academicYear,
+        status,
+      });
       return ApiResponse.success(res, exams, 'Exams fetched');
-    } catch (error) {
-      next(error);
-    }
+    } catch (e) { next(e); }
   }
 
-  /**
-   * GET /api/exams/:id
-   * Get a single exam by ID.
-   */
   static async getExamById(req, res, next) {
     try {
-      const exam = await ExamService.getExamById(req.params.id);
-      return ApiResponse.success(res, exam, 'Exam details fetched');
-    } catch (error) {
-      next(error);
-    }
+      return ApiResponse.success(res, await ExamService.getExamById(req.params.id));
+    } catch (e) { next(e); }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  //  MARKS
-  // ═══════════════════════════════════════════════════════════
+  static async updateExam(req, res, next) {
+    try {
+      return ApiResponse.success(res, await ExamService.updateExam(req.params.id, req.body, req.user), 'Exam updated');
+    } catch (e) { next(e); }
+  }
 
-  /**
-   * POST /api/exams/:examId/marks
-   * Bulk save marks for an exam.
-   */
+  static async deleteExam(req, res, next) {
+    try {
+      return ApiResponse.success(res, await ExamService.deleteExam(req.params.id), 'Exam deleted');
+    } catch (e) { next(e); }
+  }
+
+  static async publishExam(req, res, next) {
+    try {
+      return ApiResponse.success(res, await ExamService.publishExam(req.params.id), 'Exam published');
+    } catch (e) { next(e); }
+  }
+
+  static async lockExam(req, res, next) {
+    try {
+      return ApiResponse.success(res, await ExamService.lockExam(req.params.id), 'Exam locked');
+    } catch (e) { next(e); }
+  }
+
+  // ── MARKS ─────────────────────────────────────────────────
+
   static async saveMarks(req, res, next) {
     try {
-      const { examId } = req.params;
-      const { marks } = req.body;
-      const result = await ExamService.saveMarks(examId, marks);
-      return ApiResponse.created(res, result, 'Marks saved successfully');
-    } catch (error) {
-      next(error);
-    }
+      return ApiResponse.created(res, await ExamService.saveMarks(req.params.examId, req.body.marks, req.user), 'Marks saved');
+    } catch (e) { next(e); }
   }
 
-  /**
-   * GET /api/exams/:examId/marks
-   * Get all marks for an exam.
-   */
   static async getExamMarks(req, res, next) {
     try {
-      const { examId } = req.params;
-      const data = await ExamService.getExamMarks(examId);
-      return ApiResponse.success(res, data, 'Exam marks fetched');
-    } catch (error) {
-      next(error);
-    }
+      return ApiResponse.success(res, await ExamService.getExamMarks(req.params.examId));
+    } catch (e) { next(e); }
   }
 
-  /**
-   * GET /api/exams/results/:studentId
-   * Get all results for a student.
-   */
+  // ── RESULTS ───────────────────────────────────────────────
+
+  static async getExamResults(req, res, next) {
+    try {
+      return ApiResponse.success(res, await ExamService.getExamResults(req.params.examId));
+    } catch (e) { next(e); }
+  }
+
   static async getStudentResults(req, res, next) {
     try {
-      const { studentId } = req.params;
-      const data = await ExamService.getStudentResults(studentId);
-      return ApiResponse.success(res, data, 'Student results fetched');
-    } catch (error) {
-      next(error);
-    }
+      return ApiResponse.success(res, await ExamService.getStudentResults(req.params.studentId));
+    } catch (e) { next(e); }
+  }
+
+  // ── PDF ───────────────────────────────────────────────────
+
+  static async getResultsPdf(req, res, next) {
+    try {
+      // generateResultsPdf streams directly — do NOT call ApiResponse
+      await ExamService.generateResultsPdf(req.params.examId, res);
+    } catch (e) { next(e); }
   }
 }
 

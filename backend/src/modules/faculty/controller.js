@@ -1,4 +1,5 @@
 const FacultyService = require('./service');
+const DashboardService = require('./dashboardService');
 const ApiResponse = require('../../utils/apiResponse');
 
 class FacultyController {
@@ -53,6 +54,36 @@ class FacultyController {
     } catch (error) {
       next(error);
     }
+  }
+
+  // ── Dashboard endpoints ─────────────────────────────────────────
+
+  static async getDashboard(req, res, next) {
+    try {
+      return ApiResponse.success(res, await DashboardService.getDashboard(req.user._id));
+    } catch (e) { next(e); }
+  }
+
+  static async getClassStudents(req, res, next) {
+    try {
+      return ApiResponse.success(res, await DashboardService.getClassStudents(req.params.classId, req.user._id));
+    } catch (e) { next(e); }
+  }
+
+  static async getClassAnalytics(req, res, next) {
+    try {
+      const { classId, examId } = req.params;
+      return ApiResponse.success(res, await DashboardService.getClassAnalytics(classId, examId));
+    } catch (e) { next(e); }
+  }
+
+  static async getMonthlyAttendance(req, res, next) {
+    try {
+      const { classId } = req.params;
+      const year  = parseInt(req.query.year)  || new Date().getFullYear();
+      const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+      return ApiResponse.success(res, await DashboardService.getMonthlyAttendance(classId, year, month));
+    } catch (e) { next(e); }
   }
 }
 

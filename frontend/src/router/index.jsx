@@ -4,7 +4,7 @@ import ProtectedRoute, { RoleRoute } from '@/components/common/ProtectedRoute';
 import MainLayout from '@/components/layout/MainLayout';
 import Loader from '@/components/common/Loader';
 
-// ─── Lazy-loaded pages ──────────────────────────────────────
+// ─── Lazy-loaded Admin pages ─────────────────────────────────
 const LoginPage = React.lazy(() => import('@/pages/auth/Login'));
 const DashboardPage = React.lazy(() => import('@/pages/dashboard/Dashboard'));
 const StudentsPage = React.lazy(() => import('@/pages/students/Students'));
@@ -36,15 +36,44 @@ const GradeSetupPage = React.lazy(() => import('@/pages/setup/GradeSetup'));
 const AttendanceConfigPage = React.lazy(() => import('@/pages/setup/AttendanceConfig'));
 const PaymentSettingsPage = React.lazy(() => import('@/pages/setup/PaymentSettings'));
 const ClassGroupsPage = React.lazy(() => import('@/pages/setup/ClassGroups'));
+const SubjectsPage    = React.lazy(() => import('@/pages/setup/Subjects'));
+const ClassConfigPage = React.lazy(() => import('@/pages/setup/ClassConfig'));
 
-// ─── Public Pages (no auth) ────────────────────────────────
+// ─── Public Pages ──────────────────────────────────────────
 const OnlineAdmissionPage = React.lazy(() => import('@/pages/admissions/OnlineAdmission'));
 const ApplicationStatusPage = React.lazy(() => import('@/pages/admissions/ApplicationStatus'));
+
+// ─── Parent Mobile App ─────────────────────────────────────
+const ParentDashboard = React.lazy(() => import('@/pages/parent/ParentDashboard'));
+const ParentFees = React.lazy(() => import('@/pages/parent/ParentFees'));
+const ParentAttendance = React.lazy(() => import('@/pages/parent/ParentAttendance'));
+const ParentExams = React.lazy(() => import('@/pages/parent/ParentExams'));
+const ParentNotifications = React.lazy(() => import('@/pages/parent/ParentNotifications'));
+const ParentProfile = React.lazy(() => import('@/pages/parent/ParentProfile'));
+
+// ─── Faculty Mobile App ────────────────────────────────────
+const FacultyAttendance   = React.lazy(() => import('@/pages/faculty/FacultyAttendance'));
+const FacultyStudents     = React.lazy(() => import('@/pages/faculty/FacultyStudents'));
+const FacultyNotifications= React.lazy(() => import('@/pages/faculty/FacultyNotifications'));
+const FacultyProfile      = React.lazy(() => import('@/pages/faculty/FacultyProfile'));
+const AssignmentManager   = React.lazy(() => import('@/pages/faculty/AssignmentManager'));
+const StudyMaterialsPage  = React.lazy(() => import('@/pages/faculty/StudyMaterials'));
 
 // ─── Role constants ─────────────────────────────────────────
 const ADMIN_ROLES = ['super_admin', 'admin', 'principal'];
 const STAFF_ROLES = [...ADMIN_ROLES, 'faculty'];
-const ALL_ROLES = [...STAFF_ROLES, 'parent'];
+const PARENT_ROLES = ['parent'];
+const FACULTY_ROLES = ['faculty'];
+
+/**
+ * Smart redirect after login: parent → /parent/dashboard, faculty → /faculty/attendance, else → /
+ */
+const RoleRedirect = () => {
+  const user = JSON.parse(localStorage.getItem('vms_user') || 'null');
+  if (user?.role === 'parent') return <Navigate to="/parent/dashboard" replace />;
+  if (user?.role === 'faculty') return <Navigate to="/faculty/attendance" replace />;
+  return <Navigate to="/" replace />;
+};
 
 const AppRouter = () => {
   return (
@@ -56,14 +85,46 @@ const AppRouter = () => {
           <Route path="/online-admission" element={<OnlineAdmissionPage />} />
           <Route path="/admission-status" element={<ApplicationStatusPage />} />
 
-          {/* Protected Routes — wrapped in MainLayout */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <MainLayout />
-              </ProtectedRoute>
-            }
-          >
+          {/* ─── Parent Mobile App ─────────────────────────── */}
+          <Route path="/parent/*" element={
+            <ProtectedRoute>
+              <RoleRoute roles={[...PARENT_ROLES, ...ADMIN_ROLES]}>
+                <Routes>
+                  <Route index element={<Navigate to="dashboard" replace />} />
+                  <Route path="dashboard" element={<ParentDashboard />} />
+                  <Route path="fees" element={<ParentFees />} />
+                  <Route path="attendance" element={<ParentAttendance />} />
+                  <Route path="exams" element={<ParentExams />} />
+                  <Route path="notifications" element={<ParentNotifications />} />
+                  <Route path="profile" element={<ParentProfile />} />
+                </Routes>
+              </RoleRoute>
+            </ProtectedRoute>
+          } />
+
+          {/* ─── Faculty Mobile App ────────────────────────── */}
+          <Route path="/faculty/*" element={
+            <ProtectedRoute>
+              <RoleRoute roles={FACULTY_ROLES}>
+                <Routes>
+                  <Route index element={<Navigate to="attendance" replace />} />
+                  <Route path="attendance"   element={<FacultyAttendance />} />
+                  <Route path="students"     element={<FacultyStudents />} />
+                  <Route path="notifications" element={<FacultyNotifications />} />
+                  <Route path="profile"      element={<FacultyProfile />} />
+                  <Route path="assignments"  element={<AssignmentManager />} />
+                  <Route path="materials"    element={<StudyMaterialsPage />} />
+                </Routes>
+              </RoleRoute>
+            </ProtectedRoute>
+          } />
+
+          {/* ─── Admin Desktop App ─────────────────────────── */}
+          <Route element={
+            <ProtectedRoute>
+              <MainLayout />
+            </ProtectedRoute>
+          }>
             {/* Open to all authenticated roles */}
             <Route path="/" element={<DashboardPage />} />
             <Route path="/students" element={<StudentsPage />} />
@@ -71,7 +132,6 @@ const AppRouter = () => {
 
             {/* Admin + Principal only */}
             <Route path="/admissions" element={<RoleRoute roles={ADMIN_ROLES}><AdmissionsPage /></RoleRoute>} />
-            <Route path="/faculty" element={<RoleRoute roles={ADMIN_ROLES}><FacultyPage /></RoleRoute>} />
             <Route path="/parents" element={<RoleRoute roles={ADMIN_ROLES}><ParentsPage /></RoleRoute>} />
             <Route path="/activity" element={<RoleRoute roles={ADMIN_ROLES}><ActivityLogsPage /></RoleRoute>} />
 
@@ -79,17 +139,24 @@ const AppRouter = () => {
             <Route path="/attendance" element={<RoleRoute roles={STAFF_ROLES}><AttendancePage /></RoleRoute>} />
             <Route path="/communication" element={<RoleRoute roles={STAFF_ROLES}><CommunicationPage /></RoleRoute>} />
 
+            {/* Note: /faculty is admin-managed faculty list */}
+            <Route path="/faculty" element={<RoleRoute roles={ADMIN_ROLES}><FacultyPage /></RoleRoute>} />
+
+            {/* Assignments + Materials (admin + faculty) */}
+            <Route path="/assignments" element={<RoleRoute roles={STAFF_ROLES}><AssignmentManager /></RoleRoute>} />
+            <Route path="/materials"   element={<RoleRoute roles={STAFF_ROLES}><StudyMaterialsPage /></RoleRoute>} />
+
             {/* Admin + Parent */}
             <Route path="/fees" element={<RoleRoute roles={[...ADMIN_ROLES, 'parent']}><FeesPage /></RoleRoute>} />
 
-            {/* ─── School Operations Modules ───────────────── */}
+            {/* School Operations */}
             <Route path="/hostel" element={<RoleRoute roles={STAFF_ROLES}><HostelPage /></RoleRoute>} />
             <Route path="/leave" element={<RoleRoute roles={STAFF_ROLES}><LeaveRequestsPage /></RoleRoute>} />
             <Route path="/health" element={<RoleRoute roles={STAFF_ROLES}><HealthRecordsPage /></RoleRoute>} />
             <Route path="/incidents" element={<RoleRoute roles={STAFF_ROLES}><IncidentsPage /></RoleRoute>} />
             <Route path="/duty" element={<RoleRoute roles={ADMIN_ROLES}><DutyAssignmentPage /></RoleRoute>} />
 
-            {/* ─── Setup Module (admin only) ─────────────────── */}
+            {/* Setup Module */}
             <Route path="/setup" element={<RoleRoute roles={['super_admin', 'admin']}><SetupDashboard /></RoleRoute>} />
             <Route path="/setup/school-settings" element={<RoleRoute roles={['super_admin', 'admin']}><SchoolSettingsPage /></RoleRoute>} />
             <Route path="/setup/academic-year" element={<RoleRoute roles={['super_admin', 'admin']}><AcademicYearPage /></RoleRoute>} />
@@ -101,10 +168,12 @@ const AppRouter = () => {
             <Route path="/setup/attendance-config" element={<RoleRoute roles={['super_admin', 'admin']}><AttendanceConfigPage /></RoleRoute>} />
             <Route path="/setup/payment-settings" element={<RoleRoute roles={['super_admin', 'admin']}><PaymentSettingsPage /></RoleRoute>} />
             <Route path="/setup/class-groups" element={<RoleRoute roles={['super_admin', 'admin']}><ClassGroupsPage /></RoleRoute>} />
+            <Route path="/setup/subjects"     element={<RoleRoute roles={['super_admin', 'admin']}><SubjectsPage /></RoleRoute>} />
+            <Route path="/setup/class-config" element={<RoleRoute roles={['super_admin', 'admin']}><ClassConfigPage /></RoleRoute>} />
           </Route>
 
-          {/* Catch-all redirect */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* Catch-all — role-aware redirect */}
+          <Route path="*" element={<RoleRedirect />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

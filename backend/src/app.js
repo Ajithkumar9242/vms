@@ -32,6 +32,9 @@ const incidentRoutes = require('./modules/incident/route');
 const dutyRoutes = require('./modules/duty/route');
 const paymentRoutes = require('./modules/payment/route');
 const setupRoutes = require('./modules/setup/routes');
+const subjectRoutes = require('./modules/subject/route');
+const assignmentRoutes = require('./modules/assignment/route');
+const materialRoutes   = require('./modules/material/route');
 
 const app = express();
 
@@ -101,6 +104,9 @@ app.use('/api/incidents', incidentRoutes);
 app.use('/api/duty', dutyRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/setup', setupRoutes);
+app.use('/api/subjects', subjectRoutes);
+app.use('/api/assignments', assignmentRoutes);
+app.use('/api/materials', materialRoutes);
 
 // ─── Health Check ───────────────────────────────────────────
 app.get('/api/health', (req, res) => {

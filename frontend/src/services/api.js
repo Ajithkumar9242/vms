@@ -128,8 +128,9 @@ api.interceptors.response.use(
 
 // ─── Auth ───────────────────────────────────────────────────
 export const authAPI = {
-  login: (credentials) => api.post('/auth/login', credentials),
-  getMe: () => api.get('/auth/me'),
+  login:          (credentials) => api.post('/auth/login', credentials),
+  getMe:          ()             => api.get('/auth/me'),
+  changePassword: (data)         => api.patch('/auth/change-password', data),
 };
 
 // ─── School ─────────────────────────────────────────────────
@@ -183,12 +184,26 @@ export const attendanceAPI = {
 
 // ─── Exams & Results ────────────────────────────────────────
 export const examAPI = {
-  create: (data) => api.post('/exams', data),
-  getAll: (params) => api.get('/exams', { params }),
-  getById: (id) => api.get(`/exams/${id}`),
+  // Exam CRUD
+  create:    (data)         => api.post('/exams', data),
+  getAll:    (params)       => api.get('/exams', { params }),
+  getById:   (id)           => api.get(`/exams/${id}`),
+  update:    (id, data)     => api.put(`/exams/${id}`, data),
+  remove:    (id)           => api.delete(`/exams/${id}`),
+
+  // Lifecycle
+  publish:   (id)           => api.patch(`/exams/${id}/publish`),
+  lock:      (id)           => api.patch(`/exams/${id}/lock`),
+
+  // Marks
   saveMarks: (examId, data) => api.post(`/exams/${examId}/marks`, data),
-  getMarks: (examId) => api.get(`/exams/${examId}/marks`),
+  getMarks:  (examId)       => api.get(`/exams/${examId}/marks`),
+
+  // Results
+  getExamResults:    (examId)    => api.get(`/exams/${examId}/results`),
   getStudentResults: (studentId) => api.get(`/exams/results/${studentId}`),
+
+  // Subjects helper
   getSubjectsForClass: (classId) => api.get('/exams/subjects-for-class', { params: { classId } }),
 };
 
@@ -207,6 +222,8 @@ export const parentAPI = {
   getAll: (params) => api.get('/parents', { params }),
   getById: (id) => api.get(`/parents/${id}`),
   linkStudent: (parentId, studentId) => api.patch(`/parents/${parentId}/link`, { studentId }),
+  /** Self-service: parent updates their own profile (phone, email, address, occupation) */
+  updateMyProfile: (data) => api.patch('/parents/profile/me', data),
 };
 
 // ─── Notifications ──────────────────────────────────────────
@@ -368,6 +385,52 @@ export const setupAPI = {
   // Payment Settings
   getPaymentSettings: () => api.get('/setup/payment-settings'),
   savePaymentSettings: (data) => api.put('/setup/payment-settings', data),
+};
+
+// ─── Subjects ────────────────────────────────────────────────
+export const subjectAPI = {
+  /** List subjects. params: { classId?, type?, isActive?, search?, page?, limit? } */
+  getAll: (params) => api.get('/subjects', { params }),
+  /** Create a subject. */
+  create: (data) => api.post('/subjects', data),
+  /** Update a subject by id. */
+  update: (id, data) => api.put(`/subjects/${id}`, data),
+  /** Soft-delete a subject (sets isActive = false). */
+  remove: (id) => api.delete(`/subjects/${id}`),
+  /** Toggle isActive for a subject. */
+  toggle: (id) => api.patch(`/subjects/${id}/toggle`),
+  /** Assign or remove subject from a ClassConfig. */
+  assignToClassConfig: (id, data) => api.post(`/subjects/${id}/assign`, data),
+};
+
+// ─── Assignments ─────────────────────────────────────────────
+export const assignmentAPI = {
+  create:         (data)                  => api.post('/assignments', data),
+  getAll:         (params)                => api.get('/assignments', { params }),
+  getById:        (id)                    => api.get(`/assignments/${id}`),
+  update:         (id, data)              => api.put(`/assignments/${id}`, data),
+  remove:         (id)                    => api.delete(`/assignments/${id}`),
+  // Submissions
+  submit:         (id, data)              => api.post(`/assignments/${id}/submit`, data),
+  getSubmissions: (id, params)            => api.get(`/assignments/${id}/submissions`, { params }),
+  grade:          (id, data)              => api.put(`/assignments/${id}/grade`, data),
+};
+
+// ─── Study Materials ─────────────────────────────────────────
+export const materialAPI = {
+  create:  (data)   => api.post('/materials', data),
+  getAll:  (params) => api.get('/materials', { params }),
+  getById: (id)     => api.get(`/materials/${id}`),
+  remove:  (id)     => api.delete(`/materials/${id}`),
+};
+
+// ─── Faculty Dashboard ───────────────────────────────────────
+export const facultyDashboardAPI = {
+  getDashboard:        ()                   => api.get('/faculty/me/dashboard'),
+  getClassStudents:    (classId)            => api.get(`/faculty/me/class/${classId}/students`),
+  getClassAnalytics:   (classId, examId)    => api.get(`/faculty/me/class/${classId}/analytics/${examId}`),
+  getMonthlyAttendance:(classId, params)    => api.get(`/faculty/me/class/${classId}/monthly-attendance`, { params }),
+  getStudentAttendance:(studentId, params)  => api.get(`/attendance/student/${studentId}`, { params }),
 };
 
 export default api;

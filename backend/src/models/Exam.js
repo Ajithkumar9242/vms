@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 
+/**
+ * Exam schema — production ERP version.
+ *
+ * Lifecycle: Draft → Published → Locked
+ *   Draft     : can edit everything
+ *   Published : marks entry allowed; exam metadata frozen
+ *   Locked    : no further changes; results finalized
+ */
 const examSchema = new mongoose.Schema(
   {
     name: {
@@ -17,42 +25,34 @@ const examSchema = new mongoose.Schema(
       ref: 'AcademicYear',
       default: null,
     },
+    // Flat array of subject ObjectIds (no per-subject marks config)
     subjects: [
       {
-        subjectId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'Subject',
-          required: true,
-        },
-        maxMarks: {
-          type: Number,
-          required: [true, 'Maximum marks is required for subject'],
-          min: [1, 'Max marks must be at least 1'],
-        },
-        passingMarks: {
-          type: Number,
-          default: 0,
-          min: [0, 'Passing marks cannot be negative'],
-        },
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Subject',
       },
     ],
     maxMarks: {
       type: Number,
+      default: 100,
       min: [1, 'Max marks must be at least 1'],
     },
     passingMarks: {
       type: Number,
-      default: 0,
+      default: 35,
       min: [0, 'Passing marks cannot be negative'],
     },
-    examDate: {
-      type: Date,
-      default: null,
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
+    // Date range (or single date via startDate)
+    startDate: { type: Date, default: null },
+    endDate:   { type: Date, default: null },
+
+    // Legacy single-date field (kept for backward compat)
+    examDate: { type: Date, default: null },
+
+    // Lifecycle flags
+    isPublished: { type: Boolean, default: false },
+    isLocked:    { type: Boolean, default: false },
+    isActive:    { type: Boolean, default: true },  // soft-delete
   },
   { timestamps: true }
 );

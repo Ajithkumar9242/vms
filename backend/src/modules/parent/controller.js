@@ -43,6 +43,19 @@ class ParentController {
       next(error);
     }
   }
+
+  /**
+   * PATCH /api/parents/profile/me
+   * Self-service profile update — parent edits their own record.
+   */
+  static async updateMyProfile(req, res, next) {
+    try {
+      const parent = await ParentService.updateMyProfile(req.user._id, req.body);
+      return ApiResponse.success(res, parent, 'Profile updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = ParentController;

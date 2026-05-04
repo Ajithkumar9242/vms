@@ -19,15 +19,111 @@ class FeesService {
   //  FEE STRUCTURE
   // ═══════════════════════════════════════════════════════════
 
-  static async createStructure({ classId, academicYear, academicYearId, totalAmount, installments }) {
+  /**
+   * Build installments array from auto-split parameters.
+   * @param {{ totalAmount, installmentCount, startDate, frequency }} params
+   * @returns {Array} installments
+   */
+  static _autoSplitInstallments({ totalAmount, installmentCount, startDate, frequency = 'monthly' }) {
+    if (!installmentCount || installmentCount < 1) {
+      throw new AppError('installmentCount must be >= 1', 400);
+    }
+    if (!startDate) throw new AppError('startDate is required for auto split', 400);
+    if (!totalAmount || totalAmount <= 0) throw new AppError('totalAmount must be > 0', 400);
+
+    const base = Math.floor(totalAmount / installmentCount);
+    const rem = totalAmount - base * installmentCount; // rounding remainder
+    const months = frequency === 'quarterly' ? 3 : 1;
+    const start = new Date(startDate);
+    if (isNaN(start.getTime())) throw new AppError('Invalid startDate', 400);
+
+    return Array.from({ length: installmentCount }, (_, i) => {
+      const due = new Date(start);
+      due.setMonth(due.getMonth() + i * months);
+      const amount = i === installmentCount - 1 ? base + rem : base; // last absorbs rounding
+      const ordinals = ['1st', '2nd', '3rd'];
+      const label = ordinals[i] || `${i + 1}th`;
+      return {
+        name: `${label} Installment`,
+        amount,
+        dueDate: due,
+        paidAmount: 0,
+        status: 'pending',
+      };
+    });
+  }
+
+  /**
+   * Create or update a fee structure for a class + academic year.
+   * Accepts:
+   *   A) Manual installments array
+   *   B) Auto-split params: { installmentCount, startDate, frequency }
+   */
+  static async createStructure(data) {
+    const {
+      classId, academicYear, academicYearId,
+      totalAmount, installments,
+      feeGroupId,
+      installmentCount, startDate, frequency,
+    } = data;
+
+    if (!classId) throw new AppError('classId is required', 400);
+    if (!totalAmount) throw new AppError('totalAmount is required', 400);
+
     const SetupService = require('../setup/service');
     const resolvedYearId = await SetupService.resolveAcademicYearId(academicYearId || academicYear);
 
+    // ── FeeGroup validation (optional but must exist if provided) ──
+    if (feeGroupId) {
+      const FeeGroup = require('../../models/FeeGroup');
+      const grp = await FeeGroup.findById(feeGroupId);
+      if (!grp) throw new AppError('FeeGroup not found', 404);
+    }
+
+    // ── Resolve installments ───────────────────────────────────
+    let resolvedInstallments = installments;
+
+    if (!resolvedInstallments || resolvedInstallments.length === 0) {
+      // Auto-split mode
+      if (installmentCount && installmentCount > 0) {
+        resolvedInstallments = FeesService._autoSplitInstallments({
+          totalAmount,
+          installmentCount,
+          startDate,
+          frequency,
+        });
+      } else {
+        // Single-installment fallback — no breakdown
+        resolvedInstallments = [];
+      }
+    } else {
+      // Manual installments: validate sum
+      const sum = resolvedInstallments.reduce((acc, inst) => acc + Number(inst.amount), 0);
+      if (Math.abs(sum - totalAmount) > 1) {
+        throw new AppError(
+          `Installment amounts (₹${sum}) must equal totalAmount (₹${totalAmount})`,
+          400
+        );
+      }
+      // Ensure paidAmount/status defaults for new installments
+      resolvedInstallments = resolvedInstallments.map((inst) => ({
+        ...inst,
+        paidAmount: inst.paidAmount || 0,
+        status: inst.status || 'pending',
+      }));
+    }
+
     const structure = await FeeStructure.findOneAndUpdate(
       { classId, academicYearId: resolvedYearId },
-      { classId, academicYearId: resolvedYearId, totalAmount, installments },
+      {
+        classId,
+        academicYearId: resolvedYearId,
+        totalAmount,
+        installments: resolvedInstallments,
+        feeGroupId: feeGroupId || null,
+      },
       { new: true, upsert: true, runValidators: true }
-    ).populate('classId', 'name code');
+    ).populate('classId', 'name code').populate('feeGroupId', 'name');
 
     return structure;
   }
@@ -38,7 +134,10 @@ class FeesService {
     if (filters.academicYearId) query.academicYearId = filters.academicYearId;
     else if (filters.academicYear) query.academicYearId = filters.academicYear;
 
-    return FeeStructure.find(query).populate('classId', 'name code').sort({ createdAt: -1 });
+    return FeeStructure.find(query)
+      .populate('classId', 'name code')
+      .populate('feeGroupId', 'name')
+      .sort({ createdAt: -1 });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -124,6 +223,7 @@ class FeesService {
    * Record a fee payment for a student.
    * - Enforces overpay prevention via FeeInvoice
    * - Updates invoice paidAmount / dueAmount / status atomically
+   * - Applies payment to earliest unpaid installments in FeeStructure
    * - Falls back to FeeStructure if no invoice exists (backward compat)
    */
   static async recordPayment({ studentId, amount, paymentMode, transactionId, invoiceId }) {
@@ -138,7 +238,6 @@ class FeesService {
       invoice = await FeeInvoice.findById(invoiceId);
     }
     if (!invoice) {
-      // Try by studentId (latest active invoice)
       invoice = await FeeInvoice.findOne({ studentId }).sort({ createdAt: -1 });
     }
 
@@ -189,11 +288,63 @@ class FeesService {
       await invoice.save();
     }
 
+    // ─── Apply payment to installments in FeeStructure ────
+    await FeesService._applyPaymentToInstallments(student.classId?._id, invoice?.academicYearId, amount);
+
     // Activity + notification (non-blocking)
     FeesService._triggerPaymentActivity(student, amount, paymentMode, payment.receiptNumber);
     FeesService._triggerPaymentNotification(student, amount, payment.receiptNumber);
 
     return { payment, invoice };
+  }
+
+  /**
+   * Apply payment amount to earliest pending/partial installments in the FeeStructure.
+   * Mutates FeeStructure installment paidAmount and status in-place.
+   * @param {ObjectId} classId
+   * @param {ObjectId} academicYearId
+   * @param {number} amount
+   */
+  static async _applyPaymentToInstallments(classId, academicYearId, amount) {
+    if (!classId) return;
+    try {
+      const query = { classId };
+      if (academicYearId && mongoose.isValidObjectId(academicYearId?.toString()))
+        query.academicYearId = academicYearId;
+
+      const structure = await FeeStructure.findOne(query).sort({ createdAt: -1 });
+      if (!structure || !structure.installments?.length) return;
+
+      let remaining = amount;
+      const today = new Date();
+
+      for (const inst of structure.installments) {
+        if (remaining <= 0) break;
+        if (inst.status === 'paid') continue;
+
+        const outstanding = inst.amount - inst.paidAmount;
+        const toApply = Math.min(remaining, outstanding);
+        inst.paidAmount += toApply;
+        remaining -= toApply;
+
+        if (inst.paidAmount >= inst.amount) {
+          inst.status = 'paid';
+        } else if (inst.paidAmount > 0) {
+          inst.status = 'partial';
+        } else if (inst.dueDate && today > new Date(inst.dueDate)) {
+          inst.status = 'overdue';
+        } else {
+          inst.status = 'pending';
+        }
+      }
+
+      // Bypass the sum-validation hook on partial updates
+      await FeeStructure.findByIdAndUpdate(structure._id, {
+        installments: structure.installments,
+      });
+    } catch (e) {
+      console.error('Installment update failed (non-blocking):', e.message);
+    }
   }
 
   static _triggerPaymentActivity(student, amount, paymentMode, receiptNumber) {
@@ -224,8 +375,8 @@ class FeesService {
   // ═══════════════════════════════════════════════════════════
 
   /**
-   * Get full fee details for a student — invoice + payments + summary.
-   * Returns { student, invoice, feeStructure, payments, summary }
+   * Get full fee details for a student — invoice + payments + installment breakdown + summary.
+   * Returns { student, invoice, feeStructure, payments, installments, summary }
    */
   static async getStudentFees(studentId) {
     if (!mongoose.isValidObjectId(studentId)) throw new AppError('Invalid student ID format', 400);
@@ -237,18 +388,35 @@ class FeesService {
 
     // Fetch invoice (prefer invoice-based data)
     const invoice = await FeeInvoice.findOne({ studentId })
-      .populate('feeStructureId', 'totalAmount installments')
+      .populate('feeStructureId', 'totalAmount installments feeGroupId')
       .populate('classId', 'name')
       .populate('academicYearId', 'name')
       .sort({ createdAt: -1 })
       .lean();
 
-    // Fetch fee structure (fallback)
+    // Fetch fee structure (fallback or for installment detail)
     const feeStructure = invoice?.feeStructureId
-      || await FeeStructure.findOne({ classId: student.classId._id }).sort({ createdAt: -1 }).lean();
+      || await FeeStructure.findOne({ classId: student.classId._id })
+        .sort({ createdAt: -1 })
+        .populate('feeGroupId', 'name')
+        .lean();
 
-    // Fetch all payments
-    const payments = await FeePayment.find({ studentId }).sort({ paidAt: -1 }).lean();
+    // Fetch all approved payments
+    const payments = await FeePayment.find({ studentId, status: { $ne: 'rejected' } })
+      .sort({ paidAt: -1 }).lean();
+
+    // ── Installment breakdown ──────────────────────────────
+    const rawInstallments = feeStructure?.installments || [];
+    const installments = rawInstallments.map((inst) => ({
+      _id: inst._id,
+      name: inst.name,
+      amount: inst.amount,
+      dueDate: inst.dueDate,
+      paidAmount: inst.paidAmount || 0,
+      due: Math.max(0, inst.amount - (inst.paidAmount || 0)),
+      status: inst.status || (inst.paidAmount >= inst.amount ? 'paid' : inst.paidAmount > 0 ? 'partial' : 'pending'),
+      overdue: inst.dueDate && new Date(inst.dueDate) < new Date() && inst.status !== 'paid',
+    }));
 
     // Compute summary from invoice (preferred) or from structure+payments
     let totalFee, totalPaid, totalDue, status;
@@ -271,6 +439,7 @@ class FeesService {
       invoice,
       feeStructure,
       payments,
+      installments,
       summary: { totalFee, totalPaid, totalDue, status },
     };
   }

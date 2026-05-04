@@ -108,21 +108,85 @@ class SetupService {
 
   static async upsertClassConfig(data) {
     const { academicYearId, classId, sections, subjects, feeStructureId } = data;
-    if (!academicYearId || !classId) throw new AppError('academicYearId and classId are required', 400);
 
+    // ── Required fields ───────────────────────────────────────
+    if (!academicYearId || !mongoose.isValidObjectId(academicYearId)) {
+      throw new AppError('academicYearId is required and must be a valid ID', 400);
+    }
+    if (!classId || !mongoose.isValidObjectId(classId)) {
+      throw new AppError('classId is required and must be a valid ID', 400);
+    }
+
+    // ── Subjects validation ───────────────────────────────────
+    if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
+      throw new AppError('subjects must be a non-empty array', 400);
+    }
+
+    // Deduplicate subject IDs
+    const uniqueSubjectIds = [...new Set(subjects.map((s) => s.toString()))];
+    if (uniqueSubjectIds.length !== subjects.length) {
+      throw new AppError('subjects array contains duplicate IDs', 400);
+    }
+
+    // Validate all subject IDs are valid ObjectIds
+    for (const sid of uniqueSubjectIds) {
+      if (!mongoose.isValidObjectId(sid)) {
+        throw new AppError(`Invalid subjectId: ${sid}`, 400);
+      }
+    }
+
+    // Verify all subjects exist (and are active)
+    const Subject = require('../../models/Subject');
+    const existingSubjects = await Subject.find({ _id: { $in: uniqueSubjectIds } }).select('_id');
+    if (existingSubjects.length !== uniqueSubjectIds.length) {
+      const foundIds = existingSubjects.map((s) => s._id.toString());
+      const missing = uniqueSubjectIds.filter((id) => !foundIds.includes(id));
+      throw new AppError(`Subjects not found: ${missing.join(', ')}`, 400);
+    }
+
+    // ── Sections validation ───────────────────────────────────
+    if (!sections || !Array.isArray(sections) || sections.length === 0) {
+      throw new AppError('sections must be a non-empty array', 400);
+    }
+
+    const uniqueSectionIds = [...new Set(sections.map((s) => s.toString()))];
+    for (const sid of uniqueSectionIds) {
+      if (!mongoose.isValidObjectId(sid)) {
+        throw new AppError(`Invalid sectionId: ${sid}`, 400);
+      }
+    }
+
+    // Verify all sections exist and belong to the given classId
+    const Section = require('../../models/Section');
+    const existingSections = await Section.find({
+      _id: { $in: uniqueSectionIds },
+      classId,
+    }).select('_id');
+    if (existingSections.length !== uniqueSectionIds.length) {
+      throw new AppError('One or more sections do not belong to the specified class', 400);
+    }
+
+    // ── Upsert ────────────────────────────────────────────────
     let config = await ClassConfig.findOne({ academicYearId, classId });
     if (config) {
-      if (sections !== undefined) config.sections = sections;
-      if (subjects !== undefined) config.subjects = subjects;
-      if (feeStructureId !== undefined) config.feeStructureId = feeStructureId;
+      config.sections      = uniqueSectionIds;
+      config.subjects      = uniqueSubjectIds;
+      if (feeStructureId !== undefined) config.feeStructureId = feeStructureId || null;
       await config.save();
     } else {
-      config = await ClassConfig.create(data);
+      config = await ClassConfig.create({
+        academicYearId,
+        classId,
+        sections:      uniqueSectionIds,
+        subjects:      uniqueSubjectIds,
+        feeStructureId: feeStructureId || null,
+      });
     }
+
     return ClassConfig.findById(config._id)
       .populate('classId', 'name code')
       .populate('sections', 'name')
-      .populate('subjects', 'name code');
+      .populate('subjects', 'name code type isOptional');
   }
 
   static async getClassConfigs(academicYearId) {
@@ -152,28 +216,87 @@ class SetupService {
     if (invalid.length) throw new AppError(`Subjects not assigned to this class: ${invalid.join(', ')}`, 400);
   }
 
+
   // ═══════════════════════════════════════════════════════════
   //  CLASS GROUPS
   // ═══════════════════════════════════════════════════════════
 
+  /**
+   * Validate that the given teacherId is a Faculty member.
+   * Also accepts alias field name 'teacherId' on top of 'classTeacherId'.
+   */
+  static async _resolveTeacherId(teacherId) {
+    if (!teacherId) return null;
+    if (!mongoose.isValidObjectId(teacherId)) {
+      throw new AppError('Invalid teacherId format', 400);
+    }
+    const Faculty = require('../../models/Faculty');
+    const faculty = await Faculty.findById(teacherId).populate('userId', 'role');
+    if (!faculty) throw new AppError('Faculty not found', 404);
+    // Verify the linked user has role faculty (or super_admin)
+    if (faculty.userId && !['faculty', 'super_admin', 'admin'].includes(faculty.userId.role)) {
+      throw new AppError('Assigned teacher must have faculty role', 400);
+    }
+    return teacherId;
+  }
+
   static async createClassGroup(data) {
-    return ClassGroup.create(data);
+    // Accept teacherId as alias for classTeacherId
+    const teacherId = data.teacherId || data.classTeacherId || null;
+    const resolvedTeacherId = await SetupService._resolveTeacherId(teacherId);
+
+    return ClassGroup.create({
+      name:           data.name,
+      classId:        data.classId,
+      sectionId:      data.sectionId,
+      classTeacherId: resolvedTeacherId,
+    });
   }
 
   static async getClassGroups(filters = {}) {
     const query = {};
     if (filters.classId && mongoose.isValidObjectId(filters.classId)) query.classId = filters.classId;
-    return ClassGroup.find(query)
+    const groups = await ClassGroup.find(query)
       .populate('classId', 'name code')
       .populate('sectionId', 'name')
-      .populate('classTeacherId', 'name email');
+      .populate({
+        path: 'classTeacherId',
+        select: 'name email employeeId',
+        populate: { path: 'userId', select: 'role' },
+      });
+
+    // Normalize response: expose classTeacherId as both classTeacherId and teacherId
+    return groups.map((g) => {
+      const obj = g.toObject();
+      obj.teacherId = obj.classTeacherId;  // alias
+      return obj;
+    });
   }
 
   static async updateClassGroup(id, data) {
     if (!mongoose.isValidObjectId(id)) throw new AppError('Invalid ID', 400);
-    const group = await ClassGroup.findByIdAndUpdate(id, data, { new: true, runValidators: true });
+
+    // Accept teacherId as alias for classTeacherId
+    const teacherRaw = data.teacherId || data.classTeacherId;
+    const resolvedTeacherId = teacherRaw !== undefined
+      ? await SetupService._resolveTeacherId(teacherRaw || null)
+      : undefined; // undefined = don't touch the field
+
+    const update = {};
+    if (data.name      !== undefined) update.name      = data.name;
+    if (data.classId   !== undefined) update.classId   = data.classId;
+    if (data.sectionId !== undefined) update.sectionId = data.sectionId;
+    if (resolvedTeacherId !== undefined) update.classTeacherId = resolvedTeacherId;
+
+    const group = await ClassGroup.findByIdAndUpdate(id, update, { new: true, runValidators: true })
+      .populate('classId', 'name code')
+      .populate('sectionId', 'name')
+      .populate('classTeacherId', 'name email employeeId');
     if (!group) throw new AppError('Class Group not found', 404);
-    return group;
+
+    const obj = group.toObject();
+    obj.teacherId = obj.classTeacherId;
+    return obj;
   }
 
   static async deleteClassGroup(id) {
@@ -259,13 +382,66 @@ class SetupService {
   //  ATTENDANCE CONFIG
   // ═══════════════════════════════════════════════════════════
 
+  // Built-in presets for quick-apply
+  static ATTENDANCE_PRESETS = {
+    FULL_DAY: [
+      { name: 'Morning',   startTime: '09:00', endTime: '12:30', order: 1 },
+      { name: 'Afternoon', startTime: '13:30', endTime: '16:00', order: 2 },
+    ],
+    PERIOD: [
+      { name: 'P1', startTime: '09:00', endTime: '09:45', order: 1 },
+      { name: 'P2', startTime: '09:45', endTime: '10:30', order: 2 },
+      { name: 'P3', startTime: '10:45', endTime: '11:30', order: 3 },
+      { name: 'P4', startTime: '11:30', endTime: '12:15', order: 4 },
+      { name: 'P5', startTime: '13:15', endTime: '14:00', order: 5 },
+      { name: 'P6', startTime: '14:00', endTime: '14:45', order: 6 },
+    ],
+  };
+
+  /**
+   * Upsert attendance config for an academic year.
+   * Accepts sessions as objects (new API) or strings (legacy).
+   * @param {{ academicYearId, mode, sessions, preset }} data
+   */
   static async upsertAttendanceConfig(data) {
     const academicYearId = await SetupService.resolveAcademicYearId(data.academicYearId);
     if (!academicYearId) throw new AppError('No active academic year found', 400);
+
+    const mode = data.mode || 'session';
+    let sessions = data.sessions || [];
+
+    // ── Preset shortcut ──────────────────────────────────────
+    if (data.preset) {
+      const presetSessions = SetupService.ATTENDANCE_PRESETS[data.preset.toUpperCase()];
+      if (!presetSessions) {
+        throw new AppError(`Unknown preset '${data.preset}'. Valid: FULL_DAY, PERIOD`, 400);
+      }
+      sessions = presetSessions;
+    }
+
+    // ── Normalize legacy string[] to object[] ─────────────────
+    sessions = sessions.map((s, i) => {
+      if (typeof s === 'string') {
+        return { name: s, order: i + 1, startTime: null, endTime: null };
+      }
+      return { name: s.name, order: s.order || i + 1, startTime: s.startTime || null, endTime: s.endTime || null };
+    });
+
+    if (!sessions.length) throw new AppError('At least one session is required', 400);
+    if (sessions.length > 10) throw new AppError('Maximum 10 sessions allowed', 400);
+
+    // Duplicate name validation
+    const names = sessions.map((s) => s.name.toLowerCase().trim());
+    if (new Set(names).size !== names.length) throw new AppError('Session names must be unique', 400);
+
+    // Duplicate order validation
+    const orders = sessions.map((s) => s.order);
+    if (new Set(orders).size !== orders.length) throw new AppError('Session order values must be unique', 400);
+
     return AttendanceConfig.findOneAndUpdate(
       { academicYearId },
-      { academicYearId, sessions: data.sessions },
-      { new: true, upsert: true, runValidators: true }
+      { academicYearId, mode, sessions },
+      { new: true, upsert: true, runValidators: false }  // validation done above
     );
   }
 

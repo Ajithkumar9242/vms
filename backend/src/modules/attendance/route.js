@@ -91,6 +91,7 @@ router.get(
  */
 router.get(
   '/report',
+  authorize('admin', 'super_admin', 'faculty', 'parent'),
   [
     query('classId').isMongoId().withMessage('Valid class ID is required'),
     query('dateFrom').optional().isISO8601().withMessage('Valid dateFrom required'),
@@ -99,6 +100,40 @@ router.get(
   ],
   validate,
   AttendanceController.getReport
+);
+
+/**
+ * @route   GET /api/attendance/student/:studentId
+ * @desc    Get attendance records for a specific student
+ * @access  Private (admin, faculty, parent)
+ */
+router.get(
+  '/student/:studentId',
+  authorize('admin', 'super_admin', 'faculty', 'parent'),
+  [
+    require('express-validator').param('studentId').isMongoId().withMessage('Valid studentId required'),
+    require('../../utils/validators').validate,
+  ],
+  async (req, res, next) => {
+    try {
+      const { studentId } = req.params;
+      const { dateFrom, dateTo, session } = req.query;
+      const Attendance = require('../../models/Attendance');
+      const query = { studentId };
+      if (dateFrom || dateTo) {
+        query.date = {};
+        if (dateFrom) query.date.$gte = new Date(dateFrom);
+        if (dateTo)   query.date.$lte = new Date(dateTo);
+      }
+      if (session) query.session = session;
+      const records = await Attendance.find(query).sort({ date: -1 }).limit(200).lean();
+      const total   = records.length;
+      const present = records.filter(r => r.status === 'present').length;
+      const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+      const ApiResponse = require('../../utils/apiResponse');
+      return ApiResponse.success(res, { records, stats: { total, present, percentage } }, 'Student attendance fetched');
+    } catch (e) { next(e); }
+  }
 );
 
 module.exports = router;

@@ -17,6 +17,8 @@ import {
   WarningOutlined,
   ScheduleOutlined,
   SettingOutlined,
+  FileTextOutlined,
+  BookOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
@@ -66,6 +68,18 @@ const allMenuItems = [
     icon: <TrophyOutlined />,
     label: 'Exams',
     roles: ['super_admin', 'admin', 'principal', 'faculty', 'parent'],
+  },
+  {
+    key: '/assignments',
+    icon: <FileTextOutlined />,
+    label: 'Assignments',
+    roles: ['super_admin', 'admin', 'principal', 'faculty'],
+  },
+  {
+    key: '/materials',
+    icon: <BookOutlined />,
+    label: 'Study Materials',
+    roles: ['super_admin', 'admin', 'principal', 'faculty'],
   },
   {
     key: '/faculty',

@@ -139,6 +139,30 @@ class AuthService {
   }
 
   /**
+   * Change password for an authenticated user.
+   * @param {string} userId
+   * @param {string} oldPassword
+   * @param {string} newPassword
+   */
+  static async changePassword(userId, oldPassword, newPassword) {
+    const bcrypt = require('bcryptjs');
+    const user = await User.findById(userId).select('+password');
+    if (!user) throw new AppError('User not found', 404);
+
+    // Verify old password
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) throw new AppError('Current password is incorrect', 400);
+
+    if (newPassword.length < 6) throw new AppError('New password must be at least 6 characters', 400);
+
+    // Hash + save
+    user.password = await bcrypt.hash(newPassword, 12);
+    await user.save();
+
+    return { message: 'Password changed successfully' };
+  }
+
+  /**
    * Generate a signed JWT containing user id and role.
    */
   static generateToken(userId, role) {

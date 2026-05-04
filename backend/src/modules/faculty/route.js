@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const FacultyController = require('./controller');
 const { protect, authorize } = require('../../middlewares/auth');
-const { validate, body, mongoIdParam } = require('../../utils/validators');
+const { validate, body, mongoIdParam, query } = require('../../utils/validators');
 
 router.use(protect);
 
@@ -43,6 +43,30 @@ router.patch(
   ],
   validate,
   FacultyController.assignSubjects
+);
+
+// ── Faculty Dashboard (self-service) ──────────────────────────
+router.get('/me/dashboard',
+  authorize('admin', 'super_admin', 'faculty'),
+  FacultyController.getDashboard
+);
+
+router.get('/me/class/:classId/students',
+  authorize('admin', 'super_admin', 'faculty'),
+  mongoIdParam('classId'), validate,
+  FacultyController.getClassStudents
+);
+
+router.get('/me/class/:classId/analytics/:examId',
+  authorize('admin', 'super_admin', 'faculty'),
+  mongoIdParam('classId'), mongoIdParam('examId'), validate,
+  FacultyController.getClassAnalytics
+);
+
+router.get('/me/class/:classId/monthly-attendance',
+  authorize('admin', 'super_admin', 'faculty'),
+  mongoIdParam('classId'), validate,
+  FacultyController.getMonthlyAttendance
 );
 
 module.exports = router;

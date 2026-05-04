@@ -1,5 +1,9 @@
 const mongoose = require('mongoose');
 
+/**
+ * Mark schema — one row per student per subject per exam.
+ * maxMarks is stored from exam.maxMarks for historical integrity.
+ */
 const markSchema = new mongoose.Schema(
   {
     examId: {
@@ -22,10 +26,16 @@ const markSchema = new mongoose.Schema(
       required: [true, 'Marks obtained is required'],
       min: [0, 'Marks cannot be negative'],
     },
+    // Snapshotted from exam.maxMarks at time of entry
     maxMarks: {
       type: Number,
       required: [true, 'Maximum marks is required'],
       min: [1, 'Max marks must be at least 1'],
+    },
+    // Computed: pass/fail per subject (snapshotted)
+    passed: {
+      type: Boolean,
+      default: null,
     },
     grade: {
       type: String,

@@ -1,222 +1,242 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Table, Typography, Button, Space, App, Empty, Modal, Form,
-  Input, Select, Row, Col, Tag,
+  Row, Col, Card, Statistic, Typography, Tag, Table, Spin,
+  Select, Empty, Alert, Badge, Avatar,
 } from 'antd';
-import { PlusOutlined, TeamOutlined } from '@ant-design/icons';
-import { facultyAPI, schoolAPI } from '@/services/api';
+import {
+  TeamOutlined, BookOutlined, CalendarOutlined,
+  TrophyOutlined, FileTextOutlined, ClockCircleOutlined,
+} from '@ant-design/icons';
+import { facultyDashboardAPI, examAPI } from '@/services/api';
+import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 
-const Faculty = () => {
-  const { message } = App.useApp();
-  const [faculty, setFaculty] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [classes, setClasses] = useState([]);
-  const [subjects, setSubjects] = useState([]);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [selectedFaculty, setSelectedFaculty] = useState(null);
-  const [createForm] = Form.useForm();
-  const [assignForm] = Form.useForm();
+const STATUS_COLOR = { draft: 'default', published: 'blue', locked: 'green' };
 
-  const fetchFaculty = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await facultyAPI.getAll({ page, limit: 20 });
-      setFaculty(res.data.faculty);
-      setTotal(res.data.total);
-    } catch (err) {
-      message.error(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, message]);
+const FacultyDashboard = () => {
+  const [loading,  setLoading]  = useState(true);
+  const [data,     setData]     = useState(null);
+  const [students, setStudents] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [selClass, setSelClass] = useState(null);
+  const [selExam,  setSelExam]  = useState(null);
+  const [exams,    setExams]    = useState([]);
+  const [stuLoading, setStuLoading] = useState(false);
+  const [anaLoading, setAnaLoading] = useState(false);
 
-  const fetchMeta = useCallback(async () => {
-    try {
-      const [clsRes, subRes] = await Promise.all([
-        schoolAPI.getClasses({ limit: 50 }),
-        schoolAPI.getSubjects({ limit: 50 }),
-      ]);
-      setClasses(clsRes.data || []);
-      setSubjects(subRes.data || []);
-    } catch {}
+  useEffect(() => {
+    facultyDashboardAPI.getDashboard()
+      .then((r) => { setData(r?.data || r); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    examAPI.getAll().then((r) => setExams(Array.isArray(r?.data) ? r.data : r?.data?.exams || [])).catch(() => {});
   }, []);
 
-  useEffect(() => { fetchFaculty(); }, [fetchFaculty]);
-  useEffect(() => { fetchMeta(); }, [fetchMeta]);
-
-  const handleCreate = async (values) => {
-    try {
-      await facultyAPI.create(values);
-      message.success('Faculty created successfully');
-      setCreateOpen(false);
-      createForm.resetFields();
-      fetchFaculty();
-    } catch (err) {
-      message.error(err.message);
-    }
+  const loadStudents = (classId) => {
+    setSelClass(classId);
+    setStudents([]);
+    setAnalytics(null);
+    setStuLoading(true);
+    facultyDashboardAPI.getClassStudents(classId)
+      .then((r) => setStudents(Array.isArray(r?.data) ? r.data : []))
+      .catch(() => {})
+      .finally(() => setStuLoading(false));
   };
 
-  const handleAssignClasses = async (values) => {
-    try {
-      await facultyAPI.assignClasses(selectedFaculty._id, values.classIds);
-      message.success('Classes assigned successfully');
-      setAssignOpen(false);
-      assignForm.resetFields();
-      fetchFaculty();
-    } catch (err) {
-      message.error(err.message);
-    }
+  const loadAnalytics = (classId, examId) => {
+    setSelExam(examId);
+    setAnaLoading(true);
+    facultyDashboardAPI.getClassAnalytics(classId, examId)
+      .then((r) => setAnalytics(r?.data || null))
+      .catch(() => {})
+      .finally(() => setAnaLoading(false));
   };
 
-  const columns = [
-    { title: 'Employee ID', dataIndex: 'employeeId', key: 'employeeId', width: 130 },
-    { title: 'Name', dataIndex: 'name', key: 'name', width: 180 },
-    { title: 'Email', dataIndex: 'email', key: 'email', width: 200 },
-    { title: 'Designation', dataIndex: 'designation', key: 'designation', width: 140 },
+  if (loading) return <div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" /></div>;
+
+  const faculty    = data?.faculty;
+  const stats      = data?.stats || {};
+  const recentExams = data?.recentExams || [];
+
+  const studentCols = [
+    { title: 'Roll No', dataIndex: 'rollNo', key: 'rollNo', width: 90 },
+    { title: 'Name', dataIndex: 'name', key: 'name' },
     {
-      title: 'Subjects',
-      dataIndex: 'subjects',
-      key: 'subjects',
-      width: 200,
-      render: (subs) => subs?.map((s) => (
-        <Tag key={s._id} color="blue" style={{ marginBottom: 2 }}>{s.name}</Tag>
-      )) || '—',
+      title: 'Attendance %', key: 'att',
+      render: (_, r) => {
+        const pct = r.attendancePct;
+        if (pct === null) return <Text type="secondary">—</Text>;
+        const color = pct >= 75 ? '#16A34A' : pct >= 50 ? '#D97706' : '#DC2626';
+        return <Tag color={pct >= 75 ? 'green' : pct >= 50 ? 'orange' : 'red'}>{pct}%</Tag>;
+      },
     },
     {
-      title: 'Classes',
-      dataIndex: 'assignedClasses',
-      key: 'assignedClasses',
-      width: 200,
-      render: (cls) => cls?.map((c) => (
-        <Tag key={c._id} color="green" style={{ marginBottom: 2 }}>{c.name}</Tag>
-      )) || '—',
-    },
-    {
-      title: 'Status',
-      dataIndex: 'isActive',
-      key: 'isActive',
-      width: 100,
-      render: (v) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag>,
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      width: 140,
-      render: (_, record) => (
-        <Button
-          size="small"
-          icon={<TeamOutlined />}
-          onClick={() => {
-            setSelectedFaculty(record);
-            assignForm.setFieldsValue({ classIds: record.assignedClasses?.map((c) => c._id) || [] });
-            setAssignOpen(true);
-          }}
-        >
-          Assign
-        </Button>
-      ),
+      title: 'Last Marks', key: 'mark',
+      render: (_, r) => r.lastMark
+        ? `${r.lastMark.marksObtained}/${r.lastMark.maxMarks || 100}`
+        : <Text type="secondary">—</Text>,
     },
   ];
 
+  const analyticsCols = [
+    { title: 'Rank', dataIndex: 'rank', key: 'rank', width: 60 },
+    { title: 'Student', key: 'name', render: (_, r) => r.student?.name || '—' },
+    { title: 'Total', key: 'total', render: (_, r) => `${r.totalObtained}/${r.totalMax}` },
+    {
+      title: '%', dataIndex: 'percentage', key: 'pct',
+      render: (v) => <Tag color={v >= 75 ? 'green' : v >= 40 ? 'orange' : 'red'}>{v}%</Tag>,
+    },
+  ];
+
+  const classes = faculty?.assignedClasses || [];
+
   return (
-    <div className="page-container">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <Title level={3} className="page-title" style={{ margin: 0 }}>Faculty</Title>
-          <Text className="page-subtitle">Manage faculty members and assignments</Text>
+    <div style={{ padding: '0 0 40px' }}>
+      {/* Header */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1B3A5C 0%, #2563EB 100%)',
+        padding: '24px 28px', borderRadius: 16, marginBottom: 24, color: '#fff',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Avatar size={56} style={{ background: '#fff', color: '#1B3A5C', fontSize: 24, fontWeight: 800 }}>
+            {(faculty?.name || 'F').charAt(0)}
+          </Avatar>
+          <div>
+            <Title level={4} style={{ color: '#fff', margin: 0 }}>{faculty?.name || 'Faculty'}</Title>
+            <Text style={{ color: '#93C5FD' }}>{faculty?.designation || 'Teacher'} · {faculty?.department || 'General'}</Text>
+          </div>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)} id="create-faculty-btn">
-          Add Faculty
-        </Button>
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={faculty}
-        rowKey="_id"
-        loading={loading}
-        pagination={{ current: page, total, pageSize: 20, onChange: setPage, showTotal: (t) => `Total ${t} faculty` }}
-        scroll={{ x: 1100 }}
-        size="middle"
-        style={{ background: '#FFF', borderRadius: 8 }}
-        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No faculty found" /> }}
-      />
+      {/* Stats */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        {[
+          { title: 'Classes', value: stats.classCount   || 0, icon: <TeamOutlined />,       color: '#2563EB' },
+          { title: 'Subjects',value: stats.subjectCount || 0, icon: <BookOutlined />,       color: '#7C3AED' },
+          { title: 'Students',value: stats.studentCount || 0, icon: <CalendarOutlined />,   color: '#059669' },
+          { title: 'To Grade', value: stats.pendingGrade|| 0, icon: <FileTextOutlined />,   color: '#D97706' },
+        ].map((s) => (
+          <Col key={s.title} xs={12} sm={6}>
+            <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <Statistic
+                title={s.title}
+                value={s.value}
+                prefix={<span style={{ color: s.color }}>{s.icon}</span>}
+                valueStyle={{ color: s.color, fontWeight: 800 }}
+              />
+            </Card>
+          </Col>
+        ))}
+      </Row>
 
-      {/* Create Faculty Modal */}
-      <Modal
-        title="Add New Faculty"
-        open={createOpen}
-        onCancel={() => { setCreateOpen(false); createForm.resetFields(); }}
-        onOk={() => createForm.submit()}
-        okText="Create"
-        destroyOnHidden
-      >
-        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
-          <Form.Item name="name" label="Full Name" rules={[{ required: true, message: 'Name is required' }]}>
-            <Input placeholder="Enter faculty name" />
-          </Form.Item>
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item name="email" label="Email">
-                <Input placeholder="email@school.com" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="phone" label="Phone">
-                <Input placeholder="Phone number" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item name="designation" label="Designation">
-                <Input placeholder="e.g. Professor" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="department" label="Department">
-                <Input placeholder="e.g. Science" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="subjects" label="Subjects">
-            <Select
-              mode="multiple"
-              placeholder="Select subjects"
-              options={subjects.map((s) => ({ label: s.name, value: s._id }))}
-              allowClear
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <Row gutter={[16, 16]}>
+        {/* Class Students Panel */}
+        <Col xs={24} lg={14}>
+          <Card
+            title={<><TeamOutlined style={{ marginRight: 8, color: '#2563EB' }} />Class Students</>}
+            bordered={false}
+            style={{ borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+            extra={
+              <Select
+                placeholder="Select class"
+                style={{ width: 160 }}
+                onChange={loadStudents}
+                options={classes.map((c) => ({ value: c._id, label: c.name }))}
+                id="dashboard-class-select"
+              />
+            }
+          >
+            {stuLoading ? <Spin /> : students.length > 0 ? (
+              <Table
+                dataSource={students} columns={studentCols}
+                rowKey="_id" size="small" pagination={{ pageSize: 10 }}
+              />
+            ) : (
+              <Empty description={selClass ? 'No students found' : 'Select a class above'} />
+            )}
+          </Card>
+        </Col>
 
-      {/* Assign Classes Modal */}
-      <Modal
-        title={`Assign Classes — ${selectedFaculty?.name || ''}`}
-        open={assignOpen}
-        onCancel={() => { setAssignOpen(false); assignForm.resetFields(); }}
-        onOk={() => assignForm.submit()}
-        okText="Save"
-        destroyOnHidden
-      >
-        <Form form={assignForm} layout="vertical" onFinish={handleAssignClasses}>
-          <Form.Item name="classIds" label="Assigned Classes">
-            <Select
-              mode="multiple"
-              placeholder="Select classes"
-              options={classes.map((c) => ({ label: c.name, value: c._id }))}
-              allowClear
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+        {/* Recent Exams + Analytics */}
+        <Col xs={24} lg={10}>
+          <Card
+            title={<><TrophyOutlined style={{ marginRight: 8, color: '#D97706' }} />Recent Exams</>}
+            bordered={false}
+            style={{ borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16 }}
+          >
+            {recentExams.length === 0
+              ? <Empty description="No exams yet" />
+              : recentExams.map((e) => (
+                <div key={e._id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '8px 0', borderBottom: '1px solid #F1F5F9',
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{e.examName || e.name}</div>
+                    <div style={{ fontSize: 12, color: '#64748B' }}>{e.classId?.name}</div>
+                  </div>
+                  <Tag color={STATUS_COLOR[e.status] || 'default'}>{e.status}</Tag>
+                </div>
+              ))
+            }
+          </Card>
+
+          {/* Analytics Panel */}
+          {selClass && (
+            <Card
+              title={<><TrophyOutlined style={{ marginRight: 8, color: '#7C3AED' }} />Performance Analytics</>}
+              bordered={false}
+              style={{ borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+              extra={
+                <Select
+                  placeholder="Select exam"
+                  style={{ width: 160 }}
+                  onChange={(eid) => loadAnalytics(selClass, eid)}
+                  options={exams
+                    .filter((e) => String(e.classId?._id || e.classId) === String(selClass))
+                    .map((e) => ({ value: e._id, label: e.examName || e.name }))}
+                  id="analytics-exam-select"
+                />
+              }
+            >
+              {anaLoading ? <Spin /> : analytics ? (
+                <>
+                  <Row gutter={8} style={{ marginBottom: 12 }}>
+                    {[
+                      { label: 'Avg %', value: `${analytics.stats?.averagePercentage ?? '—'}%` },
+                      { label: 'Passed', value: analytics.stats?.passed ?? '—' },
+                      { label: 'Failed', value: analytics.stats?.failed ?? '—' },
+                    ].map((s) => (
+                      <Col key={s.label} span={8}>
+                        <div style={{ textAlign: 'center', background: '#F8FAFC', borderRadius: 8, padding: '10px 4px' }}>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: '#1B3A5C' }}>{s.value}</div>
+                          <div style={{ fontSize: 11, color: '#64748B' }}>{s.label}</div>
+                        </div>
+                      </Col>
+                    ))}
+                  </Row>
+                  {analytics.stats?.topper && (
+                    <Alert
+                      type="success" showIcon
+                      message={`Topper: ${analytics.stats.topper.name} — ${analytics.stats.topper.percentage}%`}
+                      style={{ marginBottom: 8 }}
+                    />
+                  )}
+                  <Table
+                    dataSource={analytics.students} columns={analyticsCols}
+                    rowKey={(r) => r.student?._id || r.rank} size="small" pagination={{ pageSize: 5 }}
+                  />
+                </>
+              ) : (
+                <Empty description="Select an exam to view analytics" />
+              )}
+            </Card>
+          )}
+        </Col>
+      </Row>
     </div>
   );
 };
 
-export default Faculty;
+export default FacultyDashboard;

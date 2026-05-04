@@ -31,4 +31,29 @@ router.post('/login', loginValidation, AuthController.login);
  */
 router.get('/me', protect, AuthController.getMe);
 
+/**
+ * @route   PATCH /api/auth/change-password
+ * @desc    Change password for the authenticated user
+ * @access  Private (all roles)
+ */
+router.patch(
+  '/change-password',
+  protect,
+  [
+    body('oldPassword')
+      .notEmpty().withMessage('Current password is required'),
+    body('newPassword')
+      .notEmpty().withMessage('New password is required')
+      .isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+    body('confirmPassword')
+      .notEmpty().withMessage('Confirm password is required')
+      .custom((value, { req }) => {
+        if (value !== req.body.newPassword) throw new Error('Passwords do not match');
+        return true;
+      }),
+    validate,
+  ],
+  AuthController.changePassword
+);
+
 module.exports = router;

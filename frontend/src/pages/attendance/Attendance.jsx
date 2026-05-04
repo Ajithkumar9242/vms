@@ -60,8 +60,13 @@ const Attendance = () => {
     attendanceAPI.getSessions()
       .then((res) => {
         const s = res.data || ['Morning'];
-        setSessions(s);
-        setMarkSession(s[0]);
+
+        const normalized = s.map((x) =>
+          typeof x === 'string' ? x : x.name
+        );
+
+        setSessions(normalized);
+        setMarkSession(normalized[0]);
       })
       .catch(() => { });
   }, []);
@@ -97,7 +102,9 @@ const Attendance = () => {
         classId: markClassId,
         sectionId: markSectionId || undefined,
         date: dateStr,
-        session: markSession,
+        session: typeof markSession === 'string'
+          ? markSession
+          : markSession?.name,
       });
       const existing = attRes.data || [];
 
@@ -164,7 +171,9 @@ const Attendance = () => {
         classId: markClassId,
         sectionId: markSectionId || null,
         date: dateStr,
-        session: markSession,
+        session: typeof markSession === 'string'
+          ? markSession
+          : markSession?.name,
         status: attendanceMap[s._id] || 'present',
       }));
 
@@ -208,7 +217,9 @@ const Attendance = () => {
           await attendanceAPI.lock({
             classId: markClassId,
             date: markDate.format('YYYY-MM-DD'),
-            session: markSession,
+            session: typeof markSession === 'string'
+              ? markSession
+              : markSession?.name,
           });
           message.success('Attendance locked successfully');
           setIsLocked(true);
@@ -387,7 +398,10 @@ const Attendance = () => {
                 style={{ width: '100%' }}
                 value={markSession}
                 onChange={(val) => setMarkSession(val)}
-                options={sessions.map((s) => ({ label: s, value: s }))}
+                options={sessions.map((s) => ({
+                  label: typeof s === 'string' ? s : s.name,
+                  value: typeof s === 'string' ? s : s.name,
+                }))}
                 id="mark-session-select"
               />
             </Col>
@@ -559,7 +573,13 @@ const Attendance = () => {
                 style={{ width: '100%' }}
                 value={viewSession}
                 onChange={(val) => setViewSession(val)}
-                options={[{ label: 'All Sessions', value: undefined }, ...sessions.map((s) => ({ label: s, value: s }))]}
+                options={[
+                  { label: 'All Sessions', value: undefined },
+                  ...sessions.map((s) => ({
+                    label: typeof s === 'string' ? s : s.name,
+                    value: typeof s === 'string' ? s : s.name,
+                  }))
+                ]}
                 allowClear
                 id="view-session-select"
               />

@@ -36,6 +36,20 @@ class AuthController {
       next(error);
     }
   }
+  /**
+   * PATCH /api/auth/change-password
+   * Change password for the currently authenticated user.
+   * Requires: protect middleware.
+   */
+  static async changePassword(req, res, next) {
+    try {
+      const { oldPassword, newPassword } = req.body;
+      const result = await AuthService.changePassword(req.user._id, oldPassword, newPassword);
+      return ApiResponse.success(res, result, result.message);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = AuthController;

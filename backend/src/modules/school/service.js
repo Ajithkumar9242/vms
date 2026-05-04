@@ -37,7 +37,9 @@ class SchoolService {
   static async getClasses(query = {}) {
     const filter = {};
     if (query.isActive !== undefined) {
-      filter.isActive = query.isActive === 'true';
+      filter.isActive =
+        query.isActive === true ||
+        query.isActive === 'true';
     }
 
     const page = parseInt(query.page) || 1;
@@ -86,11 +88,18 @@ class SchoolService {
    */
   static async getSections(query = {}) {
     const filter = {};
-    if (query.classId && mongoose.isValidObjectId(query.classId)) {
+    if (
+      query.classId &&
+      query.classId !== 'null' &&
+      query.classId !== 'undefined' &&
+      mongoose.isValidObjectId(query.classId)
+    ) {
       filter.classId = query.classId;
     }
     if (query.isActive !== undefined) {
-      filter.isActive = query.isActive === 'true';
+      filter.isActive =
+        query.isActive === true ||
+        query.isActive === 'true';
     }
 
     const page = parseInt(query.page) || 1;
@@ -131,17 +140,50 @@ class SchoolService {
 
   /**
    * Get all subjects with optional filters.
-   * @param {Object} query - { type, isActive, page, limit }
+   * When classId is provided, returns subjects from ClassConfig (source of truth).
+   * Falls back to global subject list if no ClassConfig exists for the class.
+   * @param {Object} query - { classId, type, isActive, page, limit }
    * @returns {{ subjects: Array, total: number }}
    */
   static async getSubjects(query = {}) {
+    // ── ClassConfig-based lookup when classId is given ────────
+    if (
+      query.classId &&
+      query.classId !== 'null' &&
+      query.classId !== 'undefined' &&
+      mongoose.isValidObjectId(query.classId)
+    ) {
+      const ClassConfig = require('../../models/ClassConfig');
+      const AcademicYear = require('../../models/AcademicYear');
+
+      // Resolve active academic year
+      let yearId = null;
+      if (query.academicYearId && mongoose.isValidObjectId(query.academicYearId)) {
+        yearId = query.academicYearId;
+      } else {
+        const activeYear = await AcademicYear.findOne({ isActive: true }).select('_id');
+        if (activeYear) yearId = activeYear._id;
+      }
+
+      const configFilter = { classId: query.classId };
+      if (yearId) configFilter.academicYearId = yearId;
+
+      const config = await ClassConfig.findOne(configFilter)
+        .sort({ createdAt: -1 })
+        .populate('subjects', 'name code type isOptional isActive');
+
+      if (config && config.subjects && config.subjects.length > 0) {
+        let subjects = config.subjects.filter((s) => s.isActive !== false);
+        if (query.type) subjects = subjects.filter((s) => s.type === query.type);
+        return { subjects, total: subjects.length, page: 1, limit: subjects.length };
+      }
+      // Fall through to global list if no config
+    }
+
+    // ── Global subject list (no classId, or no config found) ──
     const filter = {};
-    if (query.type) {
-      filter.type = query.type;
-    }
-    if (query.isActive !== undefined) {
-      filter.isActive = query.isActive === 'true';
-    }
+    if (query.type) filter.type = query.type;
+    filter.isActive = query.isActive !== undefined ? query.isActive === 'true' : true;
 
     const page = parseInt(query.page) || 1;
     const limit = parseInt(query.limit) || 50;

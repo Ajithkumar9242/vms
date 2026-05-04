@@ -26,15 +26,24 @@ class FeesController {
   /**
    * POST /api/fees/structure
    * Create or update a fee structure for a class + academic year.
+   * Body supports:
+   *   Manual:    { classId, academicYearId, totalAmount, feeGroupId, installments: [...] }
+   *   Auto-split:{ classId, academicYearId, totalAmount, feeGroupId, installmentCount, startDate, frequency }
    */
   static async createStructure(req, res, next) {
     try {
-      const { classId, academicYear, totalAmount, installments } = req.body;
+      const {
+        classId, academicYear, academicYearId,
+        totalAmount, installments,
+        feeGroupId,
+        installmentCount, startDate, frequency,
+      } = req.body;
+
       const structure = await FeesService.createStructure({
-        classId,
-        academicYear,
-        totalAmount,
-        installments,
+        classId, academicYear, academicYearId,
+        totalAmount, installments,
+        feeGroupId,
+        installmentCount, startDate, frequency,
       });
       return ApiResponse.created(res, structure, 'Fee structure saved successfully');
     } catch (error) {
@@ -44,12 +53,12 @@ class FeesController {
 
   /**
    * GET /api/fees/structure
-   * Get all fee structures (optional ?classId=xxx&academicYear=xxx).
+   * Get all fee structures (optional ?classId=xxx&academicYearId=xxx).
    */
   static async getStructures(req, res, next) {
     try {
-      const { classId, academicYear } = req.query;
-      const structures = await FeesService.getStructures({ classId, academicYear });
+      const { classId, academicYear, academicYearId } = req.query;
+      const structures = await FeesService.getStructures({ classId, academicYear, academicYearId });
       return ApiResponse.success(res, structures, 'Fee structures fetched');
     } catch (error) {
       next(error);

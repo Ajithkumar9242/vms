@@ -1,243 +1,245 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Modal, Form, Input, InputNumber, Select, DatePicker,
-  App, Table, Typography, Divider,
+  Modal, Form, Input, InputNumber, Select, DatePicker, App, Row, Col,
 } from 'antd';
+import dayjs from 'dayjs';
 import { examAPI, schoolAPI } from '@/services/api';
 
-const { Text } = Typography;
+const { RangePicker } = DatePicker;
 
 /**
- * CreateExamModal — per-subject maxMarks + passingMarks.
- * Loads subjects from ClassConfig when class is selected.
+ * CreateExamModal — create OR edit an exam.
+ *
+ * Props:
+ *  open       : boolean
+ *  editRecord : exam object | null   (null = create mode)
+ *  onClose    : () => void
+ *  onSuccess  : () => void
  */
-const CreateExamModal = ({ open, onClose, onSuccess }) => {
+const CreateExamModal = ({ open, editRecord, onClose, onSuccess }) => {
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
   const [classes, setClasses] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [loadingSubjects, setLoadingSubjects] = useState(false);
 
-  // per-subject config: { [subjectId]: { maxMarks, passingMarks } }
-  const [subjects, setSubjects] = useState([]); // available subjects for selected class
-  const [subjectMarks, setSubjectMarks] = useState({}); // per-subject marks config
-  const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
+  const isEdit = !!(editRecord?._id);
 
-  // ─── Load classes on open ─────────────────────────────────
+  // ── Load classes ─────────────────────────────────────────
   useEffect(() => {
     if (!open) return;
     schoolAPI.getClasses({ limit: 50 })
-      .then((res) => setClasses(res.data || []))
-      .catch(() => {});
-    // Reset state when reopened
-    setSubjects([]);
-    setSubjectMarks({});
-    setSelectedSubjectIds([]);
+      .then((res) => {
+        const list = res?.data?.classes || res?.data || res || [];
+        setClasses(Array.isArray(list) ? list : []);
+      })
+      .catch(() => { });
   }, [open]);
 
-  // ─── Load subjects when class changes ─────────────────────
-  const handleClassChange = async (classId) => {
-    setSubjects([]);
-    setSubjectMarks({});
-    setSelectedSubjectIds([]);
-    form.setFieldValue('subjectIds', undefined);
-    if (!classId) return;
+  // ── Load subjects for a given classId ────────────────────
+  const loadSubjectsForClass = useCallback(async (classId) => {
+    if (!classId) { setSubjects([]); return; }
+    setLoadingSubjects(true);
     try {
       const res = await examAPI.getSubjectsForClass(classId);
-      setSubjects(res.data || []);
+      // API interceptor unwraps to res.data (the { success, data } wrapper)
+      // so we try both shapes:
+      const list = res?.data || res || [];
+      setSubjects(Array.isArray(list) ? list : []);
     } catch {
-      // fall back to all subjects
-      try {
-        const res = await schoolAPI.getSubjects({ limit: 100 });
-        setSubjects(res.data || []);
-      } catch { /* */ }
+      setSubjects([]);
+    } finally {
+      setLoadingSubjects(false);
     }
-  };
+  }, []);
 
-  // ─── When subjects are selected, initialize marks config ──
-  const handleSubjectSelect = (selectedIds) => {
-    setSelectedSubjectIds(selectedIds);
-    const globalMax = form.getFieldValue('globalMaxMarks') || 100;
-    const globalPassing = form.getFieldValue('globalPassingMarks') || 35;
-    setSubjectMarks((prev) => {
-      const next = { ...prev };
-      selectedIds.forEach((id) => {
-        if (!next[id]) {
-          next[id] = { maxMarks: globalMax, passingMarks: globalPassing };
-        }
+  // ── Populate form on open ─────────────────────────────────
+  useEffect(() => {
+    if (!open) {
+      form.resetFields();
+      setSubjects([]);
+      return;
+    }
+
+    if (isEdit && editRecord) {
+      const classId = editRecord.classId?._id || editRecord.classId;
+
+      // Load subjects first, then set form values so multi-select options exist
+      loadSubjectsForClass(classId).then(() => {
+        const start = editRecord.startDate ? dayjs(editRecord.startDate) : null;
+        const end = editRecord.endDate ? dayjs(editRecord.endDate) : null;
+
+        form.setFieldsValue({
+          examName: editRecord.examName || editRecord.name,
+          classId,
+          dateRange: start ? [start, end || null] : undefined,
+          maxMarks: editRecord.maxMarks ?? 100,
+          passingMarks: editRecord.passingMarks ?? 35,
+          subjects: (editRecord.subjects || []).map((s) => s?._id?.toString() || s?.toString?.() || s),
+        });
       });
-      return next;
-    });
+    } else {
+      // Create mode — clean slate
+      form.resetFields();
+      form.setFieldsValue({ maxMarks: 100, passingMarks: 35 });
+      setSubjects([]);
+    }
+  }, [open, editRecord, isEdit, form, loadSubjectsForClass]);
+
+  // ── Class selector change ─────────────────────────────────
+  const handleClassChange = (classId) => {
+    form.setFieldValue('subjects', undefined);
+    loadSubjectsForClass(classId);
   };
 
-  // ─── Update a single subject's marks ──────────────────────
-  const updateSubjectMark = (subjectId, field, value) => {
-    setSubjectMarks((prev) => ({
-      ...prev,
-      [subjectId]: { ...prev[subjectId], [field]: value },
-    }));
-  };
-
-  // ─── Apply global defaults to all selected subjects ───────
-  const applyGlobalToAll = () => {
-    const globalMax = form.getFieldValue('globalMaxMarks') || 100;
-    const globalPassing = form.getFieldValue('globalPassingMarks') || 35;
-    const next = {};
-    selectedSubjectIds.forEach((id) => {
-      next[id] = { maxMarks: globalMax, passingMarks: globalPassing };
-    });
-    setSubjectMarks(next);
-  };
-
-  // ─── Submit ───────────────────────────────────────────────
+  // ── Submit ────────────────────────────────────────────────
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
-      if (!selectedSubjectIds.length) {
-        message.warning('Select at least one subject');
-        return;
-      }
       setSubmitting(true);
 
-      const subjectsPayload = selectedSubjectIds.map((id) => ({
-        subjectId: id,
-        maxMarks: subjectMarks[id]?.maxMarks || values.globalMaxMarks || 100,
-        passingMarks: subjectMarks[id]?.passingMarks ?? values.globalPassingMarks ?? 35,
-      }));
+      const [startDate, endDate] = values.dateRange
+        ? [
+          values.dateRange[0]?.toISOString() ?? null,
+          values.dateRange[1]?.toISOString() ?? null,
+        ]
+        : [null, null];
 
-      await examAPI.create({
-        name: values.name,
+      const payload = {
+        examName: values.examName,
         classId: values.classId,
-        academicYearId: values.academicYearId || undefined,
-        subjects: subjectsPayload,
-        examDate: values.examDate ? values.examDate.toISOString() : null,
-      });
+        maxMarks: values.maxMarks,
+        passingMarks: values.passingMarks ?? 35,
+        subjects: values.subjects || [],
+        startDate,
+        endDate,
+      };
 
-      message.success('Exam created successfully');
+      if (isEdit) {
+        await examAPI.update(editRecord._id, payload);
+        message.success('Exam updated');
+      } else {
+        await examAPI.create(payload);
+        message.success('Exam created');
+      }
+
       form.resetFields();
       setSubjects([]);
-      setSubjectMarks({});
-      setSelectedSubjectIds([]);
       onSuccess?.();
     } catch (err) {
-      if (err.errorFields) return;
-      message.error(err.message || 'Failed to create exam');
+      if (err.errorFields) return;   // Ant Design inline validation
+      message.error(err.message || 'Failed to save exam');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // ─── Per-subject marks table ──────────────────────────────
-  const selectedSubjects = subjects.filter((s) => selectedSubjectIds.includes(s._id));
-  const subjectTableCols = [
-    {
-      title: 'Subject',
-      dataIndex: 'name',
-      key: 'name',
-      render: (name, s) => <Text strong>{name} <Text type="secondary" style={{ fontSize: 11 }}>({s.code})</Text></Text>,
-    },
-    {
-      title: 'Max Marks',
-      key: 'maxMarks',
-      width: 120,
-      render: (_, s) => (
-        <InputNumber
-          min={1}
-          size="small"
-          value={subjectMarks[s._id]?.maxMarks ?? 100}
-          onChange={(val) => updateSubjectMark(s._id, 'maxMarks', val)}
-          style={{ width: '100%' }}
-        />
-      ),
-    },
-    {
-      title: 'Passing Marks',
-      key: 'passingMarks',
-      width: 120,
-      render: (_, s) => (
-        <InputNumber
-          min={0}
-          size="small"
-          value={subjectMarks[s._id]?.passingMarks ?? 35}
-          onChange={(val) => updateSubjectMark(s._id, 'passingMarks', val)}
-          style={{ width: '100%' }}
-        />
-      ),
-    },
-  ];
+  const handleCancel = () => {
+    form.resetFields();
+    setSubjects([]);
+    onClose?.();
+  };
 
   return (
     <Modal
-      title="Create Exam"
+      title={isEdit ? `Edit Exam — ${editRecord?.examName || editRecord?.name || ''}` : 'Create Exam'}
       open={open}
-      onCancel={() => { form.resetFields(); setSubjects([]); setSubjectMarks({}); setSelectedSubjectIds([]); onClose?.(); }}
+      onCancel={handleCancel}
       onOk={handleSubmit}
-      okText="Create Exam"
-      okButtonProps={{ loading: submitting, disabled: submitting, id: 'create-exam-submit' }}
+      okText={isEdit ? 'Save Changes' : 'Create Exam'}
+      okButtonProps={{ loading: submitting, id: 'exam-modal-submit' }}
+      cancelButtonProps={{ id: 'exam-modal-cancel' }}
       destroyOnHidden
       maskClosable={false}
-      width={620}
+      width={520}
     >
-      <Form form={form} layout="vertical" requiredMark="optional" style={{ marginTop: 16 }}>
-        <Form.Item name="name" label="Exam Name" rules={[{ required: true, message: 'Enter exam name' }]}>
-          <Input placeholder="e.g. Mid Term, Final Exam" id="exam-name-input" />
+      <Form
+        form={form}
+        layout="vertical"
+        requiredMark="optional"
+        style={{ marginTop: 16 }}
+      >
+        {/* Exam Name */}
+        <Form.Item
+          name="examName"
+          label="Exam Name"
+          rules={[{ required: true, message: 'Enter exam name' }]}
+        >
+          <Input placeholder="e.g. Mid Term Exam, Unit Test 1" id="exam-name-input" />
         </Form.Item>
 
-        <Form.Item name="classId" label="Class" rules={[{ required: true, message: 'Select class' }]}>
+        {/* Class */}
+        <Form.Item
+          name="classId"
+          label="Class"
+          rules={[{ required: true, message: 'Select a class' }]}
+        >
           <Select
             placeholder="Select class"
             options={classes.map((c) => ({ label: c.name, value: c._id }))}
             onChange={handleClassChange}
+            disabled={isEdit}          // class locked on edit
+            showSearch
+            optionFilterProp="label"
             id="exam-class-select"
           />
         </Form.Item>
 
-        <Form.Item name="examDate" label="Exam Date">
-          <DatePicker style={{ width: '100%' }} format="DD-MM-YYYY" id="exam-date-picker" />
-        </Form.Item>
-
-        {/* Global defaults — applied when selecting subjects */}
-        <Divider orientation="left" orientationMargin={0} style={{ fontSize: 12, marginTop: 4 }}>
-          Default Marks (applied to each subject)
-        </Divider>
-        <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-          <Form.Item name="globalMaxMarks" label="Max Marks" style={{ flex: 1, marginBottom: 0 }} initialValue={100}>
-            <InputNumber min={1} style={{ width: '100%' }} onChange={applyGlobalToAll} />
-          </Form.Item>
-          <Form.Item name="globalPassingMarks" label="Passing Marks" style={{ flex: 1, marginBottom: 0 }} initialValue={35}>
-            <InputNumber min={0} style={{ width: '100%' }} onChange={applyGlobalToAll} />
-          </Form.Item>
-        </div>
-
-        <Form.Item name="subjectIds" label="Subjects" rules={[{ required: false }]}>
-          <Select
-            mode="multiple"
-            placeholder={subjects.length ? 'Select subjects' : 'Select a class first'}
-            options={subjects.map((s) => ({ label: `${s.name} (${s.code})`, value: s._id }))}
-            onChange={handleSubjectSelect}
-            disabled={!subjects.length}
-            optionFilterProp="label"
-            showSearch
-            id="exam-subjects-select"
+        {/* Date Range */}
+        <Form.Item name="dateRange" label="Exam Date / Date Range">
+          <RangePicker
+            style={{ width: '100%' }}
+            format="DD-MM-YYYY"
+            allowEmpty={[true, true]}
+            id="exam-date-range"
           />
         </Form.Item>
 
-        {/* Per-subject marks config */}
-        {selectedSubjects.length > 0 && (
-          <>
-            <Divider orientation="left" orientationMargin={0} style={{ fontSize: 12, marginTop: 4 }}>
-              Per-Subject Marks Configuration
-            </Divider>
-            <Table
-              dataSource={selectedSubjects}
-              columns={subjectTableCols}
-              rowKey="_id"
-              pagination={false}
-              size="small"
-              bordered
-              style={{ marginBottom: 8 }}
-            />
-          </>
-        )}
+        {/* Max / Passing Marks */}
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item
+              name="maxMarks"
+              label="Max Marks"
+              rules={[{ required: true, message: 'Required' }]}
+            >
+              <InputNumber min={1} style={{ width: '100%' }} id="exam-max-marks" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="passingMarks" label="Passing Marks">
+              <InputNumber min={0} style={{ width: '100%' }} id="exam-passing-marks" />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        {/* Subjects */}
+        <Form.Item
+          name="subjects"
+          label="Subjects (optional)"
+          extra={
+            !form.getFieldValue('classId')
+              ? 'Select a class to load subjects'
+              : subjects.length === 0 && !loadingSubjects
+                ? 'No subjects found — all subjects will be available'
+                : `${subjects.length} subject${subjects.length !== 1 ? 's' : ''} available`
+          }
+        >
+          <Select
+            mode="multiple"
+            placeholder={subjects.length ? 'Select subjects…' : 'Leave empty for all subjects'}
+            options={subjects.map((s) => ({
+              label: s.code ? `${s.name} (${s.code})` : s.name,
+              value: String(s._id),
+            }))}
+            loading={loadingSubjects}
+            optionFilterProp="label"
+            showSearch
+            allowClear
+            id="exam-subjects-select"
+          />
+        </Form.Item>
       </Form>
     </Modal>
   );

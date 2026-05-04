@@ -91,12 +91,57 @@ class FacultyService {
     return faculty;
   }
 
+  /**
+   * Assign subjects to faculty.
+   * Validates that subjectIds belong to at least one ClassConfig of the faculty's assigned classes.
+   * @param {string} facultyId
+   * @param {string[]} subjectIds
+   */
   static async assignSubjects(facultyId, subjectIds) {
     if (!mongoose.isValidObjectId(facultyId)) {
       throw new AppError('Invalid faculty ID format', 400);
     }
 
-    const faculty = await Faculty.findByIdAndUpdate(
+    const faculty = await Faculty.findById(facultyId);
+    if (!faculty) throw new AppError('Faculty not found', 404);
+
+    // Validate subject IDs are valid ObjectIds
+    for (const sid of subjectIds) {
+      if (!mongoose.isValidObjectId(sid)) {
+        throw new AppError(`Invalid subject ID: ${sid}`, 400);
+      }
+    }
+
+    // If faculty has assigned classes, verify each subjectId appears in at least one ClassConfig
+    if (faculty.assignedClasses && faculty.assignedClasses.length > 0) {
+      const ClassConfig = require('../../models/ClassConfig');
+      const AcademicYear = require('../../models/AcademicYear');
+
+      const activeYear = await AcademicYear.findOne({ isActive: true }).select('_id');
+      if (activeYear) {
+        const configs = await ClassConfig.find({
+          classId: { $in: faculty.assignedClasses },
+          academicYearId: activeYear._id,
+        }).select('subjects');
+
+        // Collect all allowed subject IDs across all configs
+        const allowedSubjectIds = new Set(
+          configs.flatMap((c) => c.subjects.map((s) => s.toString()))
+        );
+
+        if (allowedSubjectIds.size > 0) {
+          const invalid = subjectIds.filter((id) => !allowedSubjectIds.has(id.toString()));
+          if (invalid.length > 0) {
+            throw new AppError(
+              `Subjects not assigned to faculty's classes: ${invalid.join(', ')}`,
+              400
+            );
+          }
+        }
+      }
+    }
+
+    const updated = await Faculty.findByIdAndUpdate(
       facultyId,
       { subjects: subjectIds },
       { new: true }
@@ -104,8 +149,7 @@ class FacultyService {
       .populate('subjects', 'name code')
       .populate('assignedClasses', 'name code');
 
-    if (!faculty) throw new AppError('Faculty not found', 404);
-    return faculty;
+    return updated;
   }
 }
 

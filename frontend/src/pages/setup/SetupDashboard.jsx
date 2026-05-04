@@ -4,6 +4,7 @@ import {
   BankOutlined, CalendarOutlined, BookOutlined,
   TeamOutlined, DollarOutlined, TrophyOutlined,
   CheckSquareOutlined, CreditCardOutlined, SettingOutlined,
+  ReadOutlined, ApartmentOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
@@ -16,6 +17,8 @@ const tiles = [
   { key: 'classes', icon: <BookOutlined />, title: 'Classes', desc: 'LKG, UKG, 1–12', color: '#14B8A6' },
   { key: 'sections', icon: <TeamOutlined />, title: 'Sections', desc: 'A, B, C sections per class', color: '#22C55E' },
   { key: 'class-groups', icon: <SettingOutlined />, title: 'Class Groups', desc: '5A, V-B with class teacher', color: '#F59E0B' },
+  { key: 'subjects',     icon: <ReadOutlined />,      title: 'Subjects',         desc: 'Manage all school subjects', color: '#0EA5E9' },
+  { key: 'class-config', icon: <ApartmentOutlined />, title: 'Class Config',      desc: 'Assign subjects & sections per class/year', color: '#6366F1' },
   { key: 'fee-setup', icon: <DollarOutlined />, title: 'Fee Setup', desc: 'Groups & fee structures', color: '#EF4444' },
   { key: 'grade-setup', icon: <TrophyOutlined />, title: 'Grade System', desc: 'A+, A, B grade ranges', color: '#F97316' },
   { key: 'attendance-config', icon: <CheckSquareOutlined />, title: 'Attendance Config', desc: 'Sessions (Morning / P1, P2…)', color: '#06B6D4' },
