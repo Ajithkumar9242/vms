@@ -154,6 +154,7 @@ export const studentAPI = {
   getAll: (params) => api.get('/students', { params }),
   getById: (id) => api.get(`/students/${id}`),
   create: (data) => api.post('/students', data),
+  update: (id, data) => api.patch(`/students/${id}`, data),
 };
 
 // ─── Fees ───────────────────────────────────────────────────
@@ -212,6 +213,7 @@ export const facultyAPI = {
   create: (data) => api.post('/faculty', data),
   getAll: (params) => api.get('/faculty', { params }),
   getById: (id) => api.get(`/faculty/${id}`),
+  update: (id, data) => api.patch(`/faculty/${id}`, data),
   assignClasses: (id, classIds) => api.patch(`/faculty/${id}/assign-classes`, { classIds }),
   assignSubjects: (id, subjectIds) => api.patch(`/faculty/${id}/assign-subjects`, { subjectIds }),
 };
@@ -221,6 +223,7 @@ export const parentAPI = {
   create: (data) => api.post('/parents', data),
   getAll: (params) => api.get('/parents', { params }),
   getById: (id) => api.get(`/parents/${id}`),
+  update: (id, data) => api.patch(`/parents/${id}`, data),
   linkStudent: (parentId, studentId) => api.patch(`/parents/${parentId}/link`, { studentId }),
   /** Self-service: parent updates their own profile (phone, email, address, occupation) */
   updateMyProfile: (data) => api.patch('/parents/profile/me', data),
@@ -255,11 +258,23 @@ export const searchAPI = {
 
 // ─── Upload ─────────────────────────────────────────────────
 export const uploadAPI = {
-  upload: (file) => {
+  /** Upload a single file. folder: 'students'|'faculty'|'parents'|'materials'|'logo' */
+  upload: (file, folder = '') => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post('/upload', formData, {
+    const url = folder ? `/upload?folder=${folder}` : '/upload';
+    return api.post(url, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  /** Upload multiple files. Returns [{ url, publicId, name, type, size }] */
+  uploadMultiple: (files, folder = '') => {
+    const formData = new FormData();
+    files.forEach((f) => formData.append('files', f));
+    const url = folder ? `/upload/multiple?folder=${folder}` : '/upload/multiple';
+    return api.post(url, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
     });
   },
 };

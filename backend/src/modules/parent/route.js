@@ -48,4 +48,16 @@ router.patch(
   ParentController.linkStudent
 );
 
+/**
+ * PATCH /api/parents/:id
+ * Admin partial update (photo, etc.)
+ */
+router.patch(
+  '/:id',
+  authorize('admin', 'super_admin', 'principal'),
+  mongoIdParam('id'),
+  validate,
+  ParentController.update
+);
+
 module.exports = router;

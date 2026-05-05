@@ -32,6 +32,10 @@ const parentSchema = new mongoose.Schema(
         ref: 'Student',
       },
     ],
+    photo: {
+      type: String,
+      default: null,
+    },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

@@ -134,6 +134,35 @@ class StudentService {
       .populate('sectionId', 'name')
       .populate('academicYearId', 'name');
   }
+
+  /**
+   * Update a student's fields (partial update).
+   * Never overwrites existing value with null — skip undefined/null values.
+   * @param {string} studentId
+   * @param {Object} updates - e.g. { avatar: 'https://...' }
+   */
+  static async updateStudent(studentId, updates) {
+    if (!mongoose.isValidObjectId(studentId)) {
+      throw new AppError('Invalid student ID format', 400);
+    }
+
+    // Strip null/undefined to avoid overwriting good data
+    const clean = {};
+    Object.entries(updates).forEach(([k, v]) => {
+      if (v !== null && v !== undefined && v !== '') clean[k] = v;
+    });
+
+    const student = await Student.findByIdAndUpdate(
+      studentId,
+      { $set: clean },
+      { new: true, runValidators: true }
+    )
+      .populate('classId', 'name code')
+      .populate('sectionId', 'name');
+
+    if (!student) throw new AppError('Student not found', 404);
+    return student;
+  }
 }
 
 module.exports = StudentService;

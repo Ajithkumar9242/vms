@@ -5,21 +5,25 @@ const ActivityService = require('../activity/service');
 
 class MaterialService {
   static async create(data, user) {
-    const { title, description, type, fileUrl, fileName, mimeType, size, classId, subjectId } = data;
+    const { title, description, type, fileUrl, fileName, mimeType, size, classId, subjectId, files } = data;
     if (!title)    throw new AppError('Title is required', 400);
     if (!type)     throw new AppError('type is required', 400);
     if (!classId)  throw new AppError('classId is required', 400);
     if (!subjectId)throw new AppError('subjectId is required', 400);
-    if (!fileUrl && type !== 'link') throw new AppError('fileUrl is required', 400);
+    // fileUrl OR files[] required (unless link type)
+    if (!fileUrl && (!files || files.length === 0) && type !== 'link') {
+      throw new AppError('fileUrl or files array is required', 400);
+    }
 
     const doc = await Material.create({
       title: title.trim(),
       description: description?.trim() || '',
       type,
-      fileUrl: fileUrl || null,
-      fileName: fileName || null,
-      mimeType: mimeType || null,
-      size: size || 0,
+      fileUrl:  fileUrl || (files && files[0]?.url) || null,
+      fileName: fileName || (files && files[0]?.name) || null,
+      mimeType: mimeType || (files && files[0]?.type) || null,
+      size:     size || (files && files[0]?.size) || 0,
+      files:    files || [],
       classId,
       subjectId,
       uploadedBy: user._id,

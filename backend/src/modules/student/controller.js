@@ -48,6 +48,19 @@ class StudentController {
       next(error);
     }
   }
+
+  /**
+   * PATCH /api/students/:id
+   * Partial update (e.g. avatar URL after upload).
+   */
+  static async update(req, res, next) {
+    try {
+      const student = await StudentService.updateStudent(req.params.id, req.body);
+      return ApiResponse.success(res, { student }, 'Student updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = StudentController;

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   Table, Typography, Input, Select, Row, Col, App, Empty,
   Button, Modal, Form, DatePicker, Tag, Drawer, Tabs, Descriptions, Spin,
-  Statistic, Card, List, Badge,
+  Statistic, Card, List, Badge, Avatar,
 } from 'antd';
 import {
   SearchOutlined, PlusOutlined, EyeOutlined,
@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { studentAPI, schoolAPI, feesAPI, attendanceAPI, examAPI } from '@/services/api';
 import StatusTag from '@/components/common/StatusTag';
+import FileUpload from '@/components/common/FileUpload';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -27,6 +28,8 @@ const Students = () => {
   const [modal, setModal] = useState(false);
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [modalClassId, setModalClassId] = useState(null);
   const [filteredSections, setFilteredSections] = useState([]);
   const [profileDrawer, setProfileDrawer] = useState({ open: false, student: null });
@@ -38,12 +41,22 @@ const Students = () => {
       const params = { page, limit: pageSize };
       if (filters.search) params.search = filters.search;
       if (filters.classId) params.classId = filters.classId;
+
       const res = await studentAPI.getAll(params);
-      setStudents(res.data || []);
+
+      const list =
+        res?.data?.students ||
+        res?.data ||
+        res?.students ||
+        res ||
+        [];
+
+      setStudents(Array.isArray(list) ? list : []);
+
       setPagination({
-        current: res.pagination?.page || 1,
-        pageSize: res.pagination?.limit || 20,
-        total: res.pagination?.total || 0,
+        current: res?.pagination?.page || 1,
+        pageSize: res?.pagination?.limit || 20,
+        total: res?.pagination?.total || list.length || 0,
       });
     } catch (err) {
       message.error(err.message || 'Failed to load students');
@@ -55,13 +68,17 @@ const Students = () => {
   // ─── Load classes + sections ──────────────────────────────
   useEffect(() => {
     schoolAPI.getClasses({ limit: 50 })
-      .then((res) => setClasses(res.data || []))
-      .catch(() => {});
-    schoolAPI.getSections()
-      .then((res) => setSections(res.data || []))
-      .catch(() => {});
-  }, []);
+      .then((res) => {
+        const list = res?.data || res || [];
+        setClasses(Array.isArray(list) ? list : []);
+      });
 
+    schoolAPI.getSections()
+      .then((res) => {
+        const list = res?.data || res || [];
+        setSections(Array.isArray(list) ? list : []);
+      });
+  }, []);
   useEffect(() => {
     fetchStudents(1, pagination.pageSize);
   }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -80,11 +97,13 @@ const Students = () => {
       const payload = {
         ...values,
         dateOfBirth: values.dateOfBirth?.toISOString(),
+        ...(avatarUrl ? { avatar: avatarUrl } : {}),
       };
       await studentAPI.create(payload);
       message.success('Student created successfully');
       setModal(false);
       form.resetFields();
+      setAvatarUrl(null);
       setModalClassId(null);
       setFilteredSections([]);
       fetchStudents(1, pagination.pageSize);
@@ -183,12 +202,23 @@ const Students = () => {
       <Modal
         title="Add New Student"
         open={modal}
-        onCancel={() => { setModal(false); form.resetFields(); setModalClassId(null); setFilteredSections([]); }}
+        onCancel={() => { setModal(false); form.resetFields(); setAvatarUrl(null); setModalClassId(null); setFilteredSections([]); }}
         footer={null}
         width={560}
         destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={onFinish} style={{ marginTop: 16 }}>
+          {/* Profile photo */}
+          <Form.Item label="Profile Photo">
+            <FileUpload
+              folder="students"
+              accept="image/*"
+              value={avatarUrl}
+              onChange={setAvatarUrl}
+              onUploading={setUploading}
+              label="Upload Photo"
+            />
+          </Form.Item>
           <Row gutter={12}>
             <Col span={14}>
               <Form.Item label="Full Name" name="name" rules={[{ required: true }]}>
@@ -261,8 +291,8 @@ const Students = () => {
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0 }}>
-            <Button type="primary" htmlType="submit" loading={saving} block>
-              Create Student
+            <Button type="primary" htmlType="submit" loading={saving} disabled={uploading} block>
+              {uploading ? 'Uploading...' : 'Create Student'}
             </Button>
           </Form.Item>
         </Form>
@@ -285,39 +315,92 @@ const StudentProfileDrawer = ({ student, open, onClose }) => {
   const [examData, setExamData] = useState(null);
   const [loading, setLoading] = useState({});
 
-  const load = async (key, fn) => {
+  const load = async (key, fn, setter) => {
     setLoading((p) => ({ ...p, [key]: true }));
-    try { return await fn(); } catch { return null; } finally {
+    try {
+      const res = await fn();
+      setter(res?.data || res);
+    } catch (e) {
+      console.error(key, e);
+      setter(null);
+    } finally {
       setLoading((p) => ({ ...p, [key]: false }));
     }
   };
 
   useEffect(() => {
     if (!open || !student) return;
-    load('fees', () => feesAPI.getStudentFees(student._id)).then(setFeeData);
-    load('attend', () => attendanceAPI.getReport({ studentId: student._id })).then(setAttendData);
-    load('exams', () => examAPI.getStudentResults(student._id)).then(setExamData);
+
+    load('fees', () => feesAPI.getStudentFees(student._id), setFeeData);
+    load('attend', () => attendanceAPI.getReport({
+      classId: student.classId?._id || student.classId,
+      studentId: student._id,
+    }), setAttendData);
+    load('exams', () => examAPI.getStudentResults(student._id), setExamData);
+
   }, [open, student]);
 
   if (!student) return null;
+  // FEES
+  const feeSummary = feeData?.summary || feeData?.data?.summary || {};
+  const feePayments = feeData?.payments || feeData?.data?.payments || [];
+
+  // ATTENDANCE
+  const body = attendData?.data || {};
+
+  const row = Array.isArray(body.report) ? body.report[0] : null;
+
+  const attendStats = row
+    ? {
+      total: row.totalDays ?? 0,
+      present: row.totalPresent ?? 0,
+      absent: row.totalAbsent ?? 0,
+      percentage: row.percentage ?? 0,
+    }
+    : {
+      total: 0,
+      present: 0,
+      absent: 0,
+      percentage: 0,
+    };
+
+  // EXAMS
+  const examList = Array.isArray(examData)
+    ? examData
+    : examData?.results || [];
 
   const tabs = [
     {
       key: 'overview',
       label: <><UserOutlined /> Overview</>,
       children: (
-        <Descriptions column={1} size="small" bordered>
-          <Descriptions.Item label="Roll No">{student.rollNo || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Class">{student.classId?.name || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Section">{student.sectionId?.name || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Gender">{student.gender || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Date of Birth">
-            {student.dateOfBirth ? dayjs(student.dateOfBirth).format('DD MMM YYYY') : '—'}
-          </Descriptions.Item>
-          <Descriptions.Item label="Parent">{student.parentName || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Parent Phone">{student.parentPhone || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Blood Group">{student.bloodGroup || '—'}</Descriptions.Item>
-        </Descriptions>
+        <>
+          {/* Avatar */}
+          <div style={{ textAlign: 'center', marginBottom: 16 }}>
+            {student.avatar ? (
+              <img
+                src={student.avatar}
+                alt={student.name}
+                style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '3px solid #E2E8F0' }}
+              />
+            ) : (
+              <Avatar size={80} icon={<UserOutlined />} style={{ background: '#1B3A5C', fontSize: 32 }} />
+            )}
+            <div style={{ marginTop: 6, fontWeight: 600 }}>{student.name}</div>
+          </div>
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="Roll No">{student.rollNo || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Class">{student.classId?.name || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Section">{student.sectionId?.name || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Gender">{student.gender || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Date of Birth">
+              {student.dateOfBirth ? dayjs(student.dateOfBirth).format('DD MMM YYYY') : '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Parent">{student.parentName || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Parent Phone">{student.parentPhone || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Blood Group">{student.bloodGroup || '—'}</Descriptions.Item>
+          </Descriptions>
+        </>
       ),
     },
     {
@@ -327,9 +410,9 @@ const StudentProfileDrawer = ({ student, open, onClose }) => {
         <>
           <Row gutter={12} style={{ marginBottom: 16 }}>
             {[
-              { label: 'Total Fee', value: `₹${(feeData.summary?.totalFee || 0).toLocaleString('en-IN')}`, color: '#1B3A5C' },
-              { label: 'Paid', value: `₹${(feeData.summary?.totalPaid || 0).toLocaleString('en-IN')}`, color: '#22C55E' },
-              { label: 'Due', value: `₹${(feeData.summary?.totalDue || 0).toLocaleString('en-IN')}`, color: '#EF4444' },
+              { label: 'Total Fee', value: `₹${(feeSummary?.totalFee || 0).toLocaleString('en-IN')}`, color: '#1B3A5C' },
+              { label: 'Paid', value: `₹${(feeSummary?.totalPaid || 0).toLocaleString('en-IN')}`, color: '#22C55E' },
+              { label: 'Due', value: `₹${(feeSummary?.totalDue || 0).toLocaleString('en-IN')}`, color: '#EF4444' },
             ].map((s) => (
               <Col key={s.label} span={8}>
                 <Card size="small" bordered={false} style={{ background: '#F8FAFC', borderRadius: 8 }}>
@@ -341,7 +424,7 @@ const StudentProfileDrawer = ({ student, open, onClose }) => {
           </Row>
           <List
             size="small"
-            dataSource={feeData.payments || []}
+            dataSource={feePayments || []}
             renderItem={(p) => (
               <List.Item>
                 <span style={{ fontWeight: 500 }}>{p.receiptNumber}</span>
@@ -357,42 +440,61 @@ const StudentProfileDrawer = ({ student, open, onClose }) => {
     {
       key: 'attendance',
       label: <><CalendarOutlined /> Attendance</>,
-      children: loading.attend ? <Spin /> : attendData?.stats ? (
+      children: loading.attend ? <Spin /> : Object.keys(attendStats).length ? (
         <Row gutter={12}>
           {[
-            { label: 'Total Days', value: attendData.stats.total || 0, color: '#1B3A5C' },
-            { label: 'Present', value: attendData.stats.present || 0, color: '#22C55E' },
-            { label: 'Absent', value: attendData.stats.absent || 0, color: '#EF4444' },
-            { label: 'Avg %', value: `${attendData.stats.avgPercentage || 0}%`, color: '#3B82F6' },
+            { label: 'Total Days', value: attendStats.total || 0, color: '#1B3A5C' },
+            { label: 'Present', value: attendStats.present || 0, color: '#22C55E' },
+            { label: 'Absent', value: attendStats.absent || 0, color: '#EF4444' },
+            { label: 'Avg %', value: `${attendStats.percentage || 0}%`, color: '#3B82F6' },
           ].map((s) => (
             <Col key={s.label} span={12} style={{ marginBottom: 8 }}>
               <Card size="small" bordered={false} style={{ background: '#F8FAFC', borderRadius: 8 }}>
-                <Statistic title={<span style={{ fontSize: 11 }}>{s.label}</span>} value={s.value}
-                  valueStyle={{ fontSize: 16, fontWeight: 700, color: s.color }} />
+                <Statistic
+                  title={<span style={{ fontSize: 11 }}>{s.label}</span>}
+                  value={s.value}
+                  valueStyle={{ fontSize: 16, fontWeight: 700, color: s.color }}
+                />
               </Card>
             </Col>
           ))}
         </Row>
-      ) : <Empty description="Attendance data unavailable" />,
+      ) : <Empty description="Attendance data unavailable" />
     },
     {
       key: 'exams',
       label: <><BookOutlined /> Exams</>,
-      children: loading.exams ? <Spin /> : examData?.length ? (
+
+      children: loading.exams ? <Spin /> : examList.length ? (
         <List
           size="small"
-          dataSource={examData}
+          dataSource={examList}
           renderItem={(r) => (
             <List.Item>
               <div style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 600 }}>{r.exam?.name || r.examId}</span>
+                  <span style={{ fontWeight: 600 }}>
+                    {r.exam?.examName || r.exam?.name || 'Exam'}
+                  </span>
+
                   <Badge
-                    status={r.result === 'PASS' ? 'success' : 'error'}
-                    text={<span style={{ fontWeight: 600, color: r.result === 'PASS' ? '#22C55E' : '#EF4444' }}>{r.result}</span>}
+                    status={r.result === 'Pass' ? 'success' : 'error'}
+                    text={
+                      <span
+                        style={{
+                          fontWeight: 600,
+                          color: r.result === 'Pass' ? '#22C55E' : '#EF4444'
+                        }}
+                      >
+                        {r.result}
+                      </span>
+                    }
                   />
                 </div>
-                <span style={{ fontSize: 11, color: '#64748B' }}>Total: {r.total} | Grade: {r.grade || '—'}</span>
+
+                <span style={{ fontSize: 11, color: '#64748B' }}>
+                  Total: {r.totalObtained || r.total || 0} | Grade: {r.grade || '—'}
+                </span>
               </div>
             </List.Item>
           )}

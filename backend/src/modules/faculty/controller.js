@@ -46,6 +46,19 @@ class FacultyController {
     }
   }
 
+  /**
+   * PATCH /api/faculty/:id
+   * General partial update (e.g. avatar).
+   */
+  static async update(req, res, next) {
+    try {
+      const faculty = await FacultyService.update(req.params.id, req.body);
+      return ApiResponse.success(res, faculty, 'Faculty updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async assignSubjects(req, res, next) {
     try {
       const { subjectIds } = req.body;

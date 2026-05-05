@@ -55,4 +55,17 @@ const createStudentValidation = [
 ];
 router.post('/', authorize('admin', 'super_admin'), createStudentValidation, StudentController.create);
 
+/**
+ * @route   PATCH /api/students/:id
+ * @desc    Partial update (avatar, address, etc.)
+ * @access  Private (admin, super_admin)
+ */
+router.patch(
+  '/:id',
+  authorize('admin', 'super_admin'),
+  mongoIdParam('id'),
+  validate,
+  StudentController.update
+);
+
 module.exports = router;

@@ -97,6 +97,32 @@ class ParentService {
     await parent.save();
     return parent;
   }
+
+  /**
+   * Partial update of a parent record (e.g. photo).
+   * Never overwrites with null/undefined.
+   * @param {string} parentId
+   * @param {Object} updates
+   */
+  static async update(parentId, updates) {
+    if (!mongoose.isValidObjectId(parentId)) {
+      throw new AppError('Invalid parent ID format', 400);
+    }
+
+    const clean = {};
+    Object.entries(updates).forEach(([k, v]) => {
+      if (v !== null && v !== undefined && v !== '') clean[k] = v;
+    });
+
+    const parent = await Parent.findByIdAndUpdate(
+      parentId,
+      { $set: clean },
+      { new: true, runValidators: true }
+    ).populate('linkedStudents', 'name rollNo');
+
+    if (!parent) throw new AppError('Parent not found', 404);
+    return parent;
+  }
 }
 
 module.exports = ParentService;

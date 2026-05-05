@@ -23,6 +23,18 @@ router.post(
 router.get('/', FacultyController.getAll);
 router.get('/:id', mongoIdParam('id'), validate, FacultyController.getById);
 
+/**
+ * PATCH /api/faculty/:id
+ * Partial update — avatar, designation, etc.
+ */
+router.patch(
+  '/:id',
+  authorize('admin', 'super_admin', 'faculty'),
+  mongoIdParam('id'),
+  validate,
+  FacultyController.update
+);
+
 router.patch(
   '/:id/assign-classes',
   authorize('admin', 'super_admin'),

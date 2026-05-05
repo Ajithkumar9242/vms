@@ -2,11 +2,14 @@ import React, { useState } from 'react';
 import FacultyLayout from '@/components/mobile/FacultyLayout';
 import useAuthStore from '@/store/authStore';
 import ChangePassword from '@/components/mobile/ChangePassword';
+import { facultyAPI } from '@/services/api';
 
 const FacultyProfile = () => {
-  const { user, logout } = useAuthStore();
+  const { user, logout, setUser } = useAuthStore();
   const [showLogout, setShowLogout] = useState(false);
   const [showCp, setShowCp] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatar || user?.metadata?.avatar || null);
 
   const initials = (user?.name || 'F')
     .split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
@@ -20,18 +23,83 @@ const FacultyProfile = () => {
     { label: 'Department',   value: user?.department || user?.metadata?.department || '—', icon: '🏫' },
   ];
 
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const token = localStorage.getItem('vms_token');
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/upload?folder=faculty', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Upload failed');
+      const url = json.data?.url || json.url;
+      setAvatarUrl(url);
+      // Persist to DB if we know the faculty ID
+      const facultyId = user?.facultyId || user?.metadata?.facultyId;
+      if (facultyId) {
+        await facultyAPI.update(facultyId, { avatar: url });
+      }
+    } catch (err) {
+      console.error('Photo upload failed:', err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <FacultyLayout title="My Profile" subtitle="Faculty account">
-      {/* Avatar */}
+      {/* Avatar with upload */}
       <div style={{ textAlign: 'center', padding: '8px 0 20px' }}>
-        <div className="m-avatar" style={{ width: 80, height: 80, fontSize: 28, margin: '0 auto 12px' }}>
-          {initials}
+        <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={user?.name}
+              style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '3px solid #E2E8F0' }}
+            />
+          ) : (
+            <div className="m-avatar" style={{ width: 80, height: 80, fontSize: 28, margin: '0 auto' }}>
+              {initials}
+            </div>
+          )}
+          {/* Upload overlay */}
+          <label
+            htmlFor="faculty-photo-upload"
+            style={{
+              position: 'absolute', bottom: 0, right: 0,
+              background: uploading ? '#94A3B8' : '#2563EB',
+              borderRadius: '50%', width: 24, height: 24,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: uploading ? 'wait' : 'pointer',
+              border: '2px solid #fff', fontSize: 12,
+            }}
+            title="Change photo"
+          >
+            {uploading ? '⏳' : '📷'}
+          </label>
+          <input
+            id="faculty-photo-upload"
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handlePhotoUpload}
+            disabled={uploading}
+          />
         </div>
         <div style={{ fontSize: 18, fontWeight: 700 }}>{user?.name}</div>
         <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>{user?.email}</div>
         <span className="m-badge m-badge-info" style={{ marginTop: 8 }}>
           {user?.role?.replace('_', ' ')?.toUpperCase() || 'FACULTY'}
         </span>
+        {avatarUrl && (
+          <div style={{ fontSize: 11, color: '#22C55E', marginTop: 4 }}>✓ Photo uploaded</div>
+        )}
       </div>
 
       {/* Details */}
@@ -49,7 +117,7 @@ const FacultyProfile = () => {
       </div>
 
       <div className="m-alert m-alert-info" style={{ fontSize: 12 }}>
-        ℹ️ Profile changes must be made by the admin.
+        ℹ️ Profile changes must be made by the admin. You can update your photo above.
       </div>
 
       {/* Change Password */}
@@ -88,3 +156,4 @@ const FacultyProfile = () => {
 };
 
 export default FacultyProfile;
+

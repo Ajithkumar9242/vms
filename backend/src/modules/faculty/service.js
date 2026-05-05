@@ -151,6 +151,34 @@ class FacultyService {
 
     return updated;
   }
+
+  /**
+   * Partial update of a faculty record (e.g. avatar).
+   * Strips null/undefined to avoid overwriting existing values.
+   * @param {string} facultyId
+   * @param {Object} updates
+   */
+  static async update(facultyId, updates) {
+    if (!mongoose.isValidObjectId(facultyId)) {
+      throw new AppError('Invalid faculty ID format', 400);
+    }
+
+    const clean = {};
+    Object.entries(updates).forEach(([k, v]) => {
+      if (v !== null && v !== undefined && v !== '') clean[k] = v;
+    });
+
+    const faculty = await Faculty.findByIdAndUpdate(
+      facultyId,
+      { $set: clean },
+      { new: true, runValidators: true }
+    )
+      .populate('subjects', 'name code')
+      .populate('assignedClasses', 'name code');
+
+    if (!faculty) throw new AppError('Faculty not found', 404);
+    return faculty;
+  }
 }
 
 module.exports = FacultyService;

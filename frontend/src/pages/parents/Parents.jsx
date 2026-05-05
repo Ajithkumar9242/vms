@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Table, Typography, Button, Space, App, Empty, Modal, Form,
-  Input, Select, Row, Col, Tag,
+  Input, Select, Row, Col, Tag, Avatar,
 } from 'antd';
-import { PlusOutlined, LinkOutlined } from '@ant-design/icons';
+import { PlusOutlined, LinkOutlined, UserOutlined } from '@ant-design/icons';
 import { parentAPI, studentAPI } from '@/services/api';
+import FileUpload from '@/components/common/FileUpload';
 
 const { Title, Text } = Typography;
 
@@ -19,6 +20,8 @@ const Parents = () => {
   const [selectedParent, setSelectedParent] = useState(null);
   const [students, setStudents] = useState([]);
   const [linkStudentId, setLinkStudentId] = useState(null);
+  const [photoUrl, setPhotoUrl] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [createForm] = Form.useForm();
 
   const fetchParents = useCallback(async () => {
@@ -46,9 +49,10 @@ const Parents = () => {
 
   const handleCreate = async (values) => {
     try {
-      await parentAPI.create(values);
+      await parentAPI.create({ ...values, ...(photoUrl ? { photo: photoUrl } : {}) });
       message.success('Parent created successfully');
       setCreateOpen(false);
+      setPhotoUrl(null);
       createForm.resetFields();
       fetchParents();
     } catch (err) {
@@ -70,7 +74,16 @@ const Parents = () => {
   };
 
   const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', width: 180 },
+    { title: 'Name', dataIndex: 'name', key: 'name', width: 180,
+      render: (name, record) => (
+        <Space>
+          {record.photo
+            ? <img src={record.photo} alt={name} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+            : <Avatar size={32} icon={<UserOutlined />} style={{ background: '#1B3A5C' }} />}
+          {name}
+        </Space>
+      ),
+    },
     { title: 'Phone', dataIndex: 'phone', key: 'phone', width: 140 },
     { title: 'Email', dataIndex: 'email', key: 'email', width: 200, render: (v) => v || '—' },
     {
@@ -130,12 +143,23 @@ const Parents = () => {
       <Modal
         title="Add New Parent"
         open={createOpen}
-        onCancel={() => { setCreateOpen(false); createForm.resetFields(); }}
+        onCancel={() => { setCreateOpen(false); setPhotoUrl(null); createForm.resetFields(); }}
         onOk={() => createForm.submit()}
         okText="Create"
+        okButtonProps={{ disabled: photoUploading }}
         destroyOnHidden
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate}>
+          <Form.Item label="Profile Photo">
+            <FileUpload
+              folder="parents"
+              accept="image/*"
+              value={photoUrl}
+              onChange={setPhotoUrl}
+              onUploading={setPhotoUploading}
+              label="Upload Photo"
+            />
+          </Form.Item>
           <Form.Item name="name" label="Full Name" rules={[{ required: true, message: 'Name is required' }]}>
             <Input placeholder="Parent name" />
           </Form.Item>

@@ -1,15 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Table, Button, Modal, Form, Input, Select, Tag, Space,
-  App, Upload, Typography, Tooltip, Popconfirm, Segmented,
+  App, Typography, Tooltip, Popconfirm, Segmented,
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, DownloadOutlined,
   FilePdfOutlined, VideoCameraOutlined, AudioOutlined,
   LinkOutlined, FileImageOutlined, FileOutlined,
-  UploadOutlined,
 } from '@ant-design/icons';
 import { materialAPI, subjectAPI } from '@/services/api';
+import FileUpload from '@/components/common/FileUpload';
 import useAuthStore from '@/store/authStore';
 import dayjs from 'dayjs';
 
@@ -49,7 +49,7 @@ const StudyMaterials = () => {
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
   const [uploading, setUploading] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState(null);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
 
   useEffect(() => {
     import('@/services/api').then(({ schoolAPI, facultyDashboardAPI }) => {
@@ -92,19 +92,6 @@ const StudyMaterials = () => {
 
   useEffect(() => { fetchMaterials(); }, [fetchMaterials]);
 
-  const handleUpload = async ({ file }) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      const { uploadAPI } = await import('@/services/api');
-      const res = await uploadAPI.upload(file);
-      const url = res?.data?.url || res?.url;
-      setUploadedFile({ fileUrl: url, fileName: file.name, mimeType: file.type, size: file.size });
-      form.setFieldValue('fileUrl', url);
-      message.success('File uploaded');
-    } catch (e) { message.error('Upload failed: ' + e.message); }
-    finally { setUploading(false); }
-  };
 
   const handleSave = async () => {
     try {
@@ -112,13 +99,20 @@ const StudyMaterials = () => {
       setSaving(true);
       const payload = {
         ...values,
-        ...(uploadedFile || {}),
+        files: uploadedFiles,
+        // Legacy single-file compat: use first file if present
+        ...(uploadedFiles[0] ? {
+          fileUrl:  uploadedFiles[0].url,
+          fileName: uploadedFiles[0].name,
+          mimeType: uploadedFiles[0].type,
+          size:     uploadedFiles[0].size,
+        } : {}),
       };
       await materialAPI.create(payload);
       message.success('Material added');
       setOpen(false);
       form.resetFields();
-      setUploadedFile(null);
+      setUploadedFiles([]);
       fetchMaterials();
     } catch (e) { if (e?.message) message.error(e.message); }
     finally { setSaving(false); }
@@ -147,12 +141,20 @@ const StudyMaterials = () => {
       title: 'Actions', key: 'actions',
       render: (_, r) => (
         <Space>
-          {r.fileUrl && (
+          {/* Files: show download for single fileUrl or list if multiple */}
+          {r.files && r.files.length > 0 ? (
+            r.files.map((f, i) => (
+              <Tooltip key={i} title={f.name || 'File'}>
+                <Button icon={<DownloadOutlined />} size="small"
+                  onClick={() => window.open(f.url, '_blank')} />
+              </Tooltip>
+            ))
+          ) : r.fileUrl ? (
             <Tooltip title="Open/Download">
               <Button icon={<DownloadOutlined />} size="small"
                 onClick={() => window.open(r.fileUrl, '_blank')} />
             </Tooltip>
-          )}
+          ) : null}
           {isFaculty && (
             <Popconfirm title="Delete this material?" onConfirm={() => handleDelete(r._id)} okText="Yes">
               <Button icon={<DeleteOutlined />} size="small" danger />
@@ -172,7 +174,7 @@ const StudyMaterials = () => {
           <FilePdfOutlined style={{ marginRight: 8 }} />Study Materials
         </Title>
         {isFaculty && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setUploadedFile(null); setOpen(true); }} id="add-material-btn">
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setUploadedFiles([]); setOpen(true); }} id="add-material-btn">
             Upload Material
           </Button>
         )}
@@ -243,15 +245,16 @@ const StudyMaterials = () => {
               <Input prefix={<LinkOutlined />} placeholder="https://..." />
             </Form.Item>
           ) : (
-            <Form.Item label="File">
-              <Upload customRequest={handleUpload} showUploadList={false} maxCount={1} disabled={uploading}>
-                <Button icon={<UploadOutlined />} loading={uploading}>
-                  {uploadedFile ? uploadedFile.fileName : 'Choose File'}
-                </Button>
-              </Upload>
-              {uploadedFile && (
-                <Text type="success" style={{ marginLeft: 8, fontSize: 12 }}>✓ {uploadedFile.fileName}</Text>
-              )}
+            <Form.Item label="Files">
+              <FileUpload
+                folder="materials"
+                multiple
+                accept="image/*,.pdf,.doc,.docx"
+                value={uploadedFiles}
+                onChange={setUploadedFiles}
+                onUploading={setUploading}
+                label="Add Files"
+              />
             </Form.Item>
           )}
         </Form>

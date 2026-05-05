@@ -56,6 +56,19 @@ class ParentController {
       next(error);
     }
   }
+
+  /**
+   * PATCH /api/parents/:id
+   * Admin partial update — photo, etc.
+   */
+  static async update(req, res, next) {
+    try {
+      const parent = await ParentService.update(req.params.id, req.body);
+      return ApiResponse.success(res, parent, 'Parent updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = ParentController;
