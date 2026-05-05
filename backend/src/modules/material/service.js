@@ -43,11 +43,16 @@ class MaterialService {
       .lean();
   }
 
-  static async getAll(filters = {}) {
+  static async getAll(filters = {}, user = null) {
     const query = { isActive: true };
     if (filters.classId   && mongoose.isValidObjectId(filters.classId))   query.classId   = filters.classId;
     if (filters.subjectId && mongoose.isValidObjectId(filters.subjectId)) query.subjectId = filters.subjectId;
     if (filters.type)     query.type = filters.type;
+
+    // Faculty isolation: faculty can only see their own uploads
+    if (user && user.role === 'faculty') {
+      query.uploadedBy = user._id;
+    }
 
     const page  = Math.max(1, parseInt(filters.page)  || 1);
     const limit = Math.min(100, parseInt(filters.limit) || 20);
@@ -64,6 +69,20 @@ class MaterialService {
     ]);
 
     return { materials: docs, total, page, limit };
+  }
+
+  /**
+   * Get all active materials for a specific classId.
+   * Used by parent and student roles — no uploadedBy restriction.
+   */
+  static async getByClass(classId) {
+    if (!mongoose.isValidObjectId(classId)) throw new AppError('Invalid classId', 400);
+    const docs = await Material.find({ classId, isActive: true })
+      .populate('subjectId', 'name code')
+      .populate('uploadedBy', 'name')
+      .sort({ createdAt: -1 })
+      .lean();
+    return { materials: docs, total: docs.length };
   }
 
   static async getById(id) {

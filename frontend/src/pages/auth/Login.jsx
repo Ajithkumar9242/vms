@@ -18,7 +18,7 @@ const Login = () => {
   useEffect(() => {
     if (isAuthenticated && user) {
       if (user.role === 'parent') navigate('/parent/dashboard', { replace: true });
-      else if (user.role === 'faculty') navigate('/faculty/attendance', { replace: true });
+      else if (user.role === 'faculty') navigate('/faculty-app/attendance', { replace: true });
       else navigate('/', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
@@ -29,7 +29,7 @@ const Login = () => {
       message.success('Login successful');
       const u = useAuthStore.getState().user;
       if (u?.role === 'parent') navigate('/parent/dashboard', { replace: true });
-      else if (u?.role === 'faculty') navigate('/faculty/attendance', { replace: true });
+      else if (u?.role === 'faculty') navigate('/faculty-app/attendance', { replace: true });
       else navigate('/', { replace: true });
     } else {
       message.error(result.message || 'Login failed');

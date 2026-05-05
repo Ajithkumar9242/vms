@@ -13,6 +13,7 @@ const FeesPage = React.lazy(() => import('@/pages/fees/Fees'));
 const AttendancePage = React.lazy(() => import('@/pages/attendance/Attendance'));
 const ExamsPage = React.lazy(() => import('@/pages/exams/Exams'));
 const FacultyPage = React.lazy(() => import('@/pages/faculty/Faculty'));
+const AdminFaculty = React.lazy(() => import('@/pages/admin/AdminFaculty'));
 const ParentsPage = React.lazy(() => import('@/pages/parents/Parents'));
 const CommunicationPage = React.lazy(() => import('@/pages/communication/Communication'));
 const ActivityLogsPage = React.lazy(() => import('@/pages/activity/ActivityLogs'));
@@ -36,7 +37,7 @@ const GradeSetupPage = React.lazy(() => import('@/pages/setup/GradeSetup'));
 const AttendanceConfigPage = React.lazy(() => import('@/pages/setup/AttendanceConfig'));
 const PaymentSettingsPage = React.lazy(() => import('@/pages/setup/PaymentSettings'));
 const ClassGroupsPage = React.lazy(() => import('@/pages/setup/ClassGroups'));
-const SubjectsPage    = React.lazy(() => import('@/pages/setup/Subjects'));
+const SubjectsPage = React.lazy(() => import('@/pages/setup/Subjects'));
 const ClassConfigPage = React.lazy(() => import('@/pages/setup/ClassConfig'));
 
 // ─── Public Pages ──────────────────────────────────────────
@@ -52,12 +53,12 @@ const ParentNotifications = React.lazy(() => import('@/pages/parent/ParentNotifi
 const ParentProfile = React.lazy(() => import('@/pages/parent/ParentProfile'));
 
 // ─── Faculty Mobile App ────────────────────────────────────
-const FacultyAttendance   = React.lazy(() => import('@/pages/faculty/FacultyAttendance'));
-const FacultyStudents     = React.lazy(() => import('@/pages/faculty/FacultyStudents'));
-const FacultyNotifications= React.lazy(() => import('@/pages/faculty/FacultyNotifications'));
-const FacultyProfile      = React.lazy(() => import('@/pages/faculty/FacultyProfile'));
-const AssignmentManager   = React.lazy(() => import('@/pages/faculty/AssignmentManager'));
-const StudyMaterialsPage  = React.lazy(() => import('@/pages/faculty/StudyMaterials'));
+const FacultyAttendance = React.lazy(() => import('@/pages/faculty/FacultyAttendance'));
+const FacultyStudents = React.lazy(() => import('@/pages/faculty/FacultyStudents'));
+const FacultyNotifications = React.lazy(() => import('@/pages/faculty/FacultyNotifications'));
+const FacultyProfile = React.lazy(() => import('@/pages/faculty/FacultyProfile'));
+const AssignmentManager = React.lazy(() => import('@/pages/faculty/AssignmentManager'));
+const StudyMaterialsPage = React.lazy(() => import('@/pages/faculty/StudyMaterials'));
 
 // ─── Role constants ─────────────────────────────────────────
 const ADMIN_ROLES = ['super_admin', 'admin', 'principal'];
@@ -66,12 +67,12 @@ const PARENT_ROLES = ['parent'];
 const FACULTY_ROLES = ['faculty'];
 
 /**
- * Smart redirect after login: parent → /parent/dashboard, faculty → /faculty/attendance, else → /
+ * Smart redirect after login: parent → /parent/dashboard, faculty → /faculty-app/attendance, else → /
  */
 const RoleRedirect = () => {
   const user = JSON.parse(localStorage.getItem('vms_user') || 'null');
   if (user?.role === 'parent') return <Navigate to="/parent/dashboard" replace />;
-  if (user?.role === 'faculty') return <Navigate to="/faculty/attendance" replace />;
+  if (user?.role === 'faculty') return <Navigate to="/faculty-app/attendance" replace />;
   return <Navigate to="/" replace />;
 };
 
@@ -103,17 +104,17 @@ const AppRouter = () => {
           } />
 
           {/* ─── Faculty Mobile App ────────────────────────── */}
-          <Route path="/faculty/*" element={
+          <Route path="/faculty-app/*" element={
             <ProtectedRoute>
               <RoleRoute roles={FACULTY_ROLES}>
                 <Routes>
                   <Route index element={<Navigate to="attendance" replace />} />
-                  <Route path="attendance"   element={<FacultyAttendance />} />
-                  <Route path="students"     element={<FacultyStudents />} />
+                  <Route path="attendance" element={<FacultyAttendance />} />
+                  <Route path="students" element={<FacultyStudents />} />
                   <Route path="notifications" element={<FacultyNotifications />} />
-                  <Route path="profile"      element={<FacultyProfile />} />
-                  <Route path="assignments"  element={<AssignmentManager />} />
-                  <Route path="materials"    element={<StudyMaterialsPage />} />
+                  <Route path="profile" element={<FacultyProfile />} />
+                  <Route path="assignments" element={<AssignmentManager />} />
+                  <Route path="materials" element={<StudyMaterialsPage />} />
                 </Routes>
               </RoleRoute>
             </ProtectedRoute>
@@ -139,12 +140,12 @@ const AppRouter = () => {
             <Route path="/attendance" element={<RoleRoute roles={STAFF_ROLES}><AttendancePage /></RoleRoute>} />
             <Route path="/communication" element={<RoleRoute roles={STAFF_ROLES}><CommunicationPage /></RoleRoute>} />
 
-            {/* Note: /faculty is admin-managed faculty list */}
-            <Route path="/faculty" element={<RoleRoute roles={ADMIN_ROLES}><FacultyPage /></RoleRoute>} />
+            {/* /admin/faculty → admin-managed faculty list */}
+            <Route path="/admin/faculty" element={<RoleRoute roles={ADMIN_ROLES}><AdminFaculty /></RoleRoute>} />
 
             {/* Assignments + Materials (admin + faculty) */}
             <Route path="/assignments" element={<RoleRoute roles={STAFF_ROLES}><AssignmentManager /></RoleRoute>} />
-            <Route path="/materials"   element={<RoleRoute roles={STAFF_ROLES}><StudyMaterialsPage /></RoleRoute>} />
+            <Route path="/materials" element={<RoleRoute roles={STAFF_ROLES}><StudyMaterialsPage /></RoleRoute>} />
 
             {/* Admin + Parent */}
             <Route path="/fees" element={<RoleRoute roles={[...ADMIN_ROLES, 'parent']}><FeesPage /></RoleRoute>} />
@@ -168,7 +169,7 @@ const AppRouter = () => {
             <Route path="/setup/attendance-config" element={<RoleRoute roles={['super_admin', 'admin']}><AttendanceConfigPage /></RoleRoute>} />
             <Route path="/setup/payment-settings" element={<RoleRoute roles={['super_admin', 'admin']}><PaymentSettingsPage /></RoleRoute>} />
             <Route path="/setup/class-groups" element={<RoleRoute roles={['super_admin', 'admin']}><ClassGroupsPage /></RoleRoute>} />
-            <Route path="/setup/subjects"     element={<RoleRoute roles={['super_admin', 'admin']}><SubjectsPage /></RoleRoute>} />
+            <Route path="/setup/subjects" element={<RoleRoute roles={['super_admin', 'admin']}><SubjectsPage /></RoleRoute>} />
             <Route path="/setup/class-config" element={<RoleRoute roles={['super_admin', 'admin']}><ClassConfigPage /></RoleRoute>} />
           </Route>
 

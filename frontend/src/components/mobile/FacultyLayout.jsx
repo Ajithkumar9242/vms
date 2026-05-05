@@ -3,14 +3,18 @@ import { NavLink } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
 import { notificationAPI } from '@/services/api';
 import useFCM from '@/hooks/useFCM';
+import {
+  CalendarOutlined, TeamOutlined, FileTextOutlined,
+  BookOutlined, BellOutlined, UserOutlined,
+} from '@ant-design/icons';
 
 const FACULTY_NAV = (badge = 0) => [
-  { to: '/faculty/attendance',    label: 'Attendance',  icon: '📋', exact: true },
-  { to: '/faculty/students',      label: 'Students',    icon: '👨‍🎓' },
-  { to: '/faculty/assignments',   label: 'Assignments', icon: '📝' },
-  { to: '/faculty/materials',     label: 'Materials',   icon: '📚' },
-  { to: '/faculty/notifications', label: 'Alerts',      icon: '🔔', badge },
-  { to: '/faculty/profile',       label: 'Profile',     icon: '👤' },
+  { to: '/faculty-app/attendance',    label: 'Attendance',  icon: <CalendarOutlined />,  exact: true },
+  { to: '/faculty-app/students',      label: 'Students',    icon: <TeamOutlined /> },
+  { to: '/faculty-app/assignments',   label: 'Assignments', icon: <FileTextOutlined /> },
+  { to: '/faculty-app/materials',     label: 'Materials',   icon: <BookOutlined /> },
+  { to: '/faculty-app/notifications', label: 'Alerts',      icon: <BellOutlined />,      badge },
+  { to: '/faculty-app/profile',       label: 'Profile',     icon: <UserOutlined /> },
 ];
 
 const FacultyLayout = ({ title, subtitle, children }) => {
@@ -20,7 +24,7 @@ const FacultyLayout = ({ title, subtitle, children }) => {
   const refreshUnread = useCallback(() => {
     notificationAPI.getUnreadCount()
       .then((res) => setUnread(res?.data?.unreadCount ?? res?.data?.count ?? 0))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => { refreshUnread(); }, [refreshUnread]);

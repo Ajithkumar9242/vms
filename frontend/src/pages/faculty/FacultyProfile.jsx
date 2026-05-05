@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FacultyLayout from '@/components/mobile/FacultyLayout';
 import useAuthStore from '@/store/authStore';
 import ChangePassword from '@/components/mobile/ChangePassword';
@@ -9,18 +9,26 @@ const FacultyProfile = () => {
   const [showLogout, setShowLogout] = useState(false);
   const [showCp, setShowCp] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState(user?.avatar || user?.metadata?.avatar || null);
+  // const [avatarUrl, setAvatarUrl] = useState(user?.avatar || user?.metadata?.avatar || null);
+
+  const avatarUrl = user?.avatar || user?.metadata?.avatar;
+
+  // useEffect(() => {
+  //   const url = user?.avatar || user?.metadata?.avatar || null;
+  //   setAvatarUrl(url);
+  // }, [user]);
+
 
   const initials = (user?.name || 'F')
     .split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
   const fields = [
-    { label: 'Full Name',    value: user?.name,   icon: '👤' },
-    { label: 'Email',        value: user?.email,  icon: '✉️' },
-    { label: 'Phone',        value: user?.phone || '—', icon: '📱' },
-    { label: 'Role',         value: user?.role?.replace('_', ' ')?.toUpperCase() || 'FACULTY', icon: '🏷️' },
-    { label: 'Employee ID',  value: user?.employeeId || user?.metadata?.employeeId || '—', icon: '🪪' },
-    { label: 'Department',   value: user?.department || user?.metadata?.department || '—', icon: '🏫' },
+    { label: 'Full Name', value: user?.name, icon: '👤' },
+    { label: 'Email', value: user?.email, icon: '✉️' },
+    { label: 'Phone', value: user?.phone || '—', icon: '📱' },
+    { label: 'Role', value: user?.role?.replace('_', ' ')?.toUpperCase() || 'FACULTY', icon: '🏷️' },
+    { label: 'Employee ID', value: user?.employeeId || user?.metadata?.employeeId || '—', icon: '🪪' },
+    { label: 'Department', value: user?.department || user?.metadata?.department || '—', icon: '🏫' },
   ];
 
   const handlePhotoUpload = async (e) => {
@@ -41,9 +49,22 @@ const FacultyProfile = () => {
       const url = json.data?.url || json.url;
       setAvatarUrl(url);
       // Persist to DB if we know the faculty ID
-      const facultyId = user?.facultyId || user?.metadata?.facultyId;
+      const facultyId = user?._id || user?.metadata?._id;
       if (facultyId) {
         await facultyAPI.update(facultyId, { avatar: url });
+
+        // 🔥 UPDATE LOCAL USER STATE
+        const updatedUser = {
+          ...user,
+          avatar: url,
+          metadata: {
+            ...user?.metadata,
+            avatar: url,
+          },
+        };
+
+        setUser(updatedUser);
+        localStorage.setItem('vms_user', JSON.stringify(updatedUser));
       }
     } catch (err) {
       console.error('Photo upload failed:', err.message);
@@ -59,9 +80,15 @@ const FacultyProfile = () => {
         <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
           {avatarUrl ? (
             <img
-              src={avatarUrl}
+              src={`${avatarUrl}?t=${Date.now()}`}
               alt={user?.name}
-              style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '3px solid #E2E8F0' }}
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '3px solid #E2E8F0'
+              }}
             />
           ) : (
             <div className="m-avatar" style={{ width: 80, height: 80, fontSize: 28, margin: '0 auto' }}>

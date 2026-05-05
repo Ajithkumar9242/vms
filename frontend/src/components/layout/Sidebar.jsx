@@ -82,9 +82,9 @@ const allMenuItems = [
     roles: ['super_admin', 'admin', 'principal', 'faculty'],
   },
   {
-    key: '/faculty',
+    key: '/admin/faculty',
     icon: <UserSwitchOutlined />,
-    label: 'Faculty',
+    label: 'Manage Faculty',
     roles: ['super_admin', 'admin', 'principal'],
   },
   {

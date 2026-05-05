@@ -1,16 +1,20 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
 import { notificationAPI } from '@/services/api';
 import useFCM from '@/hooks/useFCM';
+import {
+  HomeOutlined, DollarOutlined, CalendarOutlined,
+  FileTextOutlined, BellOutlined, UserOutlined,
+} from '@ant-design/icons';
 
 const PARENT_NAV = (badge = 0) => [
-  { to: '/parent/dashboard',      label: 'Home',    icon: '🏠', exact: true },
-  { to: '/parent/fees',           label: 'Fees',    icon: '💰' },
-  { to: '/parent/attendance',     label: 'Attend',  icon: '📋' },
-  { to: '/parent/exams',          label: 'Exams',   icon: '📝' },
-  { to: '/parent/notifications',  label: 'Alerts',  icon: '🔔', badge },
-  { to: '/parent/profile',        label: 'Profile', icon: '👤' },
+  { to: '/parent/dashboard',     label: 'Home',    icon: <HomeOutlined />,     exact: true },
+  { to: '/parent/fees',          label: 'Fees',    icon: <DollarOutlined /> },
+  { to: '/parent/attendance',    label: 'Attend',  icon: <CalendarOutlined /> },
+  { to: '/parent/exams',         label: 'Exams',   icon: <FileTextOutlined /> },
+  { to: '/parent/notifications', label: 'Alerts',  icon: <BellOutlined />,     badge },
+  { to: '/parent/profile',       label: 'Profile', icon: <UserOutlined /> },
 ];
 
 const ParentLayout = ({ title, subtitle, children }) => {

@@ -10,7 +10,7 @@ class AssignmentController {
 
   static async getAll(req, res, next) {
     try {
-      return ApiResponse.success(res, await AssignmentService.getAll(req.query), 'Assignments fetched');
+      return ApiResponse.success(res, await AssignmentService.getAll(req.query, req.user), 'Assignments fetched');
     } catch (e) { next(e); }
   }
 

@@ -21,6 +21,7 @@ router.post(
 );
 
 router.get('/', reader, C.getAll);
+router.get('/class/:classId', reader, mongoIdParam('classId'), validate, C.getByClass);
 router.get('/:id', reader, mongoIdParam('id'), validate, C.getById);
 router.delete('/:id', staff, mongoIdParam('id'), validate, C.remove);
 

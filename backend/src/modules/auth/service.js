@@ -37,6 +37,9 @@ class AuthService {
     // Attach linked entity for role-based context
     userObj.linkedEntity = await AuthService._getLinkedEntity(user);
 
+    // Merge faculty profile fields (avatar, employeeId, etc.) into top-level user object
+    await AuthService._mergeFacultyFields(userObj);
+
     return { user: userObj, token };
   }
 
@@ -52,6 +55,9 @@ class AuthService {
 
     // Attach linked entity
     user.linkedEntity = await AuthService._getLinkedEntity(user);
+
+    // Merge faculty profile fields (avatar, employeeId, etc.) into top-level user object
+    await AuthService._mergeFacultyFields(user);
 
     return user;
   }
@@ -136,6 +142,45 @@ class AuthService {
     }
 
     return null;
+  }
+
+  /**
+   * Merge faculty-specific profile fields (avatar, employeeId, department, facultyId)
+   * into the top-level user object so the frontend can access user.avatar directly.
+   * No-op for non-faculty roles.
+   * @private
+   */
+  static async _mergeFacultyFields(userObj) {
+    if (userObj.role !== 'faculty') return;
+
+    try {
+      // Try referenceId first (set during faculty user creation), fall back to userId lookup
+      let faculty = null;
+
+      if (userObj.referenceId) {
+        faculty = await Faculty.findById(userObj.referenceId).select('avatar employeeId department').lean();
+      }
+
+      if (!faculty) {
+        faculty = await Faculty.findOne({ userId: userObj._id }).select('avatar employeeId department').lean();
+      }
+
+      if (!faculty) {
+        console.warn(`[Auth] No Faculty record found for user ${userObj._id}`);
+        return;
+      }
+
+      // Merge without overwriting existing truthy user fields
+      userObj.avatar      = faculty.avatar      || userObj.avatar      || null;
+      userObj.employeeId  = faculty.employeeId  || userObj.employeeId  || null;
+      userObj.department  = faculty.department  || userObj.department  || null;
+      userObj.facultyId   = faculty._id         || null;
+
+      console.log(`[Auth] Faculty fields merged — avatar: ${userObj.avatar ? 'yes' : 'no'}, facultyId: ${userObj.facultyId}`);
+    } catch (err) {
+      // Non-fatal — log and continue so login still succeeds
+      console.error('[Auth] _mergeFacultyFields error:', err.message);
+    }
   }
 
   /**

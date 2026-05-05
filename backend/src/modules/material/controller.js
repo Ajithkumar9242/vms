@@ -7,7 +7,11 @@ class MaterialController {
     catch (e) { next(e); }
   }
   static async getAll(req, res, next) {
-    try { return ApiResponse.success(res, await MaterialService.getAll(req.query)); }
+    try { return ApiResponse.success(res, await MaterialService.getAll(req.query, req.user)); }
+    catch (e) { next(e); }
+  }
+  static async getByClass(req, res, next) {
+    try { return ApiResponse.success(res, await MaterialService.getByClass(req.params.classId)); }
     catch (e) { next(e); }
   }
   static async getById(req, res, next) {

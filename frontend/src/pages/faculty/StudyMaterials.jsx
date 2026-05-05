@@ -12,6 +12,7 @@ import { materialAPI, subjectAPI } from '@/services/api';
 import FileUpload from '@/components/common/FileUpload';
 import useAuthStore from '@/store/authStore';
 import dayjs from 'dayjs';
+import FacultyLayout from '../../components/mobile/FacultyLayout';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -102,10 +103,10 @@ const StudyMaterials = () => {
         files: uploadedFiles,
         // Legacy single-file compat: use first file if present
         ...(uploadedFiles[0] ? {
-          fileUrl:  uploadedFiles[0].url,
+          fileUrl: uploadedFiles[0].url,
           fileName: uploadedFiles[0].name,
           mimeType: uploadedFiles[0].type,
-          size:     uploadedFiles[0].size,
+          size: uploadedFiles[0].size,
         } : {}),
       };
       await materialAPI.create(payload);
@@ -138,23 +139,50 @@ const StudyMaterials = () => {
     { title: 'By', key: 'by', render: (_, r) => r.uploadedBy?.name || '—' },
     { title: 'Date', key: 'date', render: (_, r) => dayjs(r.createdAt).format('DD MMM YYYY') },
     {
-      title: 'Actions', key: 'actions',
+      title: 'Files',
+      key: 'files',
+      render: (_, r) => {
+        // Collect all files: prefer files[] array, fall back to legacy fileUrl
+        const fileList = (r.files && r.files.length > 0)
+          ? r.files
+          : r.fileUrl
+            ? [{ url: r.fileUrl, name: r.fileName || 'File', type: r.mimeType || '' }]
+            : [];
+
+        if (fileList.length === 0) {
+          return r.type === 'link'
+            ? <a href={r.fileUrl} target="_blank" rel="noreferrer">Open Link</a>
+            : <Text type="secondary" style={{ fontSize: 12 }}>No files attached</Text>;
+        }
+
+        return (
+          <Space direction="vertical" size={4}>
+            {fileList.map((f, i) => {
+              const isImage = f.type?.includes('image') || /\.(jpe?g|png|gif|webp|svg)$/i.test(f.url || '');
+              return isImage ? (
+                <a key={i} href={f.url} target="_blank" rel="noreferrer">
+                  <img
+                    src={f.url}
+                    alt={f.name || 'image'}
+                    style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #E2E8F0' }}
+                  />
+                </a>
+              ) : (
+                <a key={i} href={f.url} target="_blank" rel="noreferrer"
+                  style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <DownloadOutlined />
+                  {f.name || `File ${i + 1}`}
+                </a>
+              );
+            })}
+          </Space>
+        );
+      },
+    },
+    {
+      title: 'Actions', key: 'actions', width: 80,
       render: (_, r) => (
         <Space>
-          {/* Files: show download for single fileUrl or list if multiple */}
-          {r.files && r.files.length > 0 ? (
-            r.files.map((f, i) => (
-              <Tooltip key={i} title={f.name || 'File'}>
-                <Button icon={<DownloadOutlined />} size="small"
-                  onClick={() => window.open(f.url, '_blank')} />
-              </Tooltip>
-            ))
-          ) : r.fileUrl ? (
-            <Tooltip title="Open/Download">
-              <Button icon={<DownloadOutlined />} size="small"
-                onClick={() => window.open(r.fileUrl, '_blank')} />
-            </Tooltip>
-          ) : null}
           {isFaculty && (
             <Popconfirm title="Delete this material?" onConfirm={() => handleDelete(r._id)} okText="Yes">
               <Button icon={<DeleteOutlined />} size="small" danger />
@@ -165,101 +193,142 @@ const StudyMaterials = () => {
     },
   ];
 
+
   const watchType = Form.useWatch('type', form);
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <Title level={4} style={{ margin: 0 }}>
-          <FilePdfOutlined style={{ marginRight: 8 }} />Study Materials
-        </Title>
-        {isFaculty && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setUploadedFiles([]); setOpen(true); }} id="add-material-btn">
-            Upload Material
-          </Button>
-        )}
-      </div>
+    <FacultyLayout title="Study Materials" >
+      <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 12px' }}>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <Select placeholder="Class" allowClear style={{ width: 160 }}
-          options={classes} onChange={(v) => { setFilterClass(v); setPage(1); }} id="material-class-filter" />
-        <Select placeholder="Subject" allowClear style={{ width: 180 }}
-          options={subjects} onChange={(v) => { setFilterSub(v); setPage(1); }} disabled={!filterClass} />
-        <Select placeholder="Type" allowClear style={{ width: 130 }}
-          onChange={(v) => { setFilterType(v); setPage(1); }}
-          options={['pdf', 'video', 'audio', 'image', 'link', 'other'].map((t) => ({ value: t, label: t.toUpperCase() }))}
-          id="material-type-filter"
-        />
-      </div>
+        {/* Header */}
+        <div style={{ marginBottom: 16 }}>
+          <Title level={4} style={{ marginBottom: 10 }}>
+            <FilePdfOutlined /> Study Materials
+          </Title>
 
-      <Table
-        dataSource={materials} columns={columns} rowKey="_id"
-        loading={loading}
-        pagination={{ current: page, pageSize: 15, total, onChange: setPage }}
-        style={{ borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
-      />
-
-      {/* Upload Modal */}
-      <Modal
-        open={open}
-        title="Upload Study Material"
-        onCancel={() => setOpen(false)}
-        onOk={handleSave}
-        confirmLoading={saving}
-        okText="Save"
-        width={520}
-        destroyOnHidden
-      >
-        <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
-          <Form.Item name="title" label="Title" rules={[{ required: true }]}>
-            <Input placeholder="Material title" id="material-title-input" />
-          </Form.Item>
-          <Form.Item name="description" label="Description">
-            <TextArea rows={2} placeholder="Optional description..." />
-          </Form.Item>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <Form.Item name="classId" label="Class" rules={[{ required: true }]} style={{ flex: 1 }}>
-              <Select placeholder="Class" options={classes}
-                onChange={(v) => {
-                  form.setFieldValue('subjectId', undefined);
-                  subjectAPI.getAll({ classId: v }).then((r) => {
-                    setSubjects((r?.data?.subjects || r?.data || []).map((s) => ({ value: s._id, label: s.name })));
-                  }).catch(() => { });
-                }}
-                id="material-class-select"
-              />
-            </Form.Item>
-            <Form.Item name="subjectId" label="Subject" rules={[{ required: true }]} style={{ flex: 1 }}>
-              <Select placeholder="Subject" options={subjects} id="material-subject-select" />
-            </Form.Item>
-          </div>
-          <Form.Item name="type" label="Type" rules={[{ required: true }]}>
-            <Segmented
-              options={['pdf', 'video', 'audio', 'image', 'link', 'other'].map((t) => ({ label: t.toUpperCase(), value: t }))}
-            />
-          </Form.Item>
-
-          {watchType === 'link' ? (
-            <Form.Item name="fileUrl" label="URL" rules={[{ required: true }]}>
-              <Input prefix={<LinkOutlined />} placeholder="https://..." />
-            </Form.Item>
-          ) : (
-            <Form.Item label="Files">
-              <FileUpload
-                folder="materials"
-                multiple
-                accept="image/*,.pdf,.doc,.docx"
-                value={uploadedFiles}
-                onChange={setUploadedFiles}
-                onUploading={setUploading}
-                label="Add Files"
-              />
-            </Form.Item>
+          {isFaculty && (
+            <Button
+              type="primary"
+              block
+              icon={<PlusOutlined />}
+              onClick={() => {
+                form.resetFields();
+                setUploadedFiles([]);
+                setOpen(true);
+              }}
+            >
+              Upload Material
+            </Button>
           )}
-        </Form>
-      </Modal>
-    </div>
+        </div>
+
+        {/* Filters */}
+        <div className="m-card" style={{ marginBottom: 12 }}>
+          <div className="m-form-group">
+            <label className="m-label">Class</label>
+            <Select
+              style={{ width: '100%' }}
+              options={classes}
+              onChange={(v) => { setFilterClass(v); setPage(1); }}
+            />
+          </div>
+
+          <div className="m-form-group">
+            <label className="m-label">Subject</label>
+            <Select
+              style={{ width: '100%' }}
+              options={subjects}
+              disabled={!filterClass}
+              onChange={(v) => { setFilterSub(v); setPage(1); }}
+            />
+          </div>
+
+          <div className="m-form-group">
+            <label className="m-label">Type</label>
+            <Select
+              style={{ width: '100%' }}
+              options={['pdf', 'video', 'audio', 'image', 'link', 'other'].map((t) => ({
+                value: t,
+                label: t.toUpperCase(),
+              }))}
+              onChange={(v) => { setFilterType(v); setPage(1); }}
+            />
+          </div>
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowX: 'auto' }}>
+          <Table
+            dataSource={materials}
+            columns={columns}
+            rowKey="_id"
+            loading={loading}
+            pagination={{ current: page, pageSize: 10, total, onChange: setPage }}
+            size="small"
+          />
+        </div>
+
+        {/* Upload Modal */}
+        <Modal
+          open={open}
+          title="Upload Study Material"
+          onCancel={() => setOpen(false)}
+          onOk={handleSave}
+          confirmLoading={saving}
+          okText="Save"
+          width={520}
+          destroyOnHidden
+        >
+          <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
+            <Form.Item name="title" label="Title" rules={[{ required: true }]}>
+              <Input placeholder="Material title" id="material-title-input" />
+            </Form.Item>
+            <Form.Item name="description" label="Description">
+              <TextArea rows={2} placeholder="Optional description..." />
+            </Form.Item>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <Form.Item name="classId" label="Class" rules={[{ required: true }]} style={{ flex: 1 }}>
+                <Select placeholder="Class" options={classes}
+                  onChange={(v) => {
+                    form.setFieldValue('subjectId', undefined);
+                    subjectAPI.getAll({ classId: v }).then((r) => {
+                      setSubjects((r?.data?.subjects || r?.data || []).map((s) => ({ value: s._id, label: s.name })));
+                    }).catch(() => { });
+                  }}
+                  id="material-class-select"
+                />
+              </Form.Item>
+              <Form.Item name="subjectId" label="Subject" rules={[{ required: true }]} style={{ flex: 1 }}>
+                <Select placeholder="Subject" options={subjects} id="material-subject-select" />
+              </Form.Item>
+            </div>
+            <Form.Item name="type" label="Type" rules={[{ required: true }]}>
+              <Segmented
+                options={['pdf', 'video', 'audio', 'image', 'link', 'other'].map((t) => ({ label: t.toUpperCase(), value: t }))}
+              />
+            </Form.Item>
+
+            {watchType === 'link' ? (
+              <Form.Item name="fileUrl" label="URL" rules={[{ required: true }]}>
+                <Input prefix={<LinkOutlined />} placeholder="https://..." />
+              </Form.Item>
+            ) : (
+              <Form.Item label="Files">
+                <FileUpload
+                  folder="materials"
+                  multiple
+                  accept="image/*,.pdf,.doc,.docx"
+                  value={uploadedFiles}
+                  onChange={setUploadedFiles}
+                  onUploading={setUploading}
+                  label="Add Files"
+                />
+              </Form.Item>
+            )}
+          </Form>
+        </Modal>
+      </div>
+    </FacultyLayout>
   );
 };
 

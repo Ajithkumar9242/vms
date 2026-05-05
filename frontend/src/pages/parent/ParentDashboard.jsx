@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import ParentLayout from '@/components/mobile/ParentLayout';
-import { feesAPI, notificationAPI, studentAPI } from '@/services/api';
+import { feesAPI, notificationAPI, studentAPI, materialAPI } from '@/services/api';
 import useAuthStore from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -10,68 +10,104 @@ dayjs.extend(relativeTime);
 const ParentDashboard = () => {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
-  const [studentId, setStudentId] = useState(null);
-  const [feeData, setFeeData]     = useState(null);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState(null);
+  const [studentId,     setStudentId]     = useState(null);
+  const [classId,       setClassId]       = useState(null);
+  const [feeData,       setFeeData]       = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [materials,     setMaterials]     = useState([]);
+  const [retryCount,    setRetryCount]    = useState(0);
 
   useEffect(() => {
-    resolveStudent();
-  }, [user]);
+    let cancelled = false;
 
-  const resolveStudent = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    // Use linkedEntity populated at login
-    const linkedStudent = user?.linkedEntity?.linkedStudents?.[0];
-    if (linkedStudent?._id) {
-      setStudentId(linkedStudent._id);
-      await loadDashboard(linkedStudent._id);
-      return;
-    }
-    // Fallback: check metadata
-    const sid = user?.studentId || user?.metadata?.studentId;
-    if (sid) { setStudentId(sid); await loadDashboard(sid); return; }
-    // Last resort: API call
-    try {
-      const res = await studentAPI.getAll({ limit: 1 });
-      const s   = res?.data?.students?.[0] || res?.data?.[0];
-      if (s) { setStudentId(s._id); await loadDashboard(s._id); }
-      else { setError(null); setLoading(false); } // no student, show empty gracefully
-    } catch (e) {
-      setError(e.message || 'Failed to load data.');
-      setLoading(false);
-    }
-  }, [user]);
+    const run = async () => {
+      setLoading(true);
+      setError(null);
 
-  const loadDashboard = async (sid) => {
-    setLoading(true);
-    try {
-      const [fees, notifs] = await Promise.allSettled([
-        feesAPI.getStudentFees(sid),
-        notificationAPI.getAll({ limit: 3 }),
-      ]);
-      if (fees.status   === 'fulfilled') setFeeData(fees.value?.data || fees.value);
-      if (notifs.status === 'fulfilled') {
-        const d = notifs.value?.data;
-        setNotifications(Array.isArray(d) ? d.slice(0, 3) : (d?.notifications?.slice(0, 3) || []));
+      try {
+        // ── Step 1: resolve student + classId ──────────────
+        let sid = null;
+        let cid = null;
+
+        const linked = user?.linkedEntity?.linkedStudents?.[0];
+        if (linked?._id) {
+          sid = linked._id;
+          cid = linked.classId?._id || linked.classId || null;
+        } else {
+          // fallback: metadata on user object
+          sid = user?.studentId || user?.metadata?.studentId || null;
+          cid = user?.classId   || user?.metadata?.classId   || null;
+        }
+
+        // Last resort: fetch student from API
+        if (!sid) {
+          const r = await studentAPI.getAll({ limit: 1 });
+          const s = r?.data?.data?.students?.[0]
+                 || r?.data?.students?.[0]
+                 || r?.data?.[0];
+          if (s) {
+            sid = s._id;
+            cid = s.classId?._id || s.classId || null;
+          }
+        }
+
+        if (cancelled) return;
+
+        if (sid) setStudentId(sid);
+        if (cid) setClassId(cid);
+
+        // ── Step 2: parallel fetch ─────────────────────────
+        const [fees, notifs, mats] = await Promise.allSettled([
+          sid ? feesAPI.getStudentFees(sid)          : Promise.resolve(null),
+          notificationAPI.getAll({ limit: 3 }),
+          cid ? materialAPI.getByClass(cid)          : Promise.resolve(null),
+        ]);
+
+        if (cancelled) return;
+
+        if (fees.status === 'fulfilled' && fees.value)
+          setFeeData(fees.value?.data || fees.value);
+
+        if (notifs.status === 'fulfilled' && notifs.value) {
+          const d = notifs.value?.data;
+          setNotifications(
+            Array.isArray(d) ? d.slice(0, 3) : (d?.notifications?.slice(0, 3) || [])
+          );
+        }
+
+        if (mats.status === 'fulfilled' && mats.value) {
+          // Unwrap axios + API envelope:  { data: { success, data: { materials } } }
+          const envelope = mats.value?.data;
+          const payload  = envelope?.data ?? envelope;
+          const list     = payload?.materials ?? (Array.isArray(payload) ? payload : []);
+          setMaterials(list.filter(Boolean).slice(0, 8));
+        }
+      } catch (e) {
+        if (!cancelled) setError(e.message || 'Failed to load dashboard.');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (e) {
-      setError(e.message || 'Failed to load dashboard.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    run();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, retryCount]);
+
+  const handleRetry = () => setRetryCount((c) => c + 1);
+
+
 
   const summary      = feeData?.summary;
   const feeConfigured = summary && summary.totalFee > 0;
 
   const quickLinks = [
-    { label: 'Pay Fees',    icon: '💳', to: '/parent/fees',         color: '#EFF6FF' },
-    { label: 'Attendance',  icon: '📋', to: '/parent/attendance',    color: '#F0FDF4' },
-    { label: 'Exam Results',icon: '📝', to: '/parent/exams',         color: '#FFF7ED' },
-    { label: 'Notifications',icon:'🔔', to: '/parent/notifications',  color: '#FDF4FF' },
+    { label: 'Pay Fees',     icon: '₹',  to: '/parent/fees',         color: '#EFF6FF' },
+    { label: 'Attendance',   icon: '📅', to: '/parent/attendance',    color: '#F0FDF4' },
+    { label: 'Exam Results', icon: '📊', to: '/parent/exams',         color: '#FFF7ED' },
+    { label: 'Notifications',icon: '🔔', to: '/parent/notifications',  color: '#FDF4FF' },
   ];
 
   return (
@@ -81,7 +117,7 @@ const ParentDashboard = () => {
       {!loading && error && (
         <div className="m-card" style={{ borderLeft: '3px solid #EF4444', textAlign: 'center' }}>
           <div style={{ fontSize: 13, color: '#DC2626', marginBottom: 10 }}>{error}</div>
-          <button className="m-btn m-btn-outline" onClick={resolveStudent}>Retry</button>
+          <button className="m-btn m-btn-outline" onClick={handleRetry}>Retry</button>
         </div>
       )}
 
@@ -161,6 +197,80 @@ const ParentDashboard = () => {
               </button>
             ))}
           </div>
+
+          {/* Study Materials — always show section if classId is known */}
+          {classId && (
+            <>
+              <div className="m-section-header">
+                <span className="m-section-title">Study Materials</span>
+              </div>
+
+              {materials.length === 0 ? (
+                <div className="m-card" style={{ textAlign: 'center', color: '#94A3B8', fontSize: 13, padding: '18px 0' }}>
+                  No study materials posted for your class yet.
+                </div>
+              ) : (
+                materials.map((m, i) => {
+                  // Build a unified file list: prefer files[], fall back to legacy fileUrl
+                  const fileList =
+                    Array.isArray(m.files) && m.files.length > 0
+                      ? m.files.filter((f) => f?.url)          // guard against null entries
+                      : m.fileUrl
+                        ? [{ url: m.fileUrl, name: m.fileName || 'File', type: m.mimeType || '' }]
+                        : [];
+
+                  return (
+                    <div key={m._id || i} className="m-card" style={{ marginBottom: 8, padding: '10px 14px' }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{m.title}</div>
+                      {m.description ? (
+                        <div style={{ fontSize: 12, color: '#64748B', marginBottom: 6 }}>{m.description}</div>
+                      ) : null}
+                      {fileList.length === 0 ? (
+                        <div style={{ fontSize: 12, color: '#94A3B8' }}>No files attached</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                          {fileList.map((f, fi) => {
+                            const mime = (f.type || '').toLowerCase();
+                            const ext  = (f.url || '').split('?')[0];   // strip query params
+                            const isImage =
+                              mime.includes('image') ||
+                              /\.(jpe?g|png|gif|webp|svg)$/i.test(ext);
+                            return isImage ? (
+                              <a key={fi} href={f.url} target="_blank" rel="noreferrer">
+                                <img
+                                  src={f.url}
+                                  alt={f.name || 'image'}
+                                  style={{
+                                    width: 60, height: 60, objectFit: 'cover',
+                                    borderRadius: 6, border: '1px solid #E2E8F0', display: 'block',
+                                  }}
+                                />
+                              </a>
+                            ) : (
+                              <a
+                                key={fi}
+                                href={f.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  fontSize: 12, color: '#2563EB',
+                                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                                  background: '#EFF6FF', padding: '5px 10px',
+                                  borderRadius: 4, textDecoration: 'none',
+                                }}
+                              >
+                                &#128196; {f.name || `View File ${fi + 1}`}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </>
+          )}
 
           {/* Recent Notifications */}
           {notifications.length > 0 && (

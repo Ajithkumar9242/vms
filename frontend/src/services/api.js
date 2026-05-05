@@ -433,10 +433,11 @@ export const assignmentAPI = {
 
 // ─── Study Materials ─────────────────────────────────────────
 export const materialAPI = {
-  create:  (data)   => api.post('/materials', data),
-  getAll:  (params) => api.get('/materials', { params }),
-  getById: (id)     => api.get(`/materials/${id}`),
-  remove:  (id)     => api.delete(`/materials/${id}`),
+  create:     (data)     => api.post('/materials', data),
+  getAll:     (params)   => api.get('/materials', { params }),
+  getById:    (id)       => api.get(`/materials/${id}`),
+  remove:     (id)       => api.delete(`/materials/${id}`),
+  getByClass: (classId)  => api.get(`/materials/class/${classId}`),
 };
 
 // ─── Faculty Dashboard ───────────────────────────────────────

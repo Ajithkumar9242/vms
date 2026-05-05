@@ -53,11 +53,19 @@ class AssignmentService {
     return AssignmentService._populateOne(assignment._id);
   }
 
-  static async getAll(filters = {}) {
+  static async getAll(filters = {}, user = null) {
     const query = { isActive: true };
     if (filters.classId   && mongoose.isValidObjectId(filters.classId))   query.classId   = filters.classId;
     if (filters.subjectId && mongoose.isValidObjectId(filters.subjectId)) query.subjectId = filters.subjectId;
     if (filters.facultyId && mongoose.isValidObjectId(filters.facultyId)) query.facultyId = filters.facultyId;
+
+    // Faculty isolation: faculty can only see assignments they created
+    if (user && user.role === 'faculty') {
+      const faculty = await Faculty.findOne({ userId: user._id }).select('_id').lean();
+      if (faculty) {
+        query.facultyId = faculty._id;
+      }
+    }
 
     const page  = Math.max(1, parseInt(filters.page)  || 1);
     const limit = Math.min(100, parseInt(filters.limit) || 20);
