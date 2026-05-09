@@ -16,7 +16,7 @@ const { Step } = Steps;
 
 const ParentLogin = () => {
   const navigate = useNavigate();
-  const setUser = useAuthStore?.((s) => s.setUser) || (() => { });
+  const setAuth = useAuthStore((s) => s.setAuth);
 
   const [step, setStep] = useState(0); // 0=phone, 1=otp
   const [phone, setPhone] = useState('');
@@ -71,13 +71,18 @@ const ParentLogin = () => {
     try {
       const res = await authAPI.verifyOtp(phone.replace(/\D/g, ''), otpValue);
       const data = res.data || res;
+
       const token = data.token || data.accessToken;
-      // Store tokens
-      localStorage.setItem('vms_token', token);
+      if (!token) throw new Error('Token missing from OTP verify response');
+
+      setAuth(data.user, token); // ✅ this sets localStorage + store state correctly
+
       if (data.refreshToken) localStorage.setItem('vms_refresh_token', data.refreshToken);
-      // Update auth store
-      if (data.user) setUser(data.user);
-      navigate('/parent/dashboard');
+
+      navigate('/parent/dashboard', { replace: true });
+      // // Update auth store
+      // if (data.user) setUser(data.user);
+      // navigate('/parent/dashboard');
     } catch (e) {
       setError(e.response?.data?.message || e.message || 'Invalid OTP');
       setOtp(['', '', '', '', '', '']);
