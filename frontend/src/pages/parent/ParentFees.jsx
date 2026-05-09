@@ -102,6 +102,7 @@ const ParentFees = () => {
     }
   }, []);
 
+
   // ─── PDF Receipt Download ────────────────────────────────
   const handleDownloadPDF = () => {
     setPdfLoading(true);
@@ -350,7 +351,65 @@ const ParentFees = () => {
             </div>
           )}
 
+          {/* Fee Component Breakdown (from student-wise profile) */}
+          {feeData?.feeProfile?.selectedComponents?.length > 0 && configured && (
+            <div className="m-card">
+              <div className="m-card-title" style={{ marginBottom: 10 }}>Fee Breakdown</div>
+              {feeData.feeProfile.selectedComponents.map((comp, i) => (
+                <div key={i} className="m-list-item">
+                  <div className="m-list-icon" style={{ background: comp.mandatory ? '#FEF2F2' : '#EFF6FF', fontSize: 16 }}>
+                    {comp.mandatory ? '📌' : '✅'}
+                  </div>
+                  <div className="m-list-body">
+                    <div className="m-list-title">{comp.name}</div>
+                    <div className="m-list-desc">{comp.code} · {comp.recurringType || 'yearly'}</div>
+                  </div>
+                  <div className="m-list-right">
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>₹{(comp.amount || 0).toLocaleString('en-IN')}</div>
+                  </div>
+                </div>
+              ))}
+              {/* Discounts */}
+              {feeData.feeProfile.discounts?.length > 0 && (
+                <>
+                  <div style={{ height: 1, background: '#E2E8F0', margin: '8px 0' }} />
+                  {feeData.feeProfile.discounts.map((d, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
+                      <span style={{ fontSize: 13, color: '#16A34A' }}>🏷 {d.label || d.type} Discount</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#16A34A' }}>
+                        -{d.discountType === 'percent' ? `${d.value}%` : `₹${d.value.toLocaleString('en-IN')}`}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+              {/* Net total */}
+              <div style={{ borderTop: '1px solid #E2E8F0', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#0F172A' }}>Net Total</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#1B3A5C' }}>
+                  ₹{(feeData.feeProfile.totalFee || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Penalty Notice */}
+          {(feeData?.invoice?.penaltyAmount > 0) && (
+            <div className="m-card" style={{ borderLeft: '3px solid #EF4444', background: '#FEF2F2' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#DC2626' }}>⚠️ Late Fee Applied</div>
+                  <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 2 }}>Contact school to enquire about waiver</div>
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#DC2626' }}>
+                  +₹{(feeData.invoice.penaltyAmount || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Installments */}
+
           {invoice?.feeItems?.length > 0 && configured && (
             <div className="m-card">
               <div className="m-card-title" style={{ marginBottom: 10 }}>Installments</div>

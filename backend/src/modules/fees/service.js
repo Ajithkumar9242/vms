@@ -708,6 +708,210 @@ class FeesService {
       .sort({ paidAt: -1 })
       .lean();
   }
+
+  // ═══════════════════════════════════════════════════════════
+  //  PENALTY ENGINE
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Calculate and apply late fee to an invoice.
+   * @param {string} invoiceId
+   * @param {{ type: 'fixed'|'percent', value: number }} overrideConfig - optional override
+   */
+  static async applyPenalty(invoiceId, overrideConfig, userId) {
+    const invoice = await FeeInvoice.findById(invoiceId);
+    if (!invoice) throw new AppError('Invoice not found', 404);
+    if (invoice.locked) throw new AppError('Invoice is locked. Cannot modify.', 403);
+    if (invoice.status === 'paid') throw new AppError('Invoice is fully paid. No penalty applicable.', 400);
+
+    const config = overrideConfig || {};
+    let penaltyAmt = 0;
+
+    if (config.type === 'percent') {
+      penaltyAmt = Math.round((invoice.dueAmount * config.value) / 100);
+    } else {
+      penaltyAmt = config.value || 0;
+    }
+
+    if (penaltyAmt <= 0) throw new AppError('Penalty amount must be greater than 0', 400);
+
+    invoice.penaltyAmount = (invoice.penaltyAmount || 0) + penaltyAmt;
+    await invoice.save();
+
+    ActivityService.log({
+      studentId: invoice.studentId,
+      action: `Penalty of ₹${penaltyAmt} applied to invoice ${invoice.invoiceNumber}`,
+      module: 'fee',
+      metadata: { invoiceId, penaltyAmt, userId },
+    }).catch(() => {});
+
+    return invoice;
+  }
+
+  /**
+   * Waive penalty (partially or fully) on an invoice.
+   */
+  static async waivePenalty(invoiceId, { waiveAmount, reason }, userId) {
+    const invoice = await FeeInvoice.findById(invoiceId);
+    if (!invoice) throw new AppError('Invoice not found', 404);
+    if (!invoice.penaltyAmount || invoice.penaltyAmount <= 0) {
+      throw new AppError('No penalty to waive on this invoice', 400);
+    }
+
+    const toWaive = Math.min(waiveAmount || invoice.penaltyAmount, invoice.penaltyAmount);
+    invoice.penaltyAmount -= toWaive;
+    invoice.waivedAmount  = (invoice.waivedAmount || 0) + toWaive;
+    invoice.waivedBy      = userId;
+    invoice.waivedReason  = reason || '';
+    invoice.waivedAt      = new Date();
+    await invoice.save();
+
+    ActivityService.log({
+      studentId: invoice.studentId,
+      action: `Penalty of ₹${toWaive} waived on invoice ${invoice.invoiceNumber}. Reason: ${reason || 'N/A'}`,
+      module: 'fee',
+      metadata: { invoiceId, toWaive, reason, userId },
+    }).catch(() => {});
+
+    return invoice;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  INVOICE LOCKING
+  // ═══════════════════════════════════════════════════════════
+
+  static async lockInvoice(invoiceId, userId) {
+    const invoice = await FeeInvoice.findById(invoiceId);
+    if (!invoice) throw new AppError('Invoice not found', 404);
+    if (invoice.locked) throw new AppError('Invoice is already locked', 400);
+
+    invoice.locked   = true;
+    invoice.lockedAt = new Date();
+    invoice.lockedBy = userId;
+    await invoice.save();
+    return invoice;
+  }
+
+  static async unlockInvoice(invoiceId, userId) {
+    const invoice = await FeeInvoice.findById(invoiceId);
+    if (!invoice) throw new AppError('Invoice not found', 404);
+    if (!invoice.locked) throw new AppError('Invoice is not locked', 400);
+
+    invoice.locked     = false;
+    invoice.unlockedAt = new Date();
+    invoice.unlockedBy = userId;
+    await invoice.save();
+    return invoice;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  INSTALLMENT PAYMENT (student-wise invoice)
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Record payment against a specific installment in a FeeInvoice.
+   */
+  static async recordInstallmentPayment({ invoiceId, installmentId, amount, paymentMode, transactionId, userId }) {
+    const invoice = await FeeInvoice.findById(invoiceId);
+    if (!invoice) throw new AppError('Invoice not found', 404);
+    if (invoice.locked) throw new AppError('Invoice is locked. Cannot record payment.', 403);
+    if (invoice.status === 'paid') throw new AppError('Invoice is already fully paid', 400);
+
+    let targetInstallment = null;
+    if (installmentId) {
+      targetInstallment = invoice.installments.id(installmentId);
+    }
+    // Fallback to first pending installment
+    if (!targetInstallment) {
+      targetInstallment = invoice.installments.find(i => i.status !== 'paid');
+    }
+
+    if (!targetInstallment) {
+      // No installments — treat as full payment
+      if (amount > invoice.dueAmount) {
+        throw new AppError(`Cannot overpay. Due: ₹${invoice.dueAmount}`, 400);
+      }
+    } else {
+      const remaining = targetInstallment.amount - (targetInstallment.paidAmount || 0);
+      if (amount > remaining) {
+        throw new AppError(`Amount exceeds installment due of ₹${remaining}`, 400);
+      }
+    }
+
+    // Create payment record
+    const student = await Student.findById(invoice.studentId);
+    const payment = await FeePayment.create({
+      studentId:     invoice.studentId,
+      amount,
+      paymentMode,
+      transactionId: transactionId || null,
+      invoiceId:     invoice._id,
+      installmentId: targetInstallment?._id || null,
+      installmentNo: targetInstallment?.installmentNo || null,
+      collectedBy:   userId,
+      status:        'approved',
+      paidAt:        new Date(),
+    });
+
+    // Update installment
+    if (targetInstallment) {
+      targetInstallment.paidAmount  = (targetInstallment.paidAmount || 0) + amount;
+      targetInstallment.paidAt      = new Date();
+      targetInstallment.paymentMode = paymentMode;
+      targetInstallment.receiptNumber = payment.receiptNumber;
+      targetInstallment.collectedBy   = userId;
+      targetInstallment.transactionId = transactionId || null;
+      if (targetInstallment.paidAmount >= targetInstallment.amount) {
+        targetInstallment.status = 'paid';
+      } else {
+        targetInstallment.status = 'partial';
+      }
+    }
+
+    // Update invoice totals
+    invoice.paidAmount = (invoice.paidAmount || 0) + amount;
+    await invoice.save(); // pre-save hook updates dueAmount + status
+
+    // Notify parent
+    if (student?.parentId) {
+      const Parent = require('../../models/Parent');
+      Parent.findById(student.parentId).then((parent) => {
+        if (!parent?.userId) return;
+        NotificationService.create(parent.userId, {
+          title:   'Fee Payment Received',
+          message: `₹${amount} paid for ${student.name}. Receipt: ${payment.receiptNumber}`,
+          type:    'info',
+          metadata: { studentId: student._id, amount, receiptNumber: payment.receiptNumber },
+        });
+      }).catch(() => {});
+    }
+
+    return { payment, invoice };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  ENHANCED STUDENT FEES (includes profile data)
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Enhanced getStudentFees — includes StudentFeeProfile if it exists.
+   * Backward compatible with old class-wise invoice system.
+   */
+  static async getEnhancedStudentFees(studentId) {
+    if (!mongoose.isValidObjectId(studentId)) throw new AppError('Invalid student ID', 400);
+
+    const baseData = await FeesService.getStudentFees(studentId);
+
+    // Also try to load the StudentFeeProfile
+    const StudentFeeProfile = require('../../models/StudentFeeProfile');
+    const profile = await StudentFeeProfile.findOne({ studentId })
+      .populate('selectedComponents.componentId', 'name code amount mandatory recurringType lateFeeConfig')
+      .populate('discounts.approvedBy', 'name')
+      .populate('lockedBy', 'name')
+      .lean();
+
+    return { ...baseData, feeProfile: profile || null };
+  }
 }
 
 module.exports = FeesService;

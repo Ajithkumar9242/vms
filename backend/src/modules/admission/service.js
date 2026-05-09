@@ -421,6 +421,136 @@ class AdmissionService {
       .populate('sectionId', 'name')
       .populate('approvedBy', 'name email');
   }
+  /**
+   * Put an admission on hold.
+   * @param {string} admissionId
+   * @param {string} userId
+   * @param {string} remarks
+   */
+  static async holdAdmission(admissionId, userId, remarks) {
+    const admission = await Admission.findById(admissionId);
+    if (!admission) throw new AppError('Admission not found', 404);
+    if (admission.status === 'approved') throw new AppError('Cannot hold an approved admission', 400);
+
+    admission.status     = 'hold';
+    admission.approvedBy = userId;
+    admission.holdRemarks = remarks || '';
+    admission.remarks    = remarks || '';
+    await admission.save();
+
+    // Notification (non-blocking)
+    const parentUser = admission.parentPhone
+      ? await require('../../models/Parent').findOne({ phone: admission.parentPhone }).select('userId').lean()
+      : null;
+    const notifyId = parentUser?.userId || userId;
+    NotificationService.create(notifyId, {
+      title:   'Application On Hold',
+      message: `${admission.studentName} (${admission.applicationNo}) has been placed on hold.${remarks ? ' Reason: ' + remarks : ''}`,
+      type:    'warning',
+      metadata: { admissionId: admission._id },
+    }).catch(() => {});
+
+    ActivityService.log({
+      action: `Admission placed on hold — ${admission.applicationNo}`,
+      module: 'admission',
+      performedBy: userId,
+      metadata: { admissionId: admission._id, remarks },
+    }).catch(() => {});
+
+    return Admission.findById(admissionId)
+      .populate('classId', 'name code')
+      .populate('sectionId', 'name')
+      .populate('approvedBy', 'name email');
+  }
+
+  /**
+   * Update an admission application (editable before approval).
+   * @param {string} admissionId
+   * @param {Object} data - fields to update
+   * @param {string} userId - who is editing
+   */
+  static async updateAdmission(admissionId, data, userId) {
+    const admission = await Admission.findById(admissionId);
+    if (!admission) throw new AppError('Admission not found', 404);
+    if (admission.status === 'approved') throw new AppError('Approved admissions cannot be edited directly', 400);
+
+    // Capture a lightweight change summary for audit
+    const changedFields = Object.keys(data).filter(k => String(data[k]) !== String(admission[k]));
+
+    // Merge and save — pre-save hook will CAPS names automatically
+    Object.assign(admission, data);
+    admission.editHistory.push({ editedBy: userId, editedAt: new Date(), changes: { fields: changedFields } });
+    await admission.save();
+
+    ActivityService.log({
+      action: `Admission updated — ${admission.applicationNo}`,
+      module: 'admission',
+      performedBy: userId,
+      metadata: { admissionId: admission._id, changedFields },
+    }).catch(() => {});
+
+    return Admission.findById(admissionId)
+      .populate('classId', 'name code')
+      .populate('sectionId', 'name');
+  }
+
+  /**
+   * Get admission open/close settings from SchoolSetting singleton.
+   */
+  static async getAdmissionSettings() {
+    const SchoolSetting = require('../../models/SchoolSetting');
+    const setting = await SchoolSetting.findOne()
+      .populate('activeAdmissionAcademicYearId', 'name startDate endDate')
+      .lean();
+    return {
+      admissionsOpen:                   setting?.admissionsOpen ?? false,
+      activeAdmissionAcademicYearId:    setting?.activeAdmissionAcademicYearId ?? null,
+    };
+  }
+
+  /**
+   * Update admission open/close settings.
+   * @param {{ admissionsOpen, activeAdmissionAcademicYearId }} data
+   */
+  static async updateAdmissionSettings(data) {
+    const SchoolSetting = require('../../models/SchoolSetting');
+    const setting = await SchoolSetting.findOne();
+    if (!setting) throw new AppError('School settings not configured', 404);
+
+    if (typeof data.admissionsOpen === 'boolean') setting.admissionsOpen = data.admissionsOpen;
+    if (data.activeAdmissionAcademicYearId !== undefined) {
+      setting.activeAdmissionAcademicYearId = data.activeAdmissionAcademicYearId || null;
+    }
+    await setting.save();
+
+    return {
+      admissionsOpen:                setting.admissionsOpen,
+      activeAdmissionAcademicYearId: setting.activeAdmissionAcademicYearId,
+    };
+  }
+
+  /**
+   * Submit a public admission application (online form).
+   * Validates admissions are open before accepting.
+   */
+  static async submitPublicAdmission(data) {
+    // Check if admissions are open
+    const settings = await AdmissionService.getAdmissionSettings();
+    if (!settings.admissionsOpen) {
+      throw new AppError('Admissions are currently closed. Please check back later.', 403);
+    }
+
+    // Force mode to online
+    data.mode = 'online';
+
+    // Use the active admission academic year
+    if (settings.activeAdmissionAcademicYearId) {
+      data.academicYearId = settings.activeAdmissionAcademicYearId._id
+        || settings.activeAdmissionAcademicYearId;
+    }
+
+    return AdmissionService.createAdmission(data);
+  }
 }
 
 module.exports = AdmissionService;

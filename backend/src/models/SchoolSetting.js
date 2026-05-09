@@ -30,6 +30,14 @@ const schoolSettingSchema = new mongoose.Schema(
     address: { type: String, trim: true },
     logoUrl: { type: String, trim: true },
     socialLinks: [{ platform: String, url: String }],
+
+    // ─── Admission Control ────────────────────────────────────
+    admissionsOpen: { type: Boolean, default: false },
+    activeAdmissionAcademicYearId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AcademicYear',
+      default: null,
+    },
   },
   { timestamps: true }
 );

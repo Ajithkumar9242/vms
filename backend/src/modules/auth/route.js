@@ -56,4 +56,45 @@ router.patch(
   AuthController.changePassword
 );
 
+const rateLimiter = require('../../middlewares/rateLimiter');
+
+// ─── Separate OTP Rate Limiters ────────────────────────────
+
+// Send OTP → strict
+const otpSendRateLimit = rateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 3,
+  message: 'Too many OTP requests. Wait 1 minute.',
+});
+
+// Verify OTP → more relaxed
+const otpVerifyRateLimit = rateLimiter({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 10,
+  message: 'Too many verification attempts. Please wait a few minutes.',
+});
+// ─── OTP / Phone Login ─────────────────────────────────────
+
+/** POST /api/auth/otp/send */
+router.post('/otp/send', otpSendRateLimit, [
+  body('phone').trim().notEmpty().withMessage('Phone number is required'),
+  validate,
+], AuthController.sendOtp);
+
+/** POST /api/auth/otp/verify */
+router.post('/otp/verify', otpVerifyRateLimit, [
+  body('phone').trim().notEmpty().withMessage('Phone is required'),
+  body('otp').trim().notEmpty().withMessage('OTP is required').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
+  validate,
+], AuthController.verifyOtp);
+
+/** POST /api/auth/refresh — get new access token from refresh token */
+router.post('/refresh', [
+  body('refreshToken').notEmpty().withMessage('Refresh token is required'),
+  validate,
+], AuthController.refreshToken);
+
+/** POST /api/auth/logout — optional auth, clears refresh token */
+router.post('/logout', protect, AuthController.logout);
+
 module.exports = router;

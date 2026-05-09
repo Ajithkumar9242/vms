@@ -15,8 +15,8 @@ const feePaymentSchema = new mongoose.Schema(
     paymentMode: {
       type: String,
       enum: {
-        values: ['cash', 'upi', 'online', 'razorpay'],
-        message: 'Payment mode must be cash, upi, online, or razorpay',
+        values: ['cash', 'upi', 'online', 'razorpay', 'cheque', 'bank_transfer'],
+        message: 'Invalid payment mode',
       },
       required: [true, 'Payment mode is required'],
     },
@@ -31,18 +31,37 @@ const feePaymentSchema = new mongoose.Schema(
       ref: 'FeeInvoice',
       default: null,
     },
+    // NEW: Which installment this payment covers (optional)
+    installmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    installmentNo: {
+      type: Number,
+      default: null,
+    },
     // Manual payment proof (screenshot / receipt image)
     proofUrl: {
       type: String,
       trim: true,
       default: null,
     },
-    // approval status — 'approved' by default for admin-recorded payments
-    // manual payments start as 'pending' and require admin approval
+    // NEW: Who collected this payment (admin/accountant user)
+    collectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    // approval status
     status: {
       type: String,
       enum: ['pending', 'approved', 'rejected'],
       default: 'approved',
+    },
+    remarks: {
+      type: String,
+      trim: true,
+      default: null,
     },
     paidAt: {
       type: Date,
@@ -59,6 +78,7 @@ const feePaymentSchema = new mongoose.Schema(
 
 // Index for fast look-ups by student
 feePaymentSchema.index({ studentId: 1, paidAt: -1 });
+feePaymentSchema.index({ invoiceId: 1 });
 
 // Auto-generate receiptNumber before save
 feePaymentSchema.pre('save', async function () {

@@ -41,8 +41,9 @@ const SubjectsPage = React.lazy(() => import('@/pages/setup/Subjects'));
 const ClassConfigPage = React.lazy(() => import('@/pages/setup/ClassConfig'));
 
 // ─── Public Pages ──────────────────────────────────────────
-const OnlineAdmissionPage = React.lazy(() => import('@/pages/admissions/OnlineAdmission'));
+const OnlineAdmissionPage  = React.lazy(() => import('@/pages/admissions/OnlineAdmission'));
 const ApplicationStatusPage = React.lazy(() => import('@/pages/admissions/ApplicationStatus'));
+const ParentLoginPage       = React.lazy(() => import('@/pages/auth/ParentLogin'));
 
 // ─── Parent Mobile App ─────────────────────────────────────
 const ParentDashboard = React.lazy(() => import('@/pages/parent/ParentDashboard'));
@@ -83,8 +84,10 @@ const AppRouter = () => {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/parent-login" element={<ParentLoginPage />} />
           <Route path="/online-admission" element={<OnlineAdmissionPage />} />
           <Route path="/admission-status" element={<ApplicationStatusPage />} />
+
 
           {/* ─── Parent Mobile App ─────────────────────────── */}
           <Route path="/parent/*" element={

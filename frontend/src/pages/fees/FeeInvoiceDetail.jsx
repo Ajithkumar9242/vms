@@ -1,0 +1,372 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Descriptions, Tag, Button, Space, App, Divider, Table, Modal,
+  Form, InputNumber, Input, Select, Typography, Row, Col, Card,
+  Alert, Statistic, Tooltip, Spin, Badge,
+} from 'antd';
+import {
+  LockOutlined, UnlockOutlined, DollarOutlined, WarningOutlined,
+  DownloadOutlined, CheckCircleOutlined, ExclamationCircleOutlined,
+  FileTextOutlined,
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { feesAPI } from '@/services/api';
+import useAuthStore from '@/store/authStore';
+
+const { Title, Text } = Typography;
+
+const PAY_MODES = [
+  { label: 'Cash',          value: 'cash' },
+  { label: 'UPI',           value: 'upi' },
+  { label: 'Cheque',        value: 'cheque' },
+  { label: 'Online',        value: 'online' },
+  { label: 'Bank Transfer', value: 'bank_transfer' },
+  { label: 'Razorpay',      value: 'razorpay' },
+];
+
+const statusColor = { paid: 'green', partial: 'orange', unpaid: 'red', overdue: 'red' };
+
+const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
+  const { message, modal } = App.useApp();
+  const user   = useAuthStore(s => s.user);
+  const isAdmin= ['admin', 'super_admin', 'principal'].includes(user?.role);
+
+  const [invoice, setInvoice]         = useState(null);
+  const [loading, setLoading]         = useState(false);
+  const [payModal, setPayModal]       = useState({ open: false, installmentId: null });
+  const [penaltyModal, setPenaltyModal] = useState(false);
+  const [waiveModal, setWaiveModal]   = useState(false);
+  const [payForm] = Form.useForm();
+  const [penaltyForm] = Form.useForm();
+  const [waiveForm] = Form.useForm();
+
+  const load = useCallback(async () => {
+    if (!invoiceId) return;
+    setLoading(true);
+    try {
+      const res = await feesAPI.getInvoiceById(invoiceId);
+      setInvoice(res.data);
+    } catch (e) {
+      message.error(e.message || 'Failed to load invoice');
+    } finally {
+      setLoading(false);
+    }
+  }, [invoiceId, message]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (!invoiceId) return null;
+
+  const handlePayInstallment = async () => {
+    try {
+      const values = await payForm.validateFields();
+      await feesAPI.payInstallment(invoiceId, { ...values, installmentId: payModal.installmentId });
+      message.success('Payment recorded successfully');
+      setPayModal({ open: false, installmentId: null });
+      payForm.resetFields();
+      load();
+      onPaymentRecorded?.();
+    } catch (e) {
+      if (e.errorFields) return;
+      message.error(e.message || 'Payment failed');
+    }
+  };
+
+  const handleApplyPenalty = async () => {
+    try {
+      const values = await penaltyForm.validateFields();
+      await feesAPI.applyPenalty(invoiceId, values);
+      message.success('Penalty applied');
+      setPenaltyModal(false);
+      penaltyForm.resetFields();
+      load();
+    } catch (e) {
+      if (e.errorFields) return;
+      message.error(e.message);
+    }
+  };
+
+  const handleWaivePenalty = async () => {
+    try {
+      const values = await waiveForm.validateFields();
+      await feesAPI.waivePenalty(invoiceId, values);
+      message.success('Penalty waived');
+      setWaiveModal(false);
+      waiveForm.resetFields();
+      load();
+    } catch (e) {
+      if (e.errorFields) return;
+      message.error(e.message);
+    }
+  };
+
+  const handleLock = () => {
+    modal.confirm({
+      title: 'Lock this invoice?',
+      content: 'Once locked, no payments or modifications can be made without admin unlock.',
+      icon: <LockOutlined />,
+      okText: 'Lock',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        await feesAPI.lockInvoice(invoiceId);
+        message.success('Invoice locked');
+        load();
+      },
+    });
+  };
+
+  const handleUnlock = async () => {
+    await feesAPI.unlockInvoice(invoiceId);
+    message.success('Invoice unlocked');
+    load();
+  };
+
+  const handleDownloadPDF = () => {
+    const url = feesAPI.getInvoicePdfUrl(invoiceId);
+    const token = localStorage.getItem('vms_token');
+    // Create a temporary anchor with auth header isn't possible — open in new tab
+    // For authenticated PDF downloads, we use fetch + blob
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.blob())
+      .then(blob => {
+        const a = document.createElement('a');
+        a.href  = URL.createObjectURL(blob);
+        a.download = `Invoice_${invoice?.invoiceNumber || invoiceId}.pdf`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      })
+      .catch(() => message.error('PDF download failed'));
+  };
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 40 }}><Spin size="large" /></div>;
+  if (!invoice) return null;
+
+  const student     = invoice.studentId || {};
+  const cls         = invoice.classId   || {};
+  const ay          = invoice.academicYearId || {};
+  const status      = invoice.status || 'unpaid';
+  const netTotal    = invoice.totalAmount + (invoice.penaltyAmount || 0) - (invoice.discountAmount || 0);
+  const balanceDue  = invoice.dueAmount || 0;
+  const installments = invoice.installments || [];
+
+  return (
+    <div style={{ padding: '0 4px' }}>
+      {/* Lock Warning */}
+      {invoice.locked && (
+        <Alert type="warning" icon={<LockOutlined />}
+          message="This invoice is locked. No payments or edits allowed."
+          style={{ marginBottom: 16 }} showIcon />
+      )}
+
+      {/* Header Card */}
+      <Card size="small" style={{ marginBottom: 16, background: 'linear-gradient(135deg, #F8FAFC, #EFF6FF)', borderRadius: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#1B3A5C' }}>
+              <FileTextOutlined style={{ marginRight: 8 }} />
+              {invoice.invoiceNumber}
+            </div>
+            <div style={{ fontSize: 13, color: '#64748B' }}>{student.name} · {cls.name} · {ay.name}</div>
+          </div>
+          <Space>
+            <Tag color={statusColor[status] || 'default'} style={{ fontSize: 13, padding: '4px 12px' }}>
+              {status.toUpperCase()}
+            </Tag>
+            {invoice.locked && <Tag color="red" icon={<LockOutlined />}>LOCKED</Tag>}
+          </Space>
+        </div>
+      </Card>
+
+      {/* Amount Summary */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        {[
+          { label: 'Total Fee',    value: invoice.totalAmount || 0,      color: '#1B3A5C' },
+          { label: 'Penalty',      value: invoice.penaltyAmount || 0,    color: '#EF4444' },
+          { label: 'Discount',     value: -(invoice.discountAmount || 0), color: '#16A34A' },
+          { label: 'Amount Paid',  value: invoice.paidAmount || 0,       color: '#2563EB' },
+          { label: 'Balance Due',  value: balanceDue,                    color: balanceDue > 0 ? '#EF4444' : '#16A34A' },
+        ].map(item => (
+          <Col xs={12} sm={8} md={4} key={item.label} style={{ flex: 1 }}>
+            <Card size="small" style={{ borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: item.color }}>
+                {item.value < 0 ? `-₹${Math.abs(item.value).toLocaleString('en-IN')}` : `₹${item.value.toLocaleString('en-IN')}`}
+              </div>
+              <div style={{ fontSize: 11, color: '#64748B' }}>{item.label}</div>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+
+      {/* Actions */}
+      {isAdmin && (
+        <Space wrap style={{ marginBottom: 16 }}>
+          {!invoice.locked && status !== 'paid' && (
+            <Button type="primary" icon={<DollarOutlined />}
+              onClick={() => setPayModal({ open: true, installmentId: null })}>
+              Record Payment
+            </Button>
+          )}
+          {!invoice.locked && status !== 'paid' && (
+            <Button icon={<WarningOutlined />} onClick={() => setPenaltyModal(true)}>
+              Apply Penalty
+            </Button>
+          )}
+          {!invoice.locked && (invoice.penaltyAmount || 0) > 0 && (
+            <Button icon={<CheckCircleOutlined />} onClick={() => setWaiveModal(true)}>
+              Waive Penalty
+            </Button>
+          )}
+          {invoice.locked
+            ? <Button icon={<UnlockOutlined />} type="primary" onClick={handleUnlock}>Unlock</Button>
+            : <Button icon={<LockOutlined />} danger onClick={handleLock}>Lock Invoice</Button>
+          }
+          <Button icon={<DownloadOutlined />} onClick={handleDownloadPDF}>Download PDF</Button>
+        </Space>
+      )}
+
+      <Divider orientation="left" style={{ fontSize: 13 }}>Installment Breakdown</Divider>
+
+      {/* Installments Table */}
+      {installments.length > 0 ? (
+        <Table
+          dataSource={installments}
+          rowKey="_id"
+          size="small"
+          pagination={false}
+          style={{ marginBottom: 16 }}
+          columns={[
+            { title: '#', dataIndex: 'installmentNo', width: 40 },
+            {
+              title: 'Component', dataIndex: 'label', key: 'label',
+              render: v => <Text strong>{v}</Text>,
+            },
+            { title: 'Amount', dataIndex: 'amount', align: 'right', render: v => `₹${(v||0).toLocaleString('en-IN')}` },
+            { title: 'Paid', dataIndex: 'paidAmount', align: 'right', render: v => <Text style={{ color: '#16A34A' }}>₹{(v||0).toLocaleString('en-IN')}</Text> },
+            {
+              title: 'Due', align: 'right',
+              render: (_, r) => {
+                const due = (r.amount || 0) - (r.paidAmount || 0);
+                return <Text style={{ color: due > 0 ? '#EF4444' : '#16A34A' }}>₹{due.toLocaleString('en-IN')}</Text>;
+              },
+            },
+            {
+              title: 'Status', dataIndex: 'status',
+              render: s => <Tag color={statusColor[s] || 'default'}>{(s||'pending').toUpperCase()}</Tag>,
+            },
+            {
+              title: 'Receipt', dataIndex: 'receiptNumber',
+              render: v => v ? <Tag color="blue">{v}</Tag> : '—',
+            },
+            isAdmin && !invoice.locked && status !== 'paid' ? {
+              title: 'Pay',
+              render: (_, r) => r.status !== 'paid' && (
+                <Button size="small" type="primary"
+                  onClick={() => setPayModal({ open: true, installmentId: r._id })}>
+                  Pay
+                </Button>
+              ),
+            } : {},
+          ].filter(c => Object.keys(c).length > 0)}
+        />
+      ) : (
+        <Alert type="info" message="No installment breakdown. Full invoice payment." style={{ marginBottom: 16 }} />
+      )}
+
+      {/* Waiver / Penalty History */}
+      {(invoice.waivedAmount > 0 || invoice.penaltyAmount > 0) && (
+        <>
+          <Divider orientation="left" style={{ fontSize: 13 }}>Penalty & Waiver</Divider>
+          <Descriptions size="small" column={2} bordered>
+            <Descriptions.Item label="Current Penalty">
+              <Text style={{ color: '#EF4444' }}>₹{(invoice.penaltyAmount || 0).toLocaleString('en-IN')}</Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="Total Waived">
+              <Text style={{ color: '#16A34A' }}>₹{(invoice.waivedAmount || 0).toLocaleString('en-IN')}</Text>
+            </Descriptions.Item>
+            {invoice.waivedBy?.name && (
+              <Descriptions.Item label="Waived By">{invoice.waivedBy.name}</Descriptions.Item>
+            )}
+            {invoice.waivedReason && (
+              <Descriptions.Item label="Waiver Reason">{invoice.waivedReason}</Descriptions.Item>
+            )}
+          </Descriptions>
+        </>
+      )}
+
+      {/* Student Info */}
+      <Divider orientation="left" style={{ fontSize: 13 }}>Student Information</Divider>
+      <Descriptions size="small" column={2} bordered>
+        <Descriptions.Item label="Name">{student.name || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Roll No">{student.rollNo || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Parent">{student.parentName || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Phone">{student.parentPhone || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Due Date">
+          {invoice.dueDate ? dayjs(invoice.dueDate).format('DD MMM YYYY') : '—'}
+        </Descriptions.Item>
+        <Descriptions.Item label="Created">
+          {dayjs(invoice.createdAt).format('DD MMM YYYY')}
+        </Descriptions.Item>
+        {invoice.locked && (
+          <Descriptions.Item label="Locked By">
+            {invoice.lockedBy?.name || '—'} · {invoice.lockedAt ? dayjs(invoice.lockedAt).format('DD MMM YYYY') : ''}
+          </Descriptions.Item>
+        )}
+      </Descriptions>
+
+      {/* Payment Modal */}
+      <Modal title="Record Payment" open={payModal.open}
+        onOk={handlePayInstallment}
+        onCancel={() => { setPayModal({ open: false, installmentId: null }); payForm.resetFields(); }}
+        okText="Record" destroyOnClose>
+        <Form form={payForm} layout="vertical">
+          <Form.Item name="amount" label="Amount (₹)" rules={[{ required: true }]}>
+            <InputNumber min={1} max={balanceDue || undefined} style={{ width: '100%' }} prefix="₹" />
+          </Form.Item>
+          <Form.Item name="paymentMode" label="Payment Mode" rules={[{ required: true }]}>
+            <Select options={PAY_MODES} />
+          </Form.Item>
+          <Form.Item name="transactionId" label="Transaction / Reference ID">
+            <Input placeholder="Optional" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Penalty Modal */}
+      <Modal title="Apply Late Fee / Penalty" open={penaltyModal}
+        onOk={handleApplyPenalty}
+        onCancel={() => { setPenaltyModal(false); penaltyForm.resetFields(); }}
+        okText="Apply" destroyOnClose>
+        <Form form={penaltyForm} layout="vertical">
+          <Form.Item name="type" label="Penalty Type" rules={[{ required: true }]}
+            initialValue="fixed">
+            <Select options={[
+              { label: 'Fixed Amount (₹)', value: 'fixed' },
+              { label: 'Percentage of Due (%)', value: 'percent' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="value" label="Value" rules={[{ required: true }]}>
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Waive Penalty Modal */}
+      <Modal title="Waive Penalty" open={waiveModal}
+        onOk={handleWaivePenalty}
+        onCancel={() => { setWaiveModal(false); waiveForm.resetFields(); }}
+        okText="Waive" destroyOnClose>
+        <Form form={waiveForm} layout="vertical">
+          <Form.Item name="waiveAmount" label={`Waive Amount (max ₹${(invoice?.penaltyAmount||0).toLocaleString('en-IN')})`}>
+            <InputNumber min={0} max={invoice?.penaltyAmount} style={{ width: '100%' }} prefix="₹"
+              placeholder="Leave blank to waive all" />
+          </Form.Item>
+          <Form.Item name="reason" label="Reason for Waiver" rules={[{ required: true }]}>
+            <Input.TextArea rows={2} placeholder="e.g. Medical emergency, already paid on time" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+};
+
+export default FeeInvoiceDetail;

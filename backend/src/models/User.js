@@ -11,17 +11,16 @@ const userSchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      required: [true, 'Email is required'],
       unique: true,
+      sparse: true,         // allows multiple docs with null email (parent OTP accounts)
       lowercase: true,
       trim: true,
       match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email'],
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
       minlength: 6,
-      select: false,
+      select: false,        // optional — parent accounts use OTP, not password
     },
     role: {
       type: String,
@@ -44,16 +43,17 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       default: null,
     },
+    // Refresh token hash for OTP-based parent sessions
+    refreshTokenHash: { type: String, select: false, default: null },
   },
   {
     timestamps: true,
   }
 );
 
-// Hash password before saving
-// NOTE: Mongoose 9.x async hooks do NOT receive `next`. Use return/throw.
+// Hash password before saving (skip if no password set — OTP-only accounts)
 userSchema.pre('save', async function () {
-  if (!this.isModified('password')) return;
+  if (!this.isModified('password') || !this.password) return;
   this.password = await bcrypt.hash(this.password, 12);
 });
 

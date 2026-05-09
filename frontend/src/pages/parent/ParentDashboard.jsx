@@ -18,6 +18,9 @@ const ParentDashboard = () => {
   const [notifications, setNotifications] = useState([]);
   const [materials,     setMaterials]     = useState([]);
   const [retryCount,    setRetryCount]    = useState(0);
+  // Multi-child support
+  const [linkedStudents, setLinkedStudents] = useState([]);
+  const [selectedChildIdx, setSelectedChildIdx] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,10 +34,14 @@ const ParentDashboard = () => {
         let sid = null;
         let cid = null;
 
-        const linked = user?.linkedEntity?.linkedStudents?.[0];
-        if (linked?._id) {
-          sid = linked._id;
-          cid = linked.classId?._id || linked.classId || null;
+        const allLinked = user?.linkedEntity?.linkedStudents || [];
+        if (allLinked.length > 0) {
+          setLinkedStudents(allLinked);
+          // Use selected child index (clamped to available children)
+          const safeIdx = Math.min(selectedChildIdx, allLinked.length - 1);
+          const linked  = allLinked[safeIdx];
+          sid = linked?._id;
+          cid = linked?.classId?._id || linked?.classId || null;
         } else {
           // fallback: metadata on user object
           sid = user?.studentId || user?.metadata?.studentId || null;
@@ -94,7 +101,7 @@ const ParentDashboard = () => {
     run();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, retryCount]);
+  }, [user, retryCount, selectedChildIdx]);
 
   const handleRetry = () => setRetryCount((c) => c + 1);
 
@@ -123,6 +130,32 @@ const ParentDashboard = () => {
 
       {!loading && !error && (
         <>
+          {/* Multi-child switcher — only shown when parent has > 1 child */}
+          {linkedStudents.length > 1 && (
+            <div style={{ padding: '0 4px 10px', overflowX: 'auto' }}>
+              <div style={{ display: 'flex', gap: 8, minWidth: 'max-content' }}>
+                {linkedStudents.map((child, idx) => (
+                  <button
+                    key={child._id || idx}
+                    onClick={() => setSelectedChildIdx(idx)}
+                    style={{
+                      padding: '6px 14px', borderRadius: 20, border: 'none',
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      background: selectedChildIdx === idx ? '#2563EB' : '#E2E8F0',
+                      color:      selectedChildIdx === idx ? '#fff'    : '#374151',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {child.name || `Child ${idx + 1}`}
+                    {child.classId?.name && (
+                      <span style={{ fontWeight: 400, marginLeft: 4 }}>({child.classId.name})</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Hero */}
           <div className="m-hero">
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>

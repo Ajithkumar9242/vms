@@ -126,11 +126,16 @@ api.interceptors.response.use(
 //  API METHODS
 // ═══════════════════════════════════════════════════════════
 
-// ─── Auth ───────────────────────────────────────────────────
+// ─── Auth ─────────────────────────────────────────────
 export const authAPI = {
   login:          (credentials) => api.post('/auth/login', credentials),
   getMe:          ()             => api.get('/auth/me'),
   changePassword: (data)         => api.patch('/auth/change-password', data),
+  // OTP / phone login
+  sendOtp:        (phone)        => api.post('/auth/otp/send', { phone }),
+  verifyOtp:      (phone, otp)   => api.post('/auth/otp/verify', { phone, otp }),
+  refresh:        (refreshToken) => api.post('/auth/refresh', { refreshToken }),
+  logout:         ()             => api.post('/auth/logout'),
 };
 
 // ─── School ─────────────────────────────────────────────────
@@ -140,13 +145,23 @@ export const schoolAPI = {
   getSubjects: (params) => api.get('/school/subjects', { params }),
 };
 
-// ─── Admissions ─────────────────────────────────────────────
+// ─── Admissions ─────────────────────────────────────────
 export const admissionAPI = {
-  create: (data) => api.post('/admissions', data),
-  getAll: (params) => api.get('/admissions', { params }),
-  getById: (id) => api.get(`/admissions/${id}`),
-  approve: (id) => api.patch(`/admissions/${id}/approve`),
-  reject: (id, data) => api.patch(`/admissions/${id}/reject`, data),
+  // Public
+  getSettings:   ()             => api.get('/admissions/settings'),
+  getClasses:    ()             => api.get('/admissions/classes'),
+  getStatus:     (appNo)        => api.get(`/admissions/status/${appNo}`),
+  searchByPhone: (phone)        => api.get('/admissions/search', { params: { phone } }),
+  submitPublic:  (data)         => api.post('/admissions/public', data),
+  // Admin
+  create:         (data)        => api.post('/admissions', data),
+  getAll:         (params)      => api.get('/admissions', { params }),
+  getById:        (id)          => api.get(`/admissions/${id}`),
+  update:         (id, data)    => api.patch(`/admissions/${id}`, data),
+  approve:        (id, data)    => api.patch(`/admissions/${id}/approve`, data),
+  reject:         (id, data)    => api.patch(`/admissions/${id}/reject`, data),
+  hold:           (id, data)    => api.patch(`/admissions/${id}/hold`, data),
+  updateSettings: (data)        => api.patch('/admissions/settings', data),
 };
 
 // ─── Students ───────────────────────────────────────────────
@@ -159,20 +174,58 @@ export const studentAPI = {
 
 // ─── Fees ───────────────────────────────────────────────────
 export const feesAPI = {
-  createStructure: (data) => api.post('/fees/structure', data),
-  getStructures: (params) => api.get('/fees/structure', { params }),
-  pay: (data) => api.post('/fees/pay', data),
-  getStudentFees: (studentId) => api.get(`/fees/student/${studentId}`),
-  getOverview: (params) => api.get('/fees/overview', { params }),
-  getInvoice: (studentId) => api.get(`/fees/invoice/${studentId}`),
+  // Legacy (unchanged)
+  createStructure: (data)    => api.post('/fees/structure', data),
+  getStructures:   (params)  => api.get('/fees/structure', { params }),
+  pay:             (data)    => api.post('/fees/pay', data),
+  getOverview:     (params)  => api.get('/fees/overview', { params }),
+  getInvoice:      (studentId) => api.get(`/fees/invoice/${studentId}`),
   generateInvoice: (studentId) => api.post('/fees/invoice/generate', { studentId }),
-  getDueList: (params) => api.get('/fees/due', { params }),
-  applyStructure: (data) => api.post('/fees/apply-structure', data),
-  manualPayment: (data) => api.post('/fees/manual-payment', data),
-  approvePayment: (id) => api.put(`/fees/payment/${id}/approve`),
-  rejectPayment: (id, reason) => api.put(`/fees/payment/${id}/reject`, { reason }),
-  getPendingPayments: (params) => api.get('/fees/payments/pending', { params }),
+  getDueList:      (params)  => api.get('/fees/due', { params }),
+  applyStructure:  (data)    => api.post('/fees/apply-structure', data),
+  manualPayment:   (data)    => api.post('/fees/manual-payment', data),
+  approvePayment:  (id)      => api.put(`/fees/payment/${id}/approve`),
+  rejectPayment:   (id, reason) => api.put(`/fees/payment/${id}/reject`, { reason }),
+  getPendingPayments: (params)  => api.get('/fees/payments/pending', { params }),
+
+  // Enhanced student fees (includes profile data)
+  getStudentFees: (studentId) => api.get(`/fees/student/${studentId}`),
+
+  // ── Fee Components ──────────────────────────────────────
+  getComponents:   (params)   => api.get('/fees/components', { params }),
+  getComponent:    (id)       => api.get(`/fees/components/${id}`),
+  createComponent: (data)     => api.post('/fees/components', data),
+  updateComponent: (id, data) => api.put(`/fees/components/${id}`, data),
+  toggleComponent: (id)       => api.patch(`/fees/components/${id}/toggle`),
+  deleteComponent: (id)       => api.delete(`/fees/components/${id}`),
+
+  // ── Student Fee Profiles ────────────────────────────────
+  getClassMatrix:    (classId, params) => api.get(`/fees/profiles/class/${classId}`, { params }),
+  bulkSaveProfiles:  (data)            => api.post('/fees/profiles/bulk-save', data),
+  getStudentProfile: (studentId, params) => api.get(`/fees/profiles/student/${studentId}`, { params }),
+  addDiscount:       (studentId, data, params) => api.post(`/fees/profiles/student/${studentId}/discount`, data, { params }),
+  lockProfile:       (studentId, data) => api.post(`/fees/profiles/student/${studentId}/lock`, data),
+  unlockProfile:     (studentId, data) => api.post(`/fees/profiles/student/${studentId}/unlock`, data),
+
+  // ── Invoice (by ID) ─────────────────────────────────────
+  getInvoiceById:  (invoiceId)       => api.get(`/fees/invoices/${invoiceId}`),
+  payInstallment:  (invoiceId, data) => api.post(`/fees/invoices/${invoiceId}/pay`, data),
+  applyPenalty:    (invoiceId, data) => api.post(`/fees/invoices/${invoiceId}/penalty`, data),
+  waivePenalty:    (invoiceId, data) => api.put(`/fees/invoices/${invoiceId}/penalty/waive`, data),
+  lockInvoice:     (invoiceId)       => api.post(`/fees/invoices/${invoiceId}/lock`),
+  unlockInvoice:   (invoiceId)       => api.post(`/fees/invoices/${invoiceId}/unlock`),
+  getInvoicePdfUrl:(invoiceId)       => `${API_BASE_URL}/fees/invoices/${invoiceId}/pdf`,
+
+  // ── Analytics ────────────────────────────────────────────
+  getDashboardStats:    (params) => api.get('/fees/analytics/dashboard', { params }),
+  getMonthlyCollection: (year)   => api.get('/fees/analytics/monthly', { params: { year } }),
+  getClasswiseDues:     (params) => api.get('/fees/analytics/classwise', { params }),
+  getComponentSummary:  (params) => api.get('/fees/analytics/components', { params }),
+
+  // ── PDF receipt download URL ─────────────────────────────
+  getReceiptUrl: (paymentId) => `${API_BASE_URL}/fees/${paymentId}/receipt`,
 };
+
 
 // ─── Attendance ─────────────────────────────────────────────
 export const attendanceAPI = {

@@ -1,502 +1,422 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Table, Typography, Tag, Button, Space, Drawer,
-  Descriptions, Row, Col, Select, App, Popconfirm, Empty,
-  Modal, Form, Input, DatePicker,
+  Table, Button, Tag, Space, App, Select, Input, Modal,
+  Form, Drawer, Badge, Tooltip, Row, Col, Card, Statistic,
+  Switch, Spin, Alert, Divider, Popconfirm,
 } from 'antd';
 import {
-  CheckCircleOutlined, CloseCircleOutlined, EyeOutlined, PlusOutlined,
+  CheckCircleOutlined, CloseCircleOutlined, PauseCircleOutlined,
+  EditOutlined, PlusOutlined, SearchOutlined, ReloadOutlined,
+  LockOutlined, UnlockOutlined, SettingOutlined, EyeOutlined,
 } from '@ant-design/icons';
 import { admissionAPI, schoolAPI } from '@/services/api';
-import StatusTag from '@/components/common/StatusTag';
-import ConfirmModal from '@/components/common/ConfirmModal';
-import dayjs from 'dayjs';
+import AdmissionFormDrawer from './AdmissionFormDrawer';
 
-const { Title, Text } = Typography;
+const { Search } = Input;
+
+const STATUS_COLORS = {
+  pending:  'blue',
+  approved: 'green',
+  rejected: 'red',
+  hold:     'orange',
+};
+
+const STATUS_ICONS = {
+  pending:  null,
+  approved: <CheckCircleOutlined />,
+  rejected: <CloseCircleOutlined />,
+  hold:     <PauseCircleOutlined />,
+};
 
 const Admissions = () => {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
 
-  // ─── State ────────────────────────────────────────────────
-  const [admissions, setAdmissions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [classes, setClasses] = useState([]);
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
-  const [filters, setFilters] = useState({ status: undefined, classId: undefined });
+  // ─── State ──────────────────────────────────────────────────
+  const [admissions, setAdmissions]   = useState([]);
+  const [total, setTotal]             = useState(0);
+  const [loading, setLoading]         = useState(false);
+  const [page, setPage]               = useState(1);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [searchPhone, setSearchPhone] = useState('');
 
-  // Action states
-  const [actionLoading, setActionLoading] = useState(null);
-  const [rejectModal, setRejectModal] = useState({ open: false, id: null });
-  const [viewDrawer, setViewDrawer] = useState({ open: false, record: null });
+  // Settings state
+  const [settings, setSettings]         = useState({ admissionsOpen: false, activeAdmissionAcademicYearId: null });
+  const [academicYears, setAcademicYears] = useState([]);
+  const [settingsLoading, setSettingsLoading] = useState(false);
 
-  // New Admission modal
-  const [newModal, setNewModal] = useState(false);
-  const [admForm] = Form.useForm();
-  const [admSaving, setAdmSaving] = useState(false);
-  const [allSections, setAllSections] = useState([]);
-  const [modalSections, setModalSections] = useState([]);
-  const [modalClassId, setModalClassId] = useState(null);
+  // Action modals
+  const [remarkModal, setRemarkModal]   = useState({ open: false, type: '', id: '', name: '' });
+  const [remarkText, setRemarkText]     = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // ─── Fetch admissions ─────────────────────────────────────
-  const fetchAdmissions = useCallback(async (page = 1, pageSize = 20) => {
+  // Drawer
+  const [formDrawer, setFormDrawer]   = useState({ open: false, admission: null });
+
+  // ─── Load settings ──────────────────────────────────────────
+  const loadSettings = useCallback(async () => {
+    try {
+      const res = await admissionAPI.getSettings();
+      setSettings(res.data || res);
+    } catch { /* silent */ }
+  }, []);
+
+  const loadAcademicYears = useCallback(async () => {
+    try {
+      const res = await schoolAPI.getClasses({ limit: 1 }); // just to confirm connection
+      // Fetch academic years via setup API
+      const { default: axios } = await import('axios');
+      const token = localStorage.getItem('vms_token');
+      const r = await axios.get('/api/setup/academic-years', { headers: { Authorization: `Bearer ${token}` } });
+      setAcademicYears((r.data?.data || r.data || []).map(y => ({ label: y.name, value: y._id })));
+    } catch { /* silent */ }
+  }, []);
+
+  // ─── Load admissions ────────────────────────────────────────
+  const loadAdmissions = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, limit: pageSize };
-      if (filters.status) params.status = filters.status;
-      if (filters.classId) params.classId = filters.classId;
-
+      const params = { page, limit: 15 };
+      if (statusFilter) params.status = statusFilter;
+      if (searchPhone)  params.phone  = searchPhone;
       const res = await admissionAPI.getAll(params);
-      setAdmissions(res.data || []);
-      setPagination({
-        current: res.pagination?.page || 1,
-        pageSize: res.pagination?.limit || 20,
-        total: res.pagination?.total || 0,
-      });
-    } catch (err) {
-      message.error(err.message || 'Failed to load admissions');
+      const data = res.data || res;
+      setAdmissions(data.admissions || data);
+      setTotal(data.total || (data.admissions || data).length);
+    } catch (e) {
+      message.error(e.message || 'Failed to load admissions');
     } finally {
       setLoading(false);
     }
-  }, [filters, message]);
+  }, [page, statusFilter, searchPhone, message]);
 
-  // ─── Load classes for filter ──────────────────────────────
-  useEffect(() => {
-    const loadClasses = async () => {
-      try {
-        const res = await schoolAPI.getClasses({ limit: 50 });
-        setClasses(res.data || []);
-      } catch {
-        // Non-critical
+  useEffect(() => { loadSettings(); loadAcademicYears(); }, [loadSettings, loadAcademicYears]);
+  useEffect(() => { loadAdmissions(); }, [loadAdmissions]);
+
+  // ─── Settings toggle ────────────────────────────────────────
+  const handleToggleOpen = async (value) => {
+    setSettingsLoading(true);
+    try {
+      await admissionAPI.updateSettings({ admissionsOpen: value });
+      setSettings(s => ({ ...s, admissionsOpen: value }));
+      message.success(`Admissions ${value ? 'OPENED' : 'CLOSED'} successfully`);
+    } catch (e) {
+      message.error(e.message || 'Failed to update settings');
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handleChangeActiveYear = async (yearId) => {
+    setSettingsLoading(true);
+    try {
+      await admissionAPI.updateSettings({ activeAdmissionAcademicYearId: yearId });
+      setSettings(s => ({ ...s, activeAdmissionAcademicYearId: yearId }));
+      message.success('Active admission year updated');
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  // ─── Action helpers ─────────────────────────────────────────
+  const openRemarkModal = (type, id, name) => {
+    setRemarkText('');
+    setRemarkModal({ open: true, type, id, name });
+  };
+
+  const handleAction = async () => {
+    const { type, id } = remarkModal;
+    setActionLoading(true);
+    try {
+      if (type === 'approve') {
+        await admissionAPI.approve(id, { remarks: remarkText });
+        message.success('Admission approved!');
+      } else if (type === 'reject') {
+        await admissionAPI.reject(id, { remarks: remarkText });
+        message.success('Admission rejected');
+      } else if (type === 'hold') {
+        await admissionAPI.hold(id, { remarks: remarkText });
+        message.success('Admission placed on hold');
       }
-    };
-    loadClasses();
-    schoolAPI.getSections()
-      .then((res) => setAllSections(res.data || []))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    fetchAdmissions(1, pagination.pageSize);
-  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ─── Approve action ───────────────────────────────────────
-  const handleApprove = async (id) => {
-    setActionLoading(id);
-    try {
-      await admissionAPI.approve(id);
-      message.success('Admission approved — student record created');
-      fetchAdmissions(pagination.current, pagination.pageSize);
-    } catch (err) {
-      message.error(err.message || 'Failed to approve');
+      setRemarkModal({ open: false, type: '', id: '', name: '' });
+      loadAdmissions();
+    } catch (e) {
+      message.error(e.message || 'Action failed');
     } finally {
-      setActionLoading(null);
+      setActionLoading(false);
     }
   };
 
-  // ─── New Admission handlers ───────────────────────────────
-  const handleModalClassChange = (classId) => {
-    setModalClassId(classId);
-    admForm.setFieldValue('sectionId', undefined);
-    setModalSections(allSections.filter((s) => {
-      const sid = s.classId?._id || s.classId;
-      return sid === classId || sid?.toString() === classId;
-    }));
-  };
-
-  const onCreateAdmission = async (values) => {
-    setAdmSaving(true);
-    try {
-      const payload = {
-        ...values,
-        dateOfBirth: values.dateOfBirth?.toISOString(),
-        mode: 'offline',
-      };
-      await admissionAPI.create(payload);
-      message.success('Admission created successfully');
-      setNewModal(false);
-      admForm.resetFields();
-      setModalClassId(null);
-      setModalSections([]);
-      fetchAdmissions(1, pagination.pageSize);
-    } catch (err) {
-      message.error(err.message || 'Failed to create admission');
-    } finally {
-      setAdmSaving(false);
-    }
-  };
-
-  // ─── Reject action ───────────────────────────────────────
-  const openRejectModal = (id) => {
-    setRejectModal({ open: true, id });
-  };
-
-  const handleReject = async (remarks) => {
-    if (!remarks.trim()) {
-      message.warning('Please provide remarks for rejection');
-      return;
-    }
-    setActionLoading(rejectModal.id);
-    try {
-      await admissionAPI.reject(rejectModal.id, { remarks });
-      message.success('Admission rejected');
-      setRejectModal({ open: false, id: null });
-      fetchAdmissions(pagination.current, pagination.pageSize);
-    } catch (err) {
-      message.error(err.message || 'Failed to reject');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // ─── View drawer ──────────────────────────────────────────
-  const openViewDrawer = (record) => {
-    setViewDrawer({ open: true, record });
-  };
-
-  // ─── Table columns ────────────────────────────────────────
+  // ─── Table columns ──────────────────────────────────────────
   const columns = [
     {
-      title: 'Application No',
+      title: 'App No',
       dataIndex: 'applicationNo',
       key: 'applicationNo',
-      width: 160,
-      fixed: 'left',
-      render: (text) => <Text strong style={{ fontSize: 13 }}>{text}</Text>,
+      width: 130,
+      render: (v) => <code style={{ fontSize: 11 }}>{v}</code>,
     },
     {
-      title: 'Student Name',
+      title: 'Student',
       dataIndex: 'studentName',
       key: 'studentName',
-      width: 170,
+      render: (name, r) => (
+        <div>
+          <div style={{ fontWeight: 600 }}>{name}</div>
+          <div style={{ fontSize: 11, color: '#64748B' }}>{r.classId?.name || '—'}</div>
+        </div>
+      ),
     },
     {
-      title: 'Class',
-      dataIndex: ['classId', 'name'],
-      key: 'class',
-      width: 110,
+      title: 'Parent / Phone',
+      key: 'parent',
+      render: (_, r) => (
+        <div>
+          <div>{r.father?.name || r.parentName}</div>
+          <div style={{ fontSize: 11, color: '#64748B' }}>{r.parentPhone}</div>
+        </div>
+      ),
     },
     {
-      title: 'Parent',
-      dataIndex: 'parentName',
-      key: 'parentName',
-      width: 150,
-      responsive: ['md'],
+      title: 'Type',
+      dataIndex: 'boardingType',
+      key: 'boardingType',
+      width: 100,
+      render: (v) => <Tag color={v === 'residential' ? 'purple' : 'cyan'}>{v || 'Day-Boarding'}</Tag>,
     },
     {
-      title: 'Phone',
-      dataIndex: 'parentPhone',
-      key: 'parentPhone',
-      width: 130,
-      responsive: ['lg'],
+      title: 'Mode',
+      dataIndex: 'mode',
+      key: 'mode',
+      width: 80,
+      render: (v) => <Tag>{v || 'offline'}</Tag>,
     },
     {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
       width: 110,
-      render: (status) => <StatusTag status={status} />,
+      render: (s) => (
+        <Tag color={STATUS_COLORS[s] || 'default'} icon={STATUS_ICONS[s]}>
+          {(s || 'pending').toUpperCase()}
+        </Tag>
+      ),
     },
     {
-      title: 'Applied',
+      title: 'Date',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 110,
-      responsive: ['lg'],
-      render: (date) => dayjs(date).format('DD MMM YYYY'),
+      width: 100,
+      render: (v) => new Date(v).toLocaleDateString('en-IN'),
     },
     {
       title: 'Actions',
       key: 'actions',
-      width: 200,
+      width: 220,
       fixed: 'right',
-      render: (_, record) => {
-        const isPending = record.status === 'pending';
-        const isProcessing = actionLoading === record._id;
-
-        return (
-          <Space size={4}>
-            <Button
-              type="link"
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => openViewDrawer(record)}
-              id={`view-btn-${record._id}`}
-            >
-              View
-            </Button>
-
-            <Popconfirm
-              title="Approve this admission?"
-              description="A student record will be created."
-              onConfirm={() => handleApprove(record._id)}
-              okText="Yes, Approve"
-              okButtonProps={{ loading: isProcessing }}
-              disabled={!isPending}
-            >
-              <Button
-                type="link"
-                size="small"
-                style={{ color: isPending ? '#22C55E' : undefined }}
-                icon={<CheckCircleOutlined />}
-                loading={isProcessing}
-                disabled={!isPending}
-                id={`approve-btn-${record._id}`}
-              >
+      render: (_, r) => (
+        <Space size="small">
+          <Tooltip title="View / Edit">
+            <Button size="small" icon={<EyeOutlined />}
+              onClick={() => setFormDrawer({ open: true, admission: r })} />
+          </Tooltip>
+          {r.status === 'pending' || r.status === 'hold' ? (
+            <>
+              <Button size="small" type="primary" icon={<CheckCircleOutlined />}
+                onClick={() => openRemarkModal('approve', r._id, r.studentName)}>
                 Approve
               </Button>
-            </Popconfirm>
-
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<CloseCircleOutlined />}
-              onClick={() => openRejectModal(record._id)}
-              disabled={!isPending}
-              id={`reject-btn-${record._id}`}
-            >
-              Reject
-            </Button>
-          </Space>
-        );
-      },
+              {r.status !== 'hold' && (
+                <Button size="small" icon={<PauseCircleOutlined />} style={{ color: '#D97706', borderColor: '#D97706' }}
+                  onClick={() => openRemarkModal('hold', r._id, r.studentName)}>
+                  Hold
+                </Button>
+              )}
+              <Button size="small" danger icon={<CloseCircleOutlined />}
+                onClick={() => openRemarkModal('reject', r._id, r.studentName)}>
+                Reject
+              </Button>
+            </>
+          ) : null}
+        </Space>
+      ),
     },
   ];
 
-  const handleTableChange = (pag) => {
-    fetchAdmissions(pag.current, pag.pageSize);
+  // ─── Stats ──────────────────────────────────────────────────
+  const stats = {
+    total:    admissions.length,
+    pending:  admissions.filter(a => a.status === 'pending').length,
+    approved: admissions.filter(a => a.status === 'approved').length,
+    hold:     admissions.filter(a => a.status === 'hold').length,
+    rejected: admissions.filter(a => a.status === 'rejected').length,
   };
 
-  const viewRecord = viewDrawer.record;
-
   return (
-    <div className="page-container">
-      {/* Header */}
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <Title level={4} className="page-title" style={{ margin: 0 }}>Admissions</Title>
-          <Text type="secondary">Manage admission applications</Text>
-        </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setNewModal(true)} id="new-admission-btn">
-          New Admission
-        </Button>
-      </div>
+    <div style={{ padding: '0 0 40px' }}>
+      {/* ─── Admission Control Banner ─────────────────────── */}
+      <Card
+        style={{ marginBottom: 20, borderRadius: 12, background: settings.admissionsOpen ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${settings.admissionsOpen ? '#86EFAC' : '#FCA5A5'}` }}
+        bodyStyle={{ padding: '16px 20px' }}
+      >
+        <Row gutter={16} align="middle" wrap={false}>
+          <Col flex="auto">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <SettingOutlined style={{ fontSize: 20, color: settings.admissionsOpen ? '#16A34A' : '#DC2626' }} />
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>
+                  Admission Status:&nbsp;
+                  <span style={{ color: settings.admissionsOpen ? '#16A34A' : '#DC2626' }}>
+                    {settings.admissionsOpen ? '🟢 OPEN' : '🔴 CLOSED'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                  {settings.admissionsOpen
+                    ? 'Public admission form is accepting applications'
+                    : 'Public form is blocked — no new applications will be accepted'}
+                </div>
+              </div>
+            </div>
+          </Col>
+          <Col>
+            <Space>
+              <Select
+                placeholder="Active Admission Year"
+                style={{ width: 200 }}
+                value={settings.activeAdmissionAcademicYearId?._id || settings.activeAdmissionAcademicYearId}
+                onChange={handleChangeActiveYear}
+                options={academicYears}
+                allowClear
+                size="small"
+                id="admission-year-select"
+              />
+              <Spin spinning={settingsLoading}>
+                <Switch
+                  checked={settings.admissionsOpen}
+                  onChange={handleToggleOpen}
+                  checkedChildren="OPEN"
+                  unCheckedChildren="CLOSED"
+                  style={{ minWidth: 80 }}
+                  id="admission-toggle"
+                />
+              </Spin>
+              <Button icon={<PlusOutlined />} type="primary"
+                onClick={() => setFormDrawer({ open: true, admission: null })}
+                id="btn-new-admission">
+                New Application
+              </Button>
+            </Space>
+          </Col>
+        </Row>
+      </Card>
 
-      {/* Filters */}
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={12} sm={8} md={5}>
+      {/* ─── Stats Row ───────────────────────────────────── */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+        {[
+          { label: 'Total', value: stats.total,    color: '#3B82F6' },
+          { label: 'Pending', value: stats.pending,  color: '#F59E0B' },
+          { label: 'Approved', value: stats.approved, color: '#10B981' },
+          { label: 'On Hold', value: stats.hold,     color: '#F97316' },
+          { label: 'Rejected', value: stats.rejected, color: '#EF4444' },
+        ].map(s => (
+          <Col xs={12} sm={8} md={4} key={s.label}>
+            <Card size="small" style={{ borderRadius: 10, borderTop: `3px solid ${s.color}`, textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: 11, color: '#64748B' }}>{s.label}</div>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+
+      {/* ─── Filters ─────────────────────────────────────── */}
+      <Row gutter={12} style={{ marginBottom: 16 }}>
+        <Col>
           <Select
             placeholder="Filter by status"
+            style={{ width: 160 }}
+            value={statusFilter || undefined}
+            onChange={v => { setStatusFilter(v || ''); setPage(1); }}
             allowClear
-            style={{ width: '100%' }}
-            value={filters.status}
-            onChange={(val) => setFilters((prev) => ({ ...prev, status: val }))}
             options={[
+              { label: 'All', value: '' },
               { label: 'Pending', value: 'pending' },
               { label: 'Approved', value: 'approved' },
+              { label: 'On Hold', value: 'hold' },
               { label: 'Rejected', value: 'rejected' },
             ]}
-            id="admission-status-filter"
           />
         </Col>
-        <Col xs={12} sm={8} md={5}>
-          <Select
-            placeholder="Filter by class"
-            allowClear
-            style={{ width: '100%' }}
-            value={filters.classId}
-            onChange={(val) => setFilters((prev) => ({ ...prev, classId: val }))}
-            options={classes.map((c) => ({ label: c.name, value: c._id }))}
-            id="admission-class-filter"
+        <Col flex="auto">
+          <Search placeholder="Search by parent phone..." allowClear
+            onSearch={v => { setSearchPhone(v); setPage(1); }}
+            style={{ maxWidth: 300 }}
           />
+        </Col>
+        <Col>
+          <Button icon={<ReloadOutlined />} onClick={loadAdmissions}>Refresh</Button>
         </Col>
       </Row>
 
-      {/* Table */}
+      {/* ─── Table ───────────────────────────────────────── */}
       <Table
         columns={columns}
         dataSource={admissions}
         rowKey="_id"
         loading={loading}
+        scroll={{ x: 900 }}
         pagination={{
-          current: pagination.current,
-          pageSize: pagination.pageSize,
-          total: pagination.total,
-          showSizeChanger: true,
-          showTotal: (total) => `Total ${total} applications`,
+          current: page, total, pageSize: 15,
+          onChange: (p) => setPage(p),
+          showTotal: (t) => `${t} applications`,
         }}
-        onChange={handleTableChange}
-        scroll={{ x: 1040 }}
-        size="middle"
-        bordered={false}
-        style={{ background: '#FFF', borderRadius: 8 }}
-        locale={{
-          emptyText: (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="No admission applications found"
-            />
-          ),
-        }}
+        size="small"
+        bordered
+        style={{ background: '#fff', borderRadius: 8 }}
+        rowClassName={(r) => r.status === 'hold' ? 'ant-table-row-warning' : ''}
       />
 
-      {/* ─── Reject Modal (Reusable ConfirmModal) ──────────── */}
-      <ConfirmModal
-        open={rejectModal.open}
-        title="Reject Admission"
-        description="Please provide a reason for rejection:"
-        okText="Reject"
-        okType="danger"
-        loading={!!actionLoading}
-        requireInput
-        inputLabel="Enter remarks..."
-        onConfirm={handleReject}
-        onCancel={() => setRejectModal({ open: false, id: null })}
-      />
-
-      {/* ─── View Drawer ───────────────────────────────────── */}
-      <Drawer
-        title={`Application: ${viewRecord?.applicationNo || ''}`}
-        open={viewDrawer.open}
-        onClose={() => setViewDrawer({ open: false, record: null })}
-        width={480}
+      {/* ─── Action Remark Modal ─────────────────────────── */}
+      <Modal
+        open={remarkModal.open}
+        title={
+          remarkModal.type === 'approve' ? `✅ Approve — ${remarkModal.name}` :
+          remarkModal.type === 'hold'    ? `⏸ Hold — ${remarkModal.name}` :
+                                          `❌ Reject — ${remarkModal.name}`
+        }
+        onOk={handleAction}
+        onCancel={() => setRemarkModal({ open: false, type: '', id: '', name: '' })}
+        okText={remarkModal.type === 'approve' ? 'Approve' : remarkModal.type === 'hold' ? 'Place on Hold' : 'Reject'}
+        okButtonProps={{
+          danger: remarkModal.type === 'reject',
+          loading: actionLoading,
+          style: remarkModal.type === 'hold' ? { background: '#F97316', borderColor: '#F97316' } : {},
+        }}
         destroyOnClose
       >
-        {viewRecord && (
-          <Descriptions column={1} bordered size="small" labelStyle={{ width: 140, fontWeight: 500 }}>
-            <Descriptions.Item label="Application No">{viewRecord.applicationNo}</Descriptions.Item>
-            <Descriptions.Item label="Student Name">{viewRecord.studentName}</Descriptions.Item>
-            <Descriptions.Item label="Date of Birth">
-              {viewRecord.dateOfBirth ? dayjs(viewRecord.dateOfBirth).format('DD MMM YYYY') : '—'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Gender">
-              <span style={{ textTransform: 'capitalize' }}>{viewRecord.gender}</span>
-            </Descriptions.Item>
-            <Descriptions.Item label="Class">{viewRecord.classId?.name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Section">{viewRecord.sectionId?.name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Parent Name">{viewRecord.parentName}</Descriptions.Item>
-            <Descriptions.Item label="Parent Phone">{viewRecord.parentPhone}</Descriptions.Item>
-            <Descriptions.Item label="Parent Email">{viewRecord.parentEmail || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Address">{viewRecord.address || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Previous School">{viewRecord.previousSchool || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Status">
-              <StatusTag status={viewRecord.status} />
-            </Descriptions.Item>
-            {viewRecord.remarks && (
-              <Descriptions.Item label="Remarks">{viewRecord.remarks}</Descriptions.Item>
-            )}
-            {viewRecord.approvedBy && (
-              <Descriptions.Item label="Processed By">
-                {viewRecord.approvedBy?.name || viewRecord.approvedBy}
-              </Descriptions.Item>
-            )}
-            {viewRecord.approvedAt && (
-              <Descriptions.Item label="Processed At">
-                {dayjs(viewRecord.approvedAt).format('DD MMM YYYY, hh:mm A')}
-              </Descriptions.Item>
-            )}
-            {viewRecord.studentId && (
-              <Descriptions.Item label="Student Record">
-                <Tag color="blue">{viewRecord.studentId?.rollNo || viewRecord.studentId}</Tag>
-              </Descriptions.Item>
-            )}
-            <Descriptions.Item label="Applied On">
-              {dayjs(viewRecord.createdAt).format('DD MMM YYYY, hh:mm A')}
-            </Descriptions.Item>
-          </Descriptions>
-        )}
-      </Drawer>
-
-      {/* ─── New Admission Modal ─────────────────────────── */}
-      <Modal
-        title="New Admission Application"
-        open={newModal}
-        onCancel={() => { setNewModal(false); admForm.resetFields(); setModalClassId(null); setModalSections([]); }}
-        footer={null}
-        width={600}
-        destroyOnHidden
-      >
-        <Form form={admForm} layout="vertical" onFinish={onCreateAdmission} style={{ marginTop: 16 }}>
-          <Row gutter={12}>
-            <Col span={14}>
-              <Form.Item label="Student Name" name="studentName" rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col span={10}>
-              <Form.Item label="Gender" name="gender" rules={[{ required: true }]}>
-                <Select>
-                  <Select.Option value="male">Male</Select.Option>
-                  <Select.Option value="female">Female</Select.Option>
-                  <Select.Option value="other">Other</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item label="Date of Birth" name="dateOfBirth" rules={[{ required: true }]}>
-                <DatePicker style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Admission Type" name="type">
-                <Select defaultValue="day-boarding">
-                  <Select.Option value="day-boarding">Day Boarding</Select.Option>
-                  <Select.Option value="residential">Residential</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item label="Class" name="classId" rules={[{ required: true, message: 'Class is required' }]}>
-                <Select
-                  placeholder="Select class"
-                  onChange={handleModalClassChange}
-                  options={classes.map((c) => ({ label: c.name, value: c._id }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Section" name="sectionId">
-                <Select
-                  placeholder="Select section"
-                  allowClear
-                  disabled={!modalClassId}
-                  options={modalSections.map((s) => ({ label: s.name, value: s._id }))}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item label="Parent / Guardian Name" name="parentName" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item label="Parent Phone" name="parentPhone" rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Parent Email" name="parentEmail" rules={[{ type: 'email', message: 'Invalid email' }]}>
-                <Input />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item label="Address" name="address">
-            <Input.TextArea rows={2} />
-          </Form.Item>
-          <Form.Item label="Previous School" name="previousSchool">
-            <Input />
-          </Form.Item>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Button type="primary" htmlType="submit" loading={admSaving} block>
-              Submit Application
-            </Button>
-          </Form.Item>
-        </Form>
+        <p style={{ marginBottom: 12, color: '#64748B', fontSize: 13 }}>
+          {remarkModal.type === 'approve'
+            ? 'Approving will create a student record. You can optionally add a remark.'
+            : remarkModal.type === 'hold'
+            ? 'Enter the reason for placing this application on hold (sent to parent).'
+            : 'Enter the reason for rejection (sent to parent).'}
+        </p>
+        <Input.TextArea
+          rows={3}
+          placeholder="Remarks (optional)"
+          value={remarkText}
+          onChange={e => setRemarkText(e.target.value)}
+          autoFocus
+        />
       </Modal>
+
+      {/* ─── Form Drawer ─────────────────────────────────── */}
+      <AdmissionFormDrawer
+        open={formDrawer.open}
+        admission={formDrawer.admission}
+        onClose={() => setFormDrawer({ open: false, admission: null })}
+        onSuccess={() => { setFormDrawer({ open: false, admission: null }); loadAdmissions(); }}
+      />
     </div>
   );
 };
