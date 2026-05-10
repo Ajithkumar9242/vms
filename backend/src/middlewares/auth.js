@@ -4,6 +4,9 @@ const ApiResponse = require('../utils/apiResponse');
 
 /**
  * Protect routes — verifies JWT and attaches user to req.
+ * Accepts token from:
+ *   1. Authorization: Bearer <token> header (standard)
+ *   2. ?token=<jwt> query param (for direct browser PDF opens / file downloads)
  */
 const protect = async (req, res, next) => {
   try {
@@ -11,6 +14,11 @@ const protect = async (req, res, next) => {
 
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
+    }
+
+    // Allow token via query param for GET requests (PDF/file downloads, iframe embeds)
+    if (!token && req.method === 'GET' && req.query.token) {
+      token = req.query.token;
     }
 
     if (!token) {

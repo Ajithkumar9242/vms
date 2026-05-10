@@ -23,12 +23,7 @@ const classConfigSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Subject',
       },
-    ],
-    feeStructureId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'FeeStructure',
-      default: null,
-    },
+    ]
   },
   { timestamps: true }
 );

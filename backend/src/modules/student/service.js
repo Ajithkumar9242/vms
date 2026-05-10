@@ -99,20 +99,12 @@ class StudentService {
     // Auto-generate roll number
     const rollNo = await AdmissionService.generateRollNo(data.classId);
 
-    // Look up fee structure (graceful — non-blocking)
-    let feeStructureId = null;
-    try {
-      const feeDoc = await FeeStructure.findOne({ classId: data.classId, academicYearId }).select('_id');
-      if (feeDoc) feeStructureId = feeDoc._id;
-    } catch (e) {
-      console.error('Fee structure lookup failed:', e.message);
-    }
+
 
     const student = await Student.create({
       ...data,
       rollNo,
       academicYearId,
-      feeStructureId,
       admissionId: null,
     });
 
@@ -123,7 +115,6 @@ class StudentService {
         studentId: student._id,
         classId: student.classId,
         academicYearId: student.academicYearId,
-        feeStructureId: student.feeStructureId,
       });
     } catch (e) {
       console.error('Auto invoice generation failed (non-critical):', e.message);

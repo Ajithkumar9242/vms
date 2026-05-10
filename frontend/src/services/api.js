@@ -131,9 +131,13 @@ export const authAPI = {
   login:          (credentials) => api.post('/auth/login', credentials),
   getMe:          ()             => api.get('/auth/me'),
   changePassword: (data)         => api.patch('/auth/change-password', data),
-  // OTP / phone login
+  // Parent OTP login
   sendOtp:        (phone)        => api.post('/auth/otp/send', { phone }),
   verifyOtp:      (phone, otp)   => api.post('/auth/otp/verify', { phone, otp }),
+  // Faculty OTP login
+  sendFacultyOtp:   (phone)      => api.post('/auth/faculty/otp/send', { phone }),
+  verifyFacultyOtp: (phone, otp) => api.post('/auth/faculty/otp/verify', { phone, otp }),
+  // Token management
   refresh:        (refreshToken) => api.post('/auth/refresh', { refreshToken }),
   logout:         ()             => api.post('/auth/logout'),
 };
@@ -214,7 +218,13 @@ export const feesAPI = {
   waivePenalty:    (invoiceId, data) => api.put(`/fees/invoices/${invoiceId}/penalty/waive`, data),
   lockInvoice:     (invoiceId)       => api.post(`/fees/invoices/${invoiceId}/lock`),
   unlockInvoice:   (invoiceId)       => api.post(`/fees/invoices/${invoiceId}/unlock`),
-  getInvoicePdfUrl:(invoiceId)       => `${API_BASE_URL}/fees/invoices/${invoiceId}/pdf`,
+  regenerateSchedule: (invoiceId)    => api.post(`/fees/invoices/${invoiceId}/regenerate-schedule`),
+  getInvoicePdfUrl:(invoiceId) => `${API_BASE_URL}/fees/invoices/${invoiceId}/pdf`,
+  /** PDF URL with token embedded — for direct browser open / parent app */
+  getInvoicePdfUrlWithToken: (invoiceId) => {
+    const token = localStorage.getItem('vms_token');
+    return `${API_BASE_URL}/fees/invoices/${invoiceId}/pdf${token ? '?token=' + token : ''}`;
+  },
 
   // ── Analytics ────────────────────────────────────────────
   getDashboardStats:    (params) => api.get('/fees/analytics/dashboard', { params }),

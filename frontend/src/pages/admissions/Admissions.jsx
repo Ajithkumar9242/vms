@@ -9,7 +9,7 @@ import {
   EditOutlined, PlusOutlined, SearchOutlined, ReloadOutlined,
   LockOutlined, UnlockOutlined, SettingOutlined, EyeOutlined,
 } from '@ant-design/icons';
-import { admissionAPI, schoolAPI } from '@/services/api';
+import { admissionAPI, setupAPI } from '@/services/api';
 import AdmissionFormDrawer from './AdmissionFormDrawer';
 
 const { Search } = Input;
@@ -62,12 +62,8 @@ const Admissions = () => {
 
   const loadAcademicYears = useCallback(async () => {
     try {
-      const res = await schoolAPI.getClasses({ limit: 1 }); // just to confirm connection
-      // Fetch academic years via setup API
-      const { default: axios } = await import('axios');
-      const token = localStorage.getItem('vms_token');
-      const r = await axios.get('/api/setup/academic-years', { headers: { Authorization: `Bearer ${token}` } });
-      setAcademicYears((r.data?.data || r.data || []).map(y => ({ label: y.name, value: y._id })));
+      const res = await setupAPI.getAcademicYears();
+      setAcademicYears((res.data || res).map(y => ({ label: y.name, value: y._id })));
     } catch { /* silent */ }
   }, []);
 

@@ -134,12 +134,15 @@ const Fees = () => {
       ),
     },
     {
-      title: 'Due Date', dataIndex: 'dueDate', key: 'dueDate', width: 110,
-      render: val => {
+      title: 'Due Date', key: 'dueDate', width: 110,
+      render: (_, r) => {
+        const val = r.nextDueDate || r.dueDate;
         if (!val) return '—';
         const d = dayjs(val);
         const overdue = d.isBefore(dayjs(), 'day');
-        return <Text style={{ color: overdue ? '#EF4444' : undefined }}>{d.format('DD MMM YYYY')}</Text>;
+        return <Text style={{ color: overdue && r.status !== 'Paid' ? '#EF4444' : undefined }}>
+          {d.format('DD MMM YYYY')}
+        </Text>;
       },
     },
     {

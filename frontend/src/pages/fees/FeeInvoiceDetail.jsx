@@ -121,6 +121,24 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
     load();
   };
 
+  const handleRegenerateSchedule = () => {
+    modal.confirm({
+      title: 'Regenerate Payment Schedule?',
+      content: 'This will sync the invoice installments with the latest Fee Structure. Paid amounts will be preserved. Are you sure?',
+      icon: <WarningOutlined />,
+      okText: 'Regenerate',
+      onOk: async () => {
+        try {
+          await feesAPI.regenerateSchedule(invoiceId);
+          message.success('Schedule regenerated successfully');
+          load();
+        } catch (e) {
+          message.error(e.message || 'Failed to regenerate schedule');
+        }
+      },
+    });
+  };
+
   const handleDownloadPDF = () => {
     const url = feesAPI.getInvoicePdfUrl(invoiceId);
     const token = localStorage.getItem('vms_token');
@@ -182,14 +200,14 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
         {[
           { label: 'Total Fee',    value: invoice.totalAmount || 0,      color: '#1B3A5C' },
           { label: 'Penalty',      value: invoice.penaltyAmount || 0,    color: '#EF4444' },
-          { label: 'Discount',     value: -(invoice.discountAmount || 0), color: '#16A34A' },
+          { label: 'Discount',     value: invoice.discountAmount || 0,   color: '#16A34A', isNegative: true },
           { label: 'Amount Paid',  value: invoice.paidAmount || 0,       color: '#2563EB' },
           { label: 'Balance Due',  value: balanceDue,                    color: balanceDue > 0 ? '#EF4444' : '#16A34A' },
         ].map(item => (
           <Col xs={12} sm={8} md={4} key={item.label} style={{ flex: 1 }}>
             <Card size="small" style={{ borderRadius: 8, textAlign: 'center' }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: item.color }}>
-                {item.value < 0 ? `-₹${Math.abs(item.value).toLocaleString('en-IN')}` : `₹${item.value.toLocaleString('en-IN')}`}
+                {item.isNegative && item.value > 0 ? '-' : ''}₹{Math.abs(item.value).toLocaleString('en-IN')}
               </div>
               <div style={{ fontSize: 11, color: '#64748B' }}>{item.label}</div>
             </Card>
@@ -206,11 +224,7 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
               Record Payment
             </Button>
           )}
-          {!invoice.locked && status !== 'paid' && (
-            <Button icon={<WarningOutlined />} onClick={() => setPenaltyModal(true)}>
-              Apply Penalty
-            </Button>
-          )}
+          {/* Apply Penalty removed — now auto-calculated by penalty engine */}
           {!invoice.locked && (invoice.penaltyAmount || 0) > 0 && (
             <Button icon={<CheckCircleOutlined />} onClick={() => setWaiveModal(true)}>
               Waive Penalty
@@ -220,14 +234,60 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
             ? <Button icon={<UnlockOutlined />} type="primary" onClick={handleUnlock}>Unlock</Button>
             : <Button icon={<LockOutlined />} danger onClick={handleLock}>Lock Invoice</Button>
           }
+          {!invoice.locked && status !== 'paid' && (
+            <Button onClick={handleRegenerateSchedule}>Regenerate Schedule</Button>
+          )}
           <Button icon={<DownloadOutlined />} onClick={handleDownloadPDF}>Download PDF</Button>
         </Space>
       )}
 
-      <Divider orientation="left" style={{ fontSize: 13 }}>Installment Breakdown</Divider>
+      {/* Auto-Penalty / Overdue Notice */}
+      {((invoice.penaltyConfig?.enabled || invoice.penaltyAmount > 0) && status !== 'paid') && (
+        <Alert
+          type="warning"
+          icon={<ExclamationCircleOutlined />}
+          showIcon
+          style={{ marginBottom: 12, borderRadius: 8 }}
+          message={
+            <span>
+              ⚡ <strong>Auto-calculated Late Fee:</strong> ₹{(invoice.penaltyAmount || 0).toLocaleString('en-IN')}
+              {invoice.dueDate && (
+                <span style={{ marginLeft: 8, color: '#64748B', fontSize: 12 }}>
+                  · Due {dayjs(invoice.dueDate).format('DD MMM YYYY')}
+                  {dayjs().isAfter(invoice.dueDate) && (
+                    <span style={{ color: '#DC2626', marginLeft: 4, fontWeight: 600 }}>
+                      · {dayjs().diff(dayjs(invoice.dueDate), 'day')} days overdue
+                    </span>
+                  )}
+                </span>
+              )}
+            </span>
+          }
+        />
+      )}
 
-      {/* Installments Table */}
-      {installments.length > 0 ? (
+      {/* Fee Components Table */}
+      <Divider orientation="left" style={{ fontSize: 13 }}>Fee Components</Divider>
+      {(invoice.feeItems && invoice.feeItems.length > 0) || (invoice.feeProfileId?.selectedComponents && invoice.feeProfileId.selectedComponents.length > 0) ? (
+        <Table
+          dataSource={invoice.feeProfileId?.selectedComponents?.length > 0 ? invoice.feeProfileId.selectedComponents : invoice.feeItems}
+          rowKey={(r) => r.componentId || r.name}
+          size="small"
+          pagination={false}
+          style={{ marginBottom: 16 }}
+          columns={[
+            { title: 'Component', dataIndex: 'name', key: 'name', render: v => <Text strong>{v}</Text> },
+            { title: 'Type', dataIndex: 'recurringType', key: 'type', render: v => <Tag>{(v || 'yearly').toUpperCase()}</Tag> },
+            { title: 'Amount', dataIndex: 'amount', align: 'right', render: v => `₹${(v||0).toLocaleString('en-IN')}` },
+          ]}
+        />
+      ) : (
+        <Alert type="info" message="No components linked." style={{ marginBottom: 16 }} />
+      )}
+
+      {/* Payment Schedule Table */}
+      <Divider orientation="left" style={{ fontSize: 13 }}>Payment Schedule</Divider>
+      {installments && installments.length > 0 ? (
         <Table
           dataSource={installments}
           rowKey="_id"
@@ -237,13 +297,24 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
           columns={[
             { title: '#', dataIndex: 'installmentNo', width: 40 },
             {
-              title: 'Component', dataIndex: 'label', key: 'label',
+              title: 'Installment', dataIndex: 'label', key: 'label',
               render: v => <Text strong>{v}</Text>,
+            },
+            {
+              title: 'Due Date', dataIndex: 'dueDate',
+              render: (v, r) => v ? (
+                <Space>
+                  {dayjs(v).format('DD MMM YYYY')}
+                  {r.status !== 'paid' && dayjs().isAfter(v) && (
+                    <Badge count={`${dayjs().diff(v, 'day')} days overdue`} color="red" />
+                  )}
+                </Space>
+              ) : '—'
             },
             { title: 'Amount', dataIndex: 'amount', align: 'right', render: v => `₹${(v||0).toLocaleString('en-IN')}` },
             { title: 'Paid', dataIndex: 'paidAmount', align: 'right', render: v => <Text style={{ color: '#16A34A' }}>₹{(v||0).toLocaleString('en-IN')}</Text> },
             {
-              title: 'Due', align: 'right',
+              title: 'Balance', align: 'right',
               render: (_, r) => {
                 const due = (r.amount || 0) - (r.paidAmount || 0);
                 return <Text style={{ color: due > 0 ? '#EF4444' : '#16A34A' }}>₹{due.toLocaleString('en-IN')}</Text>;
@@ -269,7 +340,7 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
           ].filter(c => Object.keys(c).length > 0)}
         />
       ) : (
-        <Alert type="info" message="No installment breakdown. Full invoice payment." style={{ marginBottom: 16 }} />
+        <Alert type="info" message="No payment schedule found." style={{ marginBottom: 16 }} />
       )}
 
       {/* Waiver / Penalty History */}

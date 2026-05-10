@@ -9,26 +9,7 @@ router.use(protect);
 // ─── Health ───────────────────────────────────────────────────
 router.get('/health', C.health);
 
-// ═══════════════════════════════════════════════════════════
-//  FEE STRUCTURE (legacy — unchanged)
-// ═══════════════════════════════════════════════════════════
-router.post(
-  '/structure',
-  idempotency(),
-  [
-    body('classId').isMongoId().withMessage('Valid class ID is required'),
-    body('academicYear').optional().trim(),
-    body('academicYearId').optional().isMongoId(),
-    body('totalAmount').isFloat({ min: 0 }).withMessage('Total amount must be a non-negative number'),
-    body('installments').optional().isArray(),
-    body('installments.*.name').optional().notEmpty(),
-    body('installments.*.amount').optional().isFloat({ min: 0 }),
-    body('installments.*.dueDate').optional().isISO8601(),
-  ],
-  validate,
-  C.createStructure
-);
-router.get('/structure', C.getStructures);
+
 
 // ═══════════════════════════════════════════════════════════
 //  FEE COMPONENTS
@@ -177,6 +158,14 @@ router.put(
   [body('waiveAmount').optional().isFloat({ min: 0 })],
   validate,
   C.waivePenalty
+);
+
+// locking and structure logic
+router.post(
+  '/invoices/:id/regenerate-schedule',
+  authorize('admin', 'super_admin'),
+  mongoIdParam('id'), validate,
+  C.regenerateSchedule
 );
 
 // Locking

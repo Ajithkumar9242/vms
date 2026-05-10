@@ -35,18 +35,18 @@ const feeInvoiceSchema = new mongoose.Schema(
       ref: 'Class',
       required: [true, 'Class is required'],
     },
+    // Section the student belongs to (optional — populated from student on invoice creation)
+    sectionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Section',
+      default: null,
+    },
     academicYearId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'AcademicYear',
       default: null,
     },
 
-    // ─── Legacy fee structure link ────────────────────────
-    feeStructureId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'FeeStructure',
-      default: null,
-    },
 
     // ─── NEW: Student fee profile link ───────────────────
     feeProfileId: {
@@ -86,6 +86,15 @@ const feeInvoiceSchema = new mongoose.Schema(
 
     // ─── NEW: Penalty & Discount ─────────────────────────
     penaltyAmount: { type: Number, default: 0, min: 0 },
+
+    // Auto-penalty configuration (copied from FeeComponent.lateFeeConfig or set per invoice)
+    penaltyConfig: {
+      enabled:   { type: Boolean, default: false },
+      type:      { type: String, enum: ['percent', 'fixed'], default: 'fixed' },
+      value:     { type: Number, default: 0, min: 0 },
+      frequency: { type: String, enum: ['daily', 'weekly', 'monthly'], default: 'monthly' },
+    },
+
     discountAmount:{ type: Number, default: 0, min: 0 },
     waivedAmount:  { type: Number, default: 0, min: 0 },
     waivedBy:      { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
@@ -100,7 +109,10 @@ const feeInvoiceSchema = new mongoose.Schema(
     },
 
     // ─── Dates ───────────────────────────────────────────
-    dueDate: { type: Date, default: null },
+    // dueDate = earliest unpaid installment dueDate (or invoice-level due)
+    dueDate:     { type: Date, default: null },
+    // nextDueDate = next future unpaid installment dueDate (updated after each payment)
+    nextDueDate: { type: Date, default: null },
 
     invoiceNumber: {
       type: String,

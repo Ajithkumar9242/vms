@@ -231,22 +231,23 @@ class AdmissionService {
     const resolvedAcademicYearId = admission.academicYearId
       || (await SetupService.resolveAcademicYearId(null));
 
-    // 4b. Look up fee structure for this class + academic year (non-blocking if missing)
-    let feeStructureId = null;
+    // 4b. Generate admission number atomically (only consumed on successful approval)
+    let admissionNumber = null;
     try {
-      const FeeStructure = require('../../models/FeeStructure');
-      const feeDoc = await FeeStructure.findOne({
-        classId: admission.classId,
-        academicYearId: resolvedAcademicYearId,
-      }).select('_id');
-      if (feeDoc) feeStructureId = feeDoc._id;
+      const CounterService = require('../../utils/counterService');
+      const yearLabel = CounterService.getAcademicYearLabel();
+      const result = await CounterService.getNext('admissionNumber', { yearLabel, padLength: 3, startFrom: 1 });
+      admissionNumber = result.formatted; // e.g. "001/2026-27"
     } catch (e) {
-      console.error('Fee structure lookup failed:', e.message);
+      console.error('Admission number generation failed (non-critical):', e.message);
     }
+
+
 
     // 5. Create Student from admission data
     const student = await Student.create({
       admissionId: admission._id,
+      admissionNumber,
       rollNo,
       name: admission.studentName,
       dateOfBirth: admission.dateOfBirth,
@@ -254,12 +255,12 @@ class AdmissionService {
       classId: admission.classId,
       sectionId: admission.sectionId,
       academicYearId: resolvedAcademicYearId,
-      feeStructureId,
       parentName: admission.parentName,
       parentPhone: admission.parentPhone,
       parentEmail: admission.parentEmail,
       address: admission.address,
     });
+
 
     // 5a. Auto-generate fee invoice for the new student (non-blocking)
     try {
@@ -268,7 +269,6 @@ class AdmissionService {
         studentId: student._id,
         classId: student.classId,
         academicYearId: resolvedAcademicYearId,
-        feeStructureId,
       });
     } catch (e) {
       console.error('Auto invoice generation failed (non-critical):', e.message);

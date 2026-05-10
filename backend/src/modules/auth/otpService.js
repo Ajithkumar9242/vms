@@ -28,48 +28,62 @@ class OtpService {
 
   /**
    * Send OTP to a phone number.
-   * Creates / replaces OtpSession for this phone.
+   * type: 'parent' (default) | 'faculty'
    * @param {string} phone
+   * @param {string} [type='parent']
    */
-  static async sendOtp(phone) {
+  static async sendOtp(phone, type = 'parent') {
     if (!phone || !/^\d{10}$/.test(phone.replace(/\D/g, ''))) {
       throw new AppError('Please provide a valid 10-digit mobile number', 400);
     }
 
-    // Verify the phone belongs to a parent user (or any user with role parent)
-    const parent = await Parent.findOne({ phone }).select('_id phone');
-    if (!parent) {
-      // Still send OTP to avoid user enumeration — but we'll fail at verify
-      // For UX, you may choose to reveal "not found". Using safe approach here.
-      console.warn(`[OTP] No parent found for phone ${phone} — OTP generation suppressed`);
-      return { message: 'If this number is registered, an OTP has been sent.' };
+    let entityFound = false;
+
+    if (type === 'faculty') {
+      const Faculty = require('../../models/Faculty');
+      const faculty = await Faculty.findOne({ phone }).select('_id phone');
+      entityFound = !!faculty;
+      if (!faculty) {
+        console.warn(`[OTP] No faculty found for phone ${phone} — OTP suppressed`);
+        return { message: 'If this number is registered, an OTP has been sent.' };
+      }
+    } else {
+      // parent (default)
+      const parent = await Parent.findOne({ phone }).select('_id phone');
+      entityFound = !!parent;
+      if (!parent) {
+        console.warn(`[OTP] No parent found for phone ${phone} — OTP suppressed`);
+        return { message: 'If this number is registered, an OTP has been sent.' };
+      }
     }
 
     const otp     = OtpService._generateOtp();
     const otpHash = await bcrypt.hash(otp, 10);
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
 
-    // Upsert — replace any existing session for this phone
+    // Upsert OTP session (keyed by phone + type)
+    const sessionKey = type === 'faculty' ? `faculty:${phone}` : phone;
     await OtpSession.findOneAndUpdate(
-      { phone },
-      { phone, otpHash, expiresAt, attempts: 0, verified: false },
+      { phone: sessionKey },
+      { phone: sessionKey, otpHash, expiresAt, attempts: 0, verified: false },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    // ── Send via MSG91 ──────────────────────────────────────────
     await OtpService._dispatchSms(phone, otp);
-
     return { message: 'OTP sent successfully. Valid for 5 minutes.' };
   }
 
   /**
    * Verify OTP and return user + tokens.
+   * type: 'parent' (default) | 'faculty'
    * @param {string} phone
    * @param {string} otp
+   * @param {string} [type='parent']
    * @returns {{ user, accessToken, refreshToken }}
    */
-  static async verifyOtp(phone, otp) {
-    const session = await OtpSession.findOne({ phone, verified: false }).select('+otpHash');
+  static async verifyOtp(phone, otp, type = 'parent') {
+    const sessionKey = type === 'faculty' ? `faculty:${phone}` : phone;
+    const session = await OtpSession.findOne({ phone: sessionKey, verified: false }).select('+otpHash');
     if (!session) {
       throw new AppError('No pending OTP for this number. Please request a new OTP.', 400);
     }
@@ -91,23 +105,41 @@ class OtpService {
       throw new AppError(`Incorrect OTP. ${OTP_MAX_ATTEMPTS - session.attempts} attempts remaining.`, 400);
     }
 
-    // Mark verified + cleanup
     session.verified = true;
     await session.save();
 
-    // Find the parent + linked User
-    const parent = await Parent.findOne({ phone });
-    if (!parent) throw new AppError('Parent account not found for this number.', 404);
+    let user;
 
-    let user = parent.userId
-      ? await User.findById(parent.userId)
-      : await User.findOne({ phone, role: 'parent' });
+    if (type === 'faculty') {
+      // Faculty login
+      const Faculty = require('../../models/Faculty');
+      const faculty = await Faculty.findOne({ phone });
+      if (!faculty) throw new AppError('Faculty account not found for this number.', 404);
 
-    if (!user) {
-      // Auto-create user for parents who pre-date OTP system
-      const AuthService = require('./service');
-      user = await AuthService.createParentUser(parent, null);
-      if (!user) throw new AppError('Could not create parent account. Contact admin.', 500);
+      user = faculty.userId ? await User.findById(faculty.userId) : null;
+
+      if (!user) {
+        // Auto-create user for faculty without linked User account
+        const AuthService = require('./service');
+        user = await AuthService.createFacultyUser(faculty);
+        if (!user) throw new AppError('Could not create faculty account. Contact admin.', 500);
+        // Link user back to faculty
+        await Faculty.findByIdAndUpdate(faculty._id, { userId: user._id });
+      }
+    } else {
+      // Parent login (original flow)
+      const parent = await Parent.findOne({ phone });
+      if (!parent) throw new AppError('Parent account not found for this number.', 404);
+
+      user = parent.userId
+        ? await User.findById(parent.userId)
+        : await User.findOne({ phone, role: 'parent' });
+
+      if (!user) {
+        const AuthService = require('./service');
+        user = await AuthService.createParentUser(parent, null);
+        if (!user) throw new AppError('Could not create parent account. Contact admin.', 500);
+      }
     }
 
     const accessToken  = OtpService.generateAccessToken(user._id, user.role);
@@ -115,6 +147,13 @@ class OtpService {
 
     const userObj = user.toObject ? user.toObject() : { ...user };
     delete userObj.password;
+
+    // Merge faculty profile fields (avatar, employeeId, department, facultyId)
+    // into the response — mirrors what AuthService.loginUser does for email login.
+    if (type === 'faculty') {
+      const AuthService = require('./service');
+      await AuthService._mergeFacultyFields(userObj);
+    }
 
     return { user: userObj, accessToken, refreshToken };
   }

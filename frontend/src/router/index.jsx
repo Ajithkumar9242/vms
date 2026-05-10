@@ -32,7 +32,6 @@ const AcademicYearPage = React.lazy(() => import('@/pages/setup/AcademicYear'));
 const AcademicTermPage = React.lazy(() => import('@/pages/setup/AcademicTerm'));
 const ClassesPage = React.lazy(() => import('@/pages/setup/Classes'));
 const SectionsPage = React.lazy(() => import('@/pages/setup/Sections'));
-const FeeSetupPage = React.lazy(() => import('@/pages/setup/FeeSetup'));
 const GradeSetupPage = React.lazy(() => import('@/pages/setup/GradeSetup'));
 const AttendanceConfigPage = React.lazy(() => import('@/pages/setup/AttendanceConfig'));
 const PaymentSettingsPage = React.lazy(() => import('@/pages/setup/PaymentSettings'));
@@ -44,6 +43,7 @@ const ClassConfigPage = React.lazy(() => import('@/pages/setup/ClassConfig'));
 const OnlineAdmissionPage  = React.lazy(() => import('@/pages/admissions/OnlineAdmission'));
 const ApplicationStatusPage = React.lazy(() => import('@/pages/admissions/ApplicationStatus'));
 const ParentLoginPage       = React.lazy(() => import('@/pages/auth/ParentLogin'));
+const FacultyLoginPage      = React.lazy(() => import('@/pages/auth/FacultyLogin'));
 
 // ─── Parent Mobile App ─────────────────────────────────────
 const ParentDashboard = React.lazy(() => import('@/pages/parent/ParentDashboard'));
@@ -85,6 +85,7 @@ const AppRouter = () => {
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/parent-login" element={<ParentLoginPage />} />
+          <Route path="/faculty-login" element={<FacultyLoginPage />} />
           <Route path="/online-admission" element={<OnlineAdmissionPage />} />
           <Route path="/admission-status" element={<ApplicationStatusPage />} />
 
@@ -167,7 +168,6 @@ const AppRouter = () => {
             <Route path="/setup/academic-term" element={<RoleRoute roles={['super_admin', 'admin']}><AcademicTermPage /></RoleRoute>} />
             <Route path="/setup/classes" element={<RoleRoute roles={['super_admin', 'admin']}><ClassesPage /></RoleRoute>} />
             <Route path="/setup/sections" element={<RoleRoute roles={['super_admin', 'admin']}><SectionsPage /></RoleRoute>} />
-            <Route path="/setup/fee-setup" element={<RoleRoute roles={['super_admin', 'admin']}><FeeSetupPage /></RoleRoute>} />
             <Route path="/setup/grade-setup" element={<RoleRoute roles={['super_admin', 'admin']}><GradeSetupPage /></RoleRoute>} />
             <Route path="/setup/attendance-config" element={<RoleRoute roles={['super_admin', 'admin']}><AttendanceConfigPage /></RoleRoute>} />
             <Route path="/setup/payment-settings" element={<RoleRoute roles={['super_admin', 'admin']}><PaymentSettingsPage /></RoleRoute>} />

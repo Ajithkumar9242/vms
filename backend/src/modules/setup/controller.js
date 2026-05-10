@@ -130,42 +130,6 @@ class SetupController {
     } catch (e) { next(e); }
   }
 
-  // ─── Fee Groups ──────────────────────────────────────────
-  static async createFeeGroup(req, res, next) {
-    try {
-      const data = await SetupService.createFeeGroup(req.body);
-      return ApiResponse.created(res, data, 'Fee Group created');
-    } catch (e) { next(e); }
-  }
-
-  static async getFeeGroups(req, res, next) {
-    try {
-      const data = await SetupService.getFeeGroups();
-      return ApiResponse.success(res, data);
-    } catch (e) { next(e); }
-  }
-
-  static async updateFeeGroup(req, res, next) {
-    try {
-      const data = await SetupService.updateFeeGroup(req.params.id, req.body);
-      return ApiResponse.success(res, data, 'Fee Group updated');
-    } catch (e) { next(e); }
-  }
-
-  // ─── Fee Structure ───────────────────────────────────────
-  static async upsertFeeStructure(req, res, next) {
-    try {
-      const data = await SetupService.upsertFeeStructure(req.body);
-      return ApiResponse.success(res, data, 'Fee Structure saved');
-    } catch (e) { next(e); }
-  }
-
-  static async getFeeStructures(req, res, next) {
-    try {
-      const data = await SetupService.getFeeStructures(req.query);
-      return ApiResponse.success(res, data);
-    } catch (e) { next(e); }
-  }
 
   // ─── Grade Config ────────────────────────────────────────
   static async createGradeConfig(req, res, next) {

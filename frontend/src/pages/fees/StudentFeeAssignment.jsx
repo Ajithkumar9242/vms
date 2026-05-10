@@ -2,13 +2,14 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Table, Select, Button, Space, App, Typography, Tag, Checkbox,
   InputNumber, Tooltip, Badge, Modal, Form, Input, Row, Col,
-  Spin, Alert, Statistic, Card, Divider, Popconfirm,
+  Spin, Alert, Statistic, Card, Divider, Popconfirm, DatePicker,
 } from 'antd';
 import {
   SaveOutlined, LockOutlined, UnlockOutlined, PlusOutlined,
   CheckCircleFilled, CloseCircleFilled, ExclamationCircleOutlined,
-  DownloadOutlined, ReloadOutlined,
+  DownloadOutlined, ReloadOutlined, CalendarOutlined,
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { feesAPI, schoolAPI } from '@/services/api';
 import useAuthStore from '@/store/authStore';
 
@@ -31,9 +32,11 @@ const StudentFeeAssignment = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [matrixData, setMatrixData] = useState(null); // { students, components }
-  const [rows, setRows] = useState({});   // { studentId: { componentId: bool, discounts: [] } }
+  const [rows, setRows] = useState({});   // { studentId: { componentId: bool, discounts: [], installments: [] } }
   const [discountModal, setDiscountModal] = useState({ open: false, studentId: null, studentName: '' });
   const [discountForm] = Form.useForm();
+  const [instModal, setInstModal] = useState({ open: false, studentId: null, studentName: '', netFee: 0 });
+  const [instForm] = Form.useForm();
   const [hasChanges, setHasChanges] = useState(false);
 
   // Load classes
@@ -62,6 +65,7 @@ const StudentFeeAssignment = () => {
         initRows[sid] = {
           checks,
           discounts: student.discounts || [],
+          installments: student.installments || [],
         };
       }
       setRows(initRows);
@@ -94,7 +98,7 @@ const StudentFeeAssignment = () => {
       for (const student of matrixData?.students || []) {
         const comp = matrixData.components.find(c => c._id === componentId);
         if (comp?.mandatory) continue; // skip mandatory
-        if (!updated[student.studentId]) updated[student.studentId] = { checks: {}, discounts: [] };
+        if (!updated[student.studentId]) updated[student.studentId] = { checks: {}, discounts: [], installments: [] };
         updated[student.studentId] = {
           ...updated[student.studentId],
           checks: { ...(updated[student.studentId].checks || {}), [componentId]: value },
@@ -118,6 +122,7 @@ const StudentFeeAssignment = () => {
           studentId: student.studentId,
           selectedComponentIds,
           discounts: studentRows.discounts || [],
+          installments: studentRows.installments || [],
         };
       });
 
@@ -176,6 +181,55 @@ const StudentFeeAssignment = () => {
     } catch (e) {
       if (e.errorFields) return;
       message.error(e.message || 'Failed to add discount');
+    }
+  };
+
+  const openInstallmentModal = (student) => {
+    const studentRows = rows[student.studentId];
+    const netFee = computedTotals[student.studentId]?.net || 0;
+    let currentInsts = studentRows?.installments || [];
+    
+    if (currentInsts.length === 0) {
+      currentInsts = [{ label: 'Full Payment', amount: netFee, dueDate: null }];
+    }
+
+    instForm.setFieldsValue({
+      installments: currentInsts.map(i => ({
+        ...i,
+        dueDate: i.dueDate ? dayjs(i.dueDate) : null
+      }))
+    });
+    setInstModal({ open: true, studentId: student.studentId, studentName: student.name, netFee });
+  };
+
+  const handleSaveInstallments = async () => {
+    try {
+      const values = await instForm.validateFields();
+      const newInsts = values.installments.map((i, idx) => ({
+        installmentNo: idx + 1,
+        label: i.label,
+        amount: i.amount,
+        dueDate: i.dueDate ? i.dueDate.toISOString() : null,
+      }));
+
+      // Validate sum
+      const sum = newInsts.reduce((a, b) => a + (b.amount || 0), 0);
+      if (sum !== instModal.netFee) {
+        message.error(`Installment sum (Rs.${sum}) must equal net fee (Rs.${instModal.netFee})`);
+        return;
+      }
+
+      setRows(prev => ({
+        ...prev,
+        [instModal.studentId]: {
+          ...prev[instModal.studentId],
+          installments: newInsts
+        }
+      }));
+      setHasChanges(true);
+      setInstModal({ open: false, studentId: null, studentName: '', netFee: 0 });
+    } catch (e) {
+      // form validation failed
     }
   };
 
@@ -300,6 +354,11 @@ const StudentFeeAssignment = () => {
                   <Button size="small" icon={<PlusOutlined />}
                     disabled={s.locked}
                     onClick={() => openDiscountModal(s)}>Disc.</Button>
+                </Tooltip>
+                <Tooltip title="Installments">
+                  <Button size="small" icon={<CalendarOutlined />}
+                    disabled={s.locked}
+                    onClick={() => openInstallmentModal(s)}>Sch.</Button>
                 </Tooltip>
                 {s.locked ? (
                   <Tooltip title="Unlock Profile">
@@ -454,6 +513,52 @@ const StudentFeeAssignment = () => {
           <Form.Item name="reason" label="Reason">
             <Input.TextArea rows={2} placeholder="Reason for discount" />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Installment Schedule Modal */}
+      <Modal
+        title={`Installment Schedule — ${instModal.studentName} (Net Fee: Rs.${instModal.netFee})`}
+        open={instModal.open}
+        onOk={handleSaveInstallments}
+        onCancel={() => setInstModal({ open: false, studentId: null, studentName: '', netFee: 0 })}
+        width={600}
+        okText="Save Schedule"
+        destroyOnClose
+      >
+        <Alert type="info" message={`Ensure the sum of installments matches the net fee exactly.`} style={{ marginBottom: 16 }} />
+        <Form form={instForm}>
+          <Form.List name="installments">
+            {(fields, { add, remove }) => (
+              <>
+                {fields.map(({ key, name, ...restField }) => (
+                  <Row key={key} gutter={8} align="middle" style={{ marginBottom: 8 }}>
+                    <Col span={9}>
+                      <Form.Item {...restField} name={[name, 'label']} rules={[{ required: true, message: 'Label required' }]} style={{ marginBottom: 0 }}>
+                        <Input placeholder="e.g. Term 1" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={7}>
+                      <Form.Item {...restField} name={[name, 'amount']} rules={[{ required: true, message: 'Amount required' }]} style={{ marginBottom: 0 }}>
+                        <InputNumber style={{ width: '100%' }} placeholder="Amount" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={6}>
+                      <Form.Item {...restField} name={[name, 'dueDate']} style={{ marginBottom: 0 }}>
+                        <DatePicker style={{ width: '100%' }} placeholder="Due Date" format="YYYY-MM-DD" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={2}>
+                      <Button type="text" danger icon={<CloseCircleFilled />} onClick={() => remove(name)} />
+                    </Col>
+                  </Row>
+                ))}
+                <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                  Add Installment
+                </Button>
+              </>
+            )}
+          </Form.List>
         </Form>
       </Modal>
     </div>

@@ -7,10 +7,23 @@ const studentSchema = new mongoose.Schema(
       ref: 'Admission',
       default: null,
     },
+    // ─── Admission Number (auto-generated on approval) ────────
+    admissionNumber: {
+      type: String,
+      unique: true,
+      sparse: true,   // allows multiple nulls
+      trim: true,
+      default: null,
+    },
     rollNo: {
       type: String,
       unique: true,
       required: true,
+    },
+    rollNumberMode: {
+      type: String,
+      enum: ['manual', 'auto'],
+      default: 'manual',
     },
     name: {
       type: String,
@@ -82,12 +95,7 @@ const studentSchema = new mongoose.Schema(
       ref: 'AcademicYear',
       default: null,
     },
-    // Fee structure assigned at admission time (for quick lookup)
-    feeStructureId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'FeeStructure',
-      default: null,
-    },
+
   },
   { timestamps: true }
 );

@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import ParentLayout from '@/components/mobile/ParentLayout';
 import { feesAPI, studentAPI, setupAPI } from '@/services/api';
 import useAuthStore from '@/store/authStore';
-import { downloadFeeReceiptPDF } from '@/utils/pdf';
 import dayjs from 'dayjs';
 
 
@@ -103,23 +102,16 @@ const ParentFees = () => {
   }, []);
 
 
-  // ─── PDF Receipt Download ────────────────────────────────
+  // ─── PDF Invoice Download (backend streaming) ──────────
   const handleDownloadPDF = () => {
-    setPdfLoading(true);
-    try {
-      downloadFeeReceiptPDF({
-        student:    student || feeData?.student || { name: user?.name },
-        classInfo:  student?.classId || feeData?.student?.classId || {},
-        summary:    feeData?.summary,
-        invoice:    feeData?.invoice,
-        payments:   feeData?.payments || [],
-        schoolName,
-      });
-    } catch (e) {
-      setMsg({ type: 'error', text: 'PDF generation failed: ' + e.message });
-    } finally {
-      setPdfLoading(false);
+    const invoiceId = feeData?.invoice?._id;
+    if (!invoiceId) {
+      setMsg({ type: 'error', text: 'No invoice found. Contact admin.' });
+      return;
     }
+    // Open PDF inline in new tab — token is embedded in URL
+    const url = feesAPI.getInvoicePdfUrlWithToken(invoiceId);
+    window.open(url, '_blank', 'noopener');
   };
 
   const handlePrint = () => {
@@ -244,6 +236,9 @@ const ParentFees = () => {
   const progressPct = configured && summary.totalFee > 0
     ? Math.min(100, Math.round((summary.totalPaid / summary.totalFee) * 100))
     : 0;
+  // Live penalty from enhanced fees endpoint
+  const livePenalty   = summary?.livePenalty || 0;
+  const daysOverdueNo = summary?.daysOverdue  || 0;
 
   return (
     <ParentLayout title="Fee Details" subtitle="Payments & Invoices">
@@ -393,16 +388,23 @@ const ParentFees = () => {
             </div>
           )}
 
-          {/* Penalty Notice */}
-          {(feeData?.invoice?.penaltyAmount > 0) && (
+          {/* Penalty Notice — shows both stored and live auto-calculated penalty */}
+          {((feeData?.invoice?.penaltyAmount > 0) || livePenalty > 0) && (
             <div className="m-card" style={{ borderLeft: '3px solid #EF4444', background: '#FEF2F2' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#DC2626' }}>⚠️ Late Fee Applied</div>
-                  <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 2 }}>Contact school to enquire about waiver</div>
+                  {daysOverdueNo > 0 && (
+                    <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 2 }}>
+                      {daysOverdueNo} day{daysOverdueNo !== 1 ? 's' : ''} overdue · Contact school to enquire about waiver
+                    </div>
+                  )}
+                  {!daysOverdueNo && (
+                    <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 2 }}>Contact school to enquire about waiver</div>
+                  )}
                 </div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#DC2626' }}>
-                  +₹{(feeData.invoice.penaltyAmount || 0).toLocaleString('en-IN')}
+                  +₹{Math.max(livePenalty, feeData?.invoice?.penaltyAmount || 0).toLocaleString('en-IN')}
                 </div>
               </div>
             </div>

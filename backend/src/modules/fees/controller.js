@@ -20,26 +20,6 @@ class FeesController {
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  FEE STRUCTURE (legacy — unchanged)
-  // ═══════════════════════════════════════════════════════════
-
-  static async createStructure(req, res, next) {
-    try {
-      const { classId, academicYear, academicYearId, totalAmount, installments, feeGroupId, installmentCount, startDate, frequency } = req.body;
-      const structure = await FeesService.createStructure({ classId, academicYear, academicYearId, totalAmount, installments, feeGroupId, installmentCount, startDate, frequency });
-      return ApiResponse.created(res, structure, 'Fee structure saved successfully');
-    } catch (error) { next(error); }
-  }
-
-  static async getStructures(req, res, next) {
-    try {
-      const { classId, academicYear, academicYearId } = req.query;
-      const structures = await FeesService.getStructures({ classId, academicYear, academicYearId });
-      return ApiResponse.success(res, structures, 'Fee structures fetched');
-    } catch (error) { next(error); }
-  }
-
-  // ═══════════════════════════════════════════════════════════
   //  FEE COMPONENTS
   // ═══════════════════════════════════════════════════════════
 
@@ -234,7 +214,7 @@ class FeesController {
       const Student = require('../../models/Student');
       const student = await Student.findById(studentId);
       if (!student) { const AppError = require('../../utils/AppError'); throw new AppError('Student not found', 404); }
-      const invoice = await FeesService.generateInvoice({ studentId: student._id, classId: student.classId, academicYearId: student.academicYearId, feeStructureId: student.feeStructureId });
+      const invoice = await FeesService.generateInvoice({ studentId: student._id, classId: student.classId, academicYearId: student.academicYearId });
       return ApiResponse.created(res, invoice, 'Invoice generated');
     } catch (error) { next(error); }
   }
@@ -346,8 +326,17 @@ class FeesController {
   static async manualPayment(req, res, next) {
     try {
       const { studentId, amount, paymentMode, transactionId, proofUrl, invoiceId } = req.body;
-      const payment = await FeesService.recordManualPayment({ studentId, amount, paymentMode, transactionId, proofUrl, invoiceId });
-      return ApiResponse.created(res, payment, 'Manual payment submitted. Awaiting admin approval.');
+      const payment = await FeesService.recordManualPayment({
+        studentId, amount, paymentMode, transactionId, proofUrl, invoiceId
+      });
+      return ApiResponse.created(res, payment, 'Manual payment submitted for approval');
+    } catch (error) { next(error); }
+  }
+
+  static async regenerateSchedule(req, res, next) {
+    try {
+      const invoice = await FeesService.regenerateSchedule(req.params.id, req.user._id);
+      return ApiResponse.success(res, invoice, 'Invoice schedule regenerated successfully');
     } catch (error) { next(error); }
   }
 
@@ -378,24 +367,49 @@ class FeesController {
   static async generateInvoicePDF(req, res, next) {
     try {
       const { invoiceId } = req.params;
-      const PdfService = require('../../utils/pdfService');
-      const FeeInvoice = require('../../models/FeeInvoice');
-      const SchoolSetting = require('../../models/SchoolSetting');
+      const PdfService      = require('../../utils/pdfService');
+      const PenaltyEngine   = require('../../utils/penaltyEngine');
+      const FeeInvoice      = require('../../models/FeeInvoice');
+      const SchoolSetting   = require('../../models/SchoolSetting');
+      const StudentFeeProfile = require('../../models/StudentFeeProfile');
 
       const invoice = await FeeInvoice.findById(invoiceId)
-        .populate('studentId', 'name rollNo parentName classId')
-        .populate('classId', 'name')
-        .populate('academicYearId', 'name')
-        .populate('feeProfileId');
+        .populate('studentId', 'name rollNo admissionNumber parentName parentPhone parentEmail classId sectionId')
+        .populate('classId',   'name code')
+        .populate('sectionId', 'name')
+        .populate('academicYearId', 'name label')
+        .populate('feeProfileId')
+        .populate('lockedBy', 'name')
+        .populate('waivedBy', 'name')
+        .lean();
 
-      if (!invoice) { const AppError = require('../../utils/AppError'); throw new AppError('Invoice not found', 404); }
+      if (!invoice) {
+        const AppError = require('../../utils/AppError');
+        throw new AppError('Invoice not found', 404);
+      }
+
+      // Also load fee profile if not populated
+      const profile = invoice.feeProfileId
+        || await StudentFeeProfile.findOne({ studentId: invoice.studentId?._id || invoice.studentId })
+             .populate('selectedComponents.componentId', 'name code amount mandatory recurringType lateFeeConfig')
+             .lean();
+
+      invoice.feeProfileId = profile;
 
       const school = await SchoolSetting.findOne().lean() || {};
 
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=Invoice_${invoice.invoiceNumber}.pdf`);
+      // Auto-compute penalty
+      const penaltySummary = PenaltyEngine.computeInvoicePenalty(invoice, profile);
 
-      const doc = PdfService.generateInvoicePDF(invoice, school);
+      // Set response headers — inline for browser preview
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="Invoice_${invoice.invoiceNumber || invoiceId}.pdf"`
+      );
+      res.setHeader('Cache-Control', 'no-store');
+
+      const doc = PdfService.generateInvoicePDF(invoice, school, penaltySummary);
       doc.pipe(res);
       doc.end();
     } catch (error) { next(error); }
@@ -404,19 +418,31 @@ class FeesController {
   static async generateReceipt(req, res, next) {
     try {
       const paymentId = req.params.id;
-      const PdfService = require('../../utils/pdfService');
-      const FeePayment = require('../../models/FeePayment');
-      const FeeInvoice = require('../../models/FeeInvoice');
+      const PdfService    = require('../../utils/pdfService');
+      const FeePayment    = require('../../models/FeePayment');
+      const FeeInvoice    = require('../../models/FeeInvoice');
       const SchoolSetting = require('../../models/SchoolSetting');
 
-      const payment = await FeePayment.findById(paymentId).populate('studentId', 'name rollNo classId').populate('collectedBy', 'name');
-      if (!payment) { const AppError = require('../../utils/AppError'); throw new AppError('Payment not found', 404); }
+      const payment = await FeePayment.findById(paymentId)
+        .populate('studentId', 'name rollNo admissionNumber classId sectionId')
+        .populate('collectedBy', 'name')
+        .lean();
+      if (!payment) {
+        const AppError = require('../../utils/AppError');
+        throw new AppError('Payment not found', 404);
+      }
 
-      const invoice = payment.invoiceId ? await FeeInvoice.findById(payment.invoiceId).populate('classId', 'name') : null;
-      const school  = await SchoolSetting.findOne().lean() || {};
+      const invoice = payment.invoiceId
+        ? await FeeInvoice.findById(payment.invoiceId).populate('classId', 'name').lean()
+        : null;
+      const school = await SchoolSetting.findOne().lean() || {};
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=Receipt_${payment.receiptNumber}.pdf`);
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="Receipt_${payment.receiptNumber || paymentId}.pdf"`
+      );
+      res.setHeader('Cache-Control', 'no-store');
 
       const doc = PdfService.generateReceiptPDF(payment, invoice, school);
       doc.pipe(res);

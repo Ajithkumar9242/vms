@@ -1,16 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import {
   Drawer, Form, Input, Select, DatePicker, Button, Space,
-  Divider, Row, Col, App, Upload, Typography, Collapse,
+  Divider, Row, Col, App, Typography, Collapse,
   InputNumber, Checkbox,
-  Alert,
+  Alert, Upload,
 } from 'antd';
 import {
-  UploadOutlined, CameraOutlined, UserOutlined, HomeOutlined,
+  UploadOutlined, UserOutlined, HomeOutlined,
   BookOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { admissionAPI } from '@/services/api';
+import { admissionAPI, schoolAPI, setupAPI, uploadAPI } from '@/services/api';
+import WebcamCapture from '@/components/WebcamCapture';
 
 const { Title, Text } = Typography;
 const { Panel } = Collapse;
@@ -42,29 +43,31 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
   const [secondLang, setSecondLang] = useState('');
   const isEdit = !!admission;
 
-  // ─── Load dropdowns ───────────────────────────────────────
+  // ─── Load dropdowns on open ───────────────────────────────
   useEffect(() => {
     if (!open) return;
+    let cancelled = false;
     (async () => {
       try {
-        const res = await admissionAPI.getClasses();
-        setClasses((res.data || res).map(c => ({ label: c.name, value: c._id })));
-        // Academic years
-        const token = localStorage.getItem('vms_token');
-        const { default: axios } = await import('axios');
-        const r = await axios.get('/api/setup/academic-years', { headers: { Authorization: `Bearer ${token}` } });
-        setAcademicYears((r.data?.data || r.data || []).map(y => ({ label: y.name, value: y._id })));
-      } catch { /* silent */ }
+        // Classes
+        const classRes = await admissionAPI.getClasses();
+        if (!cancelled) setClasses((classRes.data || classRes).map(c => ({ label: c.name, value: c._id })));
+        // Academic years — use the typed setupAPI (no raw axios needed)
+        const yearRes = await setupAPI.getAcademicYears();
+        if (!cancelled) setAcademicYears((yearRes.data || yearRes).map(y => ({ label: y.name, value: y._id })));
+      } catch { /* silent — dropdowns will be empty */ }
     })();
+    return () => { cancelled = true; };
   }, [open]);
 
   // ─── Populate form for edit ───────────────────────────────
   useEffect(() => {
     if (!open) { form.resetFields(); return; }
     if (admission) {
+      const cid = admission.classId?._id || admission.classId;
       form.setFieldsValue({
         ...admission,
-        classId: admission.classId?._id || admission.classId,
+        classId: cid,
         sectionId: admission.sectionId?._id || admission.sectionId,
         academicYearId: admission.academicYearId?._id || admission.academicYearId,
         dateOfBirth: admission.dateOfBirth ? dayjs(admission.dateOfBirth) : null,
@@ -74,20 +77,24 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
         guardian: admission.guardian || {},
       });
       setSecondLang(admission.secondLanguage || '');
+      // Pre-load sections for the existing class
+      if (cid) handleClassChange(cid, false); // false = don't reset sectionId
     } else {
       form.resetFields();
     }
   }, [open, admission, form]);
 
   // Load sections when class changes
-  const handleClassChange = async (classId) => {
-    form.setFieldValue('sectionId', undefined);
-    if (!classId) { setSections([]); return; }
+  // resetSection=false used in edit mode to preserve the existing sectionId value.
+  const handleClassChange = async (classId, resetSection = true) => {
+    if (resetSection) form.setFieldValue('sectionId', undefined);
+    setSections([]);
+    if (!classId) return;
     try {
-      const token = localStorage.getItem('vms_token');
-      const { default: axios } = await import('axios');
-      const r = await axios.get(`/api/setup/sections?classId=${classId}`, { headers: { Authorization: `Bearer ${token}` } });
-      setSections((r.data?.data || r.data || []).map(s => ({ label: s.name, value: s._id })));
+      // Uses /api/school/sections — the correct canonical endpoint.
+      const res = await schoolAPI.getSections({ classId, limit: 100 });
+      const list = res.data || res;
+      setSections((Array.isArray(list) ? list : list.sections || []).map(s => ({ label: s.name, value: s._id })));
     } catch { setSections([]); }
   };
 
@@ -261,33 +268,25 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
               </Col>
             </Row>
 
-            {/* Photo upload */}
+            {/* Webcam / Photo Capture */}
             <Divider style={{ margin: '8px 0' }}>Student Photo</Divider>
             <Row gutter={12}>
               <Col span={24}>
-                <Form.Item name="studentPhoto" label="">
-                  <div style={{ display: 'flex', gap: 12 }}>
-                    <Upload accept="image/*" maxCount={1} beforeUpload={() => false} listType="picture">
-                      <Button icon={<UploadOutlined />}>Upload Photo</Button>
-                    </Upload>
-                    {/* Camera capture for mobile */}
-                    <label style={{ cursor: 'pointer' }}>
-                      <Button icon={<CameraOutlined />} onClick={() => document.getElementById('camera-input')?.click()}>
-                        Camera
-                      </Button>
-                      <input
-                        id="camera-input"
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        style={{ display: 'none' }}
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) form.setFieldValue('studentPhotoFile', file);
-                        }}
-                      />
-                    </label>
-                  </div>
+                <Form.Item name="studentPhotoUrl" label="">
+                  <WebcamCapture
+                    value={form.getFieldValue('studentPhotoUrl') || admission?.studentPhotoUrl}
+                    onCapture={async (dataUrl, file) => {
+                      try {
+                        // Upload to server
+                        const res = await uploadAPI.upload(file, 'admissions');
+                        const url = res?.data?.url || res?.url || dataUrl;
+                        form.setFieldValue('studentPhotoUrl', url);
+                      } catch {
+                        // Fallback: store base64 in form (will be uploaded on submit)
+                        form.setFieldValue('studentPhotoUrl', dataUrl);
+                      }
+                    }}
+                  />
                 </Form.Item>
               </Col>
             </Row>

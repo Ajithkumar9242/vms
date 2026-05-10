@@ -1,4 +1,5 @@
-const FeeStructure = require('../../models/FeeStructure');
+// FeeStructure is kept as a lazy import ONLY for backward-compat reads on legacy invoices.
+// All NEW operations use StudentFeeProfile as the single source of truth.
 const FeePayment = require('../../models/FeePayment');
 const FeeInvoice = require('../../models/FeeInvoice');
 const Student = require('../../models/Student');
@@ -6,6 +7,7 @@ const AppError = require('../../utils/AppError');
 const mongoose = require('mongoose');
 const ActivityService = require('../activity/service');
 const NotificationService = require('../notification/service');
+const StudentFeeProfile = require('../../models/StudentFeeProfile');
 
 /**
  * Fees Service — business logic for fee structures, invoices, and payments.
@@ -15,130 +17,6 @@ class FeesService {
     return { module: 'fees', status: 'Fees module is operational' };
   }
 
-  // ═══════════════════════════════════════════════════════════
-  //  FEE STRUCTURE
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Build installments array from auto-split parameters.
-   * @param {{ totalAmount, installmentCount, startDate, frequency }} params
-   * @returns {Array} installments
-   */
-  static _autoSplitInstallments({ totalAmount, installmentCount, startDate, frequency = 'monthly' }) {
-    if (!installmentCount || installmentCount < 1) {
-      throw new AppError('installmentCount must be >= 1', 400);
-    }
-    if (!startDate) throw new AppError('startDate is required for auto split', 400);
-    if (!totalAmount || totalAmount <= 0) throw new AppError('totalAmount must be > 0', 400);
-
-    const base = Math.floor(totalAmount / installmentCount);
-    const rem = totalAmount - base * installmentCount; // rounding remainder
-    const months = frequency === 'quarterly' ? 3 : 1;
-    const start = new Date(startDate);
-    if (isNaN(start.getTime())) throw new AppError('Invalid startDate', 400);
-
-    return Array.from({ length: installmentCount }, (_, i) => {
-      const due = new Date(start);
-      due.setMonth(due.getMonth() + i * months);
-      const amount = i === installmentCount - 1 ? base + rem : base; // last absorbs rounding
-      const ordinals = ['1st', '2nd', '3rd'];
-      const label = ordinals[i] || `${i + 1}th`;
-      return {
-        name: `${label} Installment`,
-        amount,
-        dueDate: due,
-        paidAmount: 0,
-        status: 'pending',
-      };
-    });
-  }
-
-  /**
-   * Create or update a fee structure for a class + academic year.
-   * Accepts:
-   *   A) Manual installments array
-   *   B) Auto-split params: { installmentCount, startDate, frequency }
-   */
-  static async createStructure(data) {
-    const {
-      classId, academicYear, academicYearId,
-      totalAmount, installments,
-      feeGroupId,
-      installmentCount, startDate, frequency,
-    } = data;
-
-    if (!classId) throw new AppError('classId is required', 400);
-    if (!totalAmount) throw new AppError('totalAmount is required', 400);
-
-    const SetupService = require('../setup/service');
-    const resolvedYearId = await SetupService.resolveAcademicYearId(academicYearId || academicYear);
-
-    // ── FeeGroup validation (optional but must exist if provided) ──
-    if (feeGroupId) {
-      const FeeGroup = require('../../models/FeeGroup');
-      const grp = await FeeGroup.findById(feeGroupId);
-      if (!grp) throw new AppError('FeeGroup not found', 404);
-    }
-
-    // ── Resolve installments ───────────────────────────────────
-    let resolvedInstallments = installments;
-
-    if (!resolvedInstallments || resolvedInstallments.length === 0) {
-      // Auto-split mode
-      if (installmentCount && installmentCount > 0) {
-        resolvedInstallments = FeesService._autoSplitInstallments({
-          totalAmount,
-          installmentCount,
-          startDate,
-          frequency,
-        });
-      } else {
-        // Single-installment fallback — no breakdown
-        resolvedInstallments = [];
-      }
-    } else {
-      // Manual installments: validate sum
-      const sum = resolvedInstallments.reduce((acc, inst) => acc + Number(inst.amount), 0);
-      if (Math.abs(sum - totalAmount) > 1) {
-        throw new AppError(
-          `Installment amounts (₹${sum}) must equal totalAmount (₹${totalAmount})`,
-          400
-        );
-      }
-      // Ensure paidAmount/status defaults for new installments
-      resolvedInstallments = resolvedInstallments.map((inst) => ({
-        ...inst,
-        paidAmount: inst.paidAmount || 0,
-        status: inst.status || 'pending',
-      }));
-    }
-
-    const structure = await FeeStructure.findOneAndUpdate(
-      { classId, academicYearId: resolvedYearId },
-      {
-        classId,
-        academicYearId: resolvedYearId,
-        totalAmount,
-        installments: resolvedInstallments,
-        feeGroupId: feeGroupId || null,
-      },
-      { new: true, upsert: true, runValidators: true }
-    ).populate('classId', 'name code').populate('feeGroupId', 'name');
-
-    return structure;
-  }
-
-  static async getStructures(filters = {}) {
-    const query = {};
-    if (filters.classId) query.classId = filters.classId;
-    if (filters.academicYearId) query.academicYearId = filters.academicYearId;
-    else if (filters.academicYear) query.academicYearId = filters.academicYear;
-
-    return FeeStructure.find(query)
-      .populate('classId', 'name code')
-      .populate('feeGroupId', 'name')
-      .sort({ createdAt: -1 });
-  }
 
   // ═══════════════════════════════════════════════════════════
   //  FEE INVOICE (core)
@@ -146,61 +24,91 @@ class FeesService {
 
   /**
    * Generate (or retrieve existing) FeeInvoice for a student.
-   * Called automatically when student is created.
-   * Safe to call multiple times — upsert ensures one invoice per student/year.
+   * SOURCE OF TRUTH: StudentFeeProfile — installments, amounts, discounts.
+   * Safe to call multiple times — idempotent (one invoice per student/year).
    *
-   * @param {{ studentId, classId, academicYearId, feeStructureId }} params
+   * @param {{ studentId, classId, academicYearId }} params
    * @returns {FeeInvoice}
    */
-  static async generateInvoice({ studentId, classId, academicYearId, feeStructureId }) {
-    // Check for existing invoice
+  static async generateInvoice({ studentId, classId, academicYearId }) {
+    // Idempotent — return existing if present
     const existing = await FeeInvoice.findOne({ studentId, academicYearId });
     if (existing) return existing;
 
-    // Resolve fee structure
-    let structure = null;
-    if (feeStructureId) {
-      structure = await FeeStructure.findById(feeStructureId);
-    }
-    if (!structure) {
-      structure = await FeeStructure.findOne({ classId, academicYearId }).sort({ createdAt: -1 });
-    }
-    if (!structure) {
+    // Resolve the StudentFeeProfile (must exist before generating invoice)
+    const profile = await StudentFeeProfile.findOne({ studentId, academicYearId }).sort({ createdAt: -1 });
+    if (!profile) {
       throw new AppError(
-        'Fee structure not found for this class and academic year. Please create it in Setup → Fee Setup.',
+        'No fee profile found for this student. Please assign fee components first in Fees → Assign Fees.',
         400
       );
-
     }
-    if (!structure.totalAmount || structure.totalAmount <= 0) {
-      throw new AppError('Invalid fee structure: totalAmount must be greater than 0', 400);
+    if (!profile.grossFee || profile.grossFee <= 0) {
+      throw new AppError('Fee profile has no components assigned. Total fee is Rs.0.', 400);
     }
 
-    // Build feeItems from installments
-    const feeItems = (structure.installments || []).map((inst) => ({
-      name: inst.name,
-      amount: inst.amount,
-      dueDate: inst.dueDate,
+    // ── Build invoice installments from profile schedule ──────────────────
+    const now = new Date();
+    const scheduleInstallments = (profile.installments || []).map((inst, i) => ({
+      installmentNo: inst.installmentNo || i + 1,
+      label:         inst.label,
+      amount:        inst.amount,
+      dueDate:       inst.dueDate || null,
+      paidAmount:    0,
+      status:        inst.dueDate && new Date(inst.dueDate) < now ? 'overdue' : 'pending',
     }));
 
-    // First installment due date or null
-    const dueDate = feeItems.length > 0 ? feeItems[0].dueDate : null;
+    // ── Build legacy feeItems (backward-compat) ───────────────────────────
+    const feeItems = (profile.selectedComponents || []).map(c => ({
+      name:   c.name,
+      amount: c.amount,
+    }));
+
+    // ── Compute due dates ─────────────────────────────────────────────────
+    const dueDates = scheduleInstallments
+      .filter(i => i.dueDate)
+      .map(i => new Date(i.dueDate))
+      .sort((a, b) => a - b);
+    const dueDate    = dueDates[0] || null;
+    const nextDueDate = FeesService._computeNextDueDate(scheduleInstallments);
+
+    const totalAmount    = profile.grossFee;
+    const discountAmount = profile.discountAmt;
 
     const invoice = await FeeInvoice.create({
       studentId,
       classId,
-      academicYearId: academicYearId || null,
-      feeStructureId: structure._id || null,
+      academicYearId:  academicYearId || null,
+      feeProfileId:    profile._id,
       feeItems,
-      totalAmount: structure.totalAmount,
-      paidAmount: 0,
-      dueAmount: structure.totalAmount,
-      status: structure.totalAmount > 0 ? 'unpaid' : 'paid',
+      installments:    scheduleInstallments,
+      totalAmount,
+      discountAmount,
+      paidAmount:      0,
+      dueAmount:       Math.max(0, totalAmount - discountAmount),
+      status:          'unpaid',
       dueDate,
+      nextDueDate,
     });
 
     return invoice;
   }
+
+  /**
+   * Compute the next upcoming unpaid installment dueDate from an installments array.
+   * Returns null if no future unpaid installments exist.
+   * @param {Array} installments
+   * @returns {Date|null}
+   */
+  static _computeNextDueDate(installments) {
+    if (!Array.isArray(installments) || !installments.length) return null;
+    const now = new Date();
+    const upcoming = installments
+      .filter(i => i.status !== 'paid' && i.dueDate && new Date(i.dueDate) >= now)
+      .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+    return upcoming[0]?.dueDate || null;
+  }
+
 
   /**
    * Get invoice for a student (+ academic year).
@@ -209,7 +117,7 @@ class FeesService {
     const query = { studentId };
     if (academicYearId && mongoose.isValidObjectId(academicYearId)) query.academicYearId = academicYearId;
     return FeeInvoice.findOne(query)
-      .populate('feeStructureId', 'totalAmount installments')
+      .populate('feeProfileId')
       .populate('classId', 'name')
       .populate('academicYearId', 'name')
       .sort({ createdAt: -1 });
@@ -250,19 +158,17 @@ class FeesService {
         );
       }
     } else {
-      // Fallback to FeeStructure (backward compat for students without invoice)
-      const feeStructure = await FeeStructure.findOne({ classId: student.classId?._id })
-        .sort({ createdAt: -1 }).lean();
-      if (feeStructure) {
-        const existingPayments = await FeePayment.find({ studentId }).lean();
-        const totalPaid = existingPayments.reduce((sum, p) => sum + p.amount, 0);
-        if (totalPaid + amount > feeStructure.totalAmount) {
-          const maxAllowed = feeStructure.totalAmount - totalPaid;
-          throw new AppError(
-            `Cannot overpay. Total fee: ₹${feeStructure.totalAmount}, Already paid: ₹${totalPaid}. Max allowed: ₹${maxAllowed}`,
-            400
-          );
-        }
+    // Fallback to FeePayments (backward compat for students without invoice)
+      const existingPayments = await FeePayment.find({ studentId }).lean();
+      const totalPaid = existingPayments.reduce((sum, p) => sum + p.amount, 0);
+      const feeProfile = await StudentFeeProfile.findOne({ studentId }).sort({ createdAt: -1 }).lean();
+      const maxFee = feeProfile ? feeProfile.netFee || feeProfile.grossFee || 0 : 0;
+      if (maxFee > 0 && totalPaid + amount > maxFee) {
+        const maxAllowed = maxFee - totalPaid;
+        throw new AppError(
+          `Cannot overpay. Total fee: Rs.${maxFee}, Already paid: Rs.${totalPaid}. Max allowed: Rs.${maxAllowed}`,
+          400
+        );
       }
     }
 
@@ -288,8 +194,11 @@ class FeesService {
       await invoice.save();
     }
 
-    // ─── Apply payment to installments in FeeStructure ────
-    await FeesService._applyPaymentToInstallments(student.classId?._id, invoice?.academicYearId, amount);
+    // ─── Apply payment to invoice installments ─────────────────
+    // (handled inline by recordInstallmentPayment; legacy path skips)
+    if (invoice && invoice.installments?.length > 0) {
+      // Already handled by invoice.save() above — installments tracked per invoice
+    }
 
     // Activity + notification (non-blocking)
     FeesService._triggerPaymentActivity(student, amount, paymentMode, payment.receiptNumber);
@@ -298,54 +207,8 @@ class FeesService {
     return { payment, invoice };
   }
 
-  /**
-   * Apply payment amount to earliest pending/partial installments in the FeeStructure.
-   * Mutates FeeStructure installment paidAmount and status in-place.
-   * @param {ObjectId} classId
-   * @param {ObjectId} academicYearId
-   * @param {number} amount
-   */
-  static async _applyPaymentToInstallments(classId, academicYearId, amount) {
-    if (!classId) return;
-    try {
-      const query = { classId };
-      if (academicYearId && mongoose.isValidObjectId(academicYearId?.toString()))
-        query.academicYearId = academicYearId;
-
-      const structure = await FeeStructure.findOne(query).sort({ createdAt: -1 });
-      if (!structure || !structure.installments?.length) return;
-
-      let remaining = amount;
-      const today = new Date();
-
-      for (const inst of structure.installments) {
-        if (remaining <= 0) break;
-        if (inst.status === 'paid') continue;
-
-        const outstanding = inst.amount - inst.paidAmount;
-        const toApply = Math.min(remaining, outstanding);
-        inst.paidAmount += toApply;
-        remaining -= toApply;
-
-        if (inst.paidAmount >= inst.amount) {
-          inst.status = 'paid';
-        } else if (inst.paidAmount > 0) {
-          inst.status = 'partial';
-        } else if (inst.dueDate && today > new Date(inst.dueDate)) {
-          inst.status = 'overdue';
-        } else {
-          inst.status = 'pending';
-        }
-      }
-
-      // Bypass the sum-validation hook on partial updates
-      await FeeStructure.findByIdAndUpdate(structure._id, {
-        installments: structure.installments,
-      });
-    } catch (e) {
-      console.error('Installment update failed (non-blocking):', e.message);
-    }
-  }
+  // _applyPaymentToInstallments now handled by recordInstallmentPayment directly on invoice.installments
+  // Legacy FeeStructure installment update removed.
 
   static _triggerPaymentActivity(student, amount, paymentMode, receiptNumber) {
     ActivityService.log({
@@ -376,7 +239,7 @@ class FeesService {
 
   /**
    * Get full fee details for a student — invoice + payments + installment breakdown + summary.
-   * Returns { student, invoice, feeStructure, payments, installments, summary }
+   * Returns { student, invoice, feeProfile, payments, installments, summary }
    */
   static async getStudentFees(studentId) {
     if (!mongoose.isValidObjectId(studentId)) throw new AppError('Invalid student ID format', 400);
@@ -386,63 +249,61 @@ class FeesService {
       .lean();
     if (!student) throw new AppError('Student not found', 404);
 
-    // Fetch invoice (prefer invoice-based data)
+    // Fetch invoice
     const invoice = await FeeInvoice.findOne({ studentId })
-      .populate('feeStructureId', 'totalAmount installments feeGroupId')
+      .populate('feeProfileId')
       .populate('classId', 'name')
       .populate('academicYearId', 'name')
       .sort({ createdAt: -1 })
       .lean();
 
-    // Fetch fee structure (fallback or for installment detail)
-    const feeStructure = invoice?.feeStructureId
-      || await FeeStructure.findOne({ classId: student.classId._id })
-        .sort({ createdAt: -1 })
-        .populate('feeGroupId', 'name')
-        .lean();
+    // Fetch StudentFeeProfile for fallback
+    const feeProfile = invoice?.feeProfileId
+      || await StudentFeeProfile.findOne({ studentId }).sort({ createdAt: -1 }).lean();
 
     // Fetch all approved payments
     const payments = await FeePayment.find({ studentId, status: { $ne: 'rejected' } })
       .sort({ paidAt: -1 }).lean();
 
-    // ── Installment breakdown ──────────────────────────────
-    const rawInstallments = feeStructure?.installments || [];
+    // ── Installment breakdown — from invoice.installments (canonical) ──────
+    const rawInstallments = invoice?.installments || [];
     const installments = rawInstallments.map((inst) => ({
-      _id: inst._id,
-      name: inst.name,
-      amount: inst.amount,
-      dueDate: inst.dueDate,
+      _id:        inst._id,
+      label:      inst.label,
+      name:       inst.label,    // backward-compat alias
+      amount:     inst.amount,
+      dueDate:    inst.dueDate,
       paidAmount: inst.paidAmount || 0,
-      due: Math.max(0, inst.amount - (inst.paidAmount || 0)),
-      status: inst.status || (inst.paidAmount >= inst.amount ? 'paid' : inst.paidAmount > 0 ? 'partial' : 'pending'),
-      overdue: inst.dueDate && new Date(inst.dueDate) < new Date() && inst.status !== 'paid',
+      due:        Math.max(0, inst.amount - (inst.paidAmount || 0)),
+      status:     inst.status || 'pending',
+      overdue:    inst.dueDate && new Date(inst.dueDate) < new Date() && inst.status !== 'paid',
     }));
 
-    // Compute summary from invoice (preferred) or from structure+payments
+    // Compute summary from invoice (preferred) or from feeProfile+payments
     let totalFee, totalPaid, totalDue, status;
     if (invoice) {
-      totalFee = invoice.totalAmount;
+      totalFee  = invoice.totalAmount;
       totalPaid = invoice.paidAmount;
-      totalDue = invoice.dueAmount;
-      status = invoice.status === 'paid' ? 'Paid' : invoice.status === 'partial' ? 'Partial' : 'Pending';
+      totalDue  = invoice.dueAmount;
+      status    = invoice.status === 'paid' ? 'Paid' : invoice.status === 'partial' ? 'Partial' : 'Pending';
     } else {
-      totalFee = feeStructure ? feeStructure.totalAmount : 0;
+      totalFee  = feeProfile ? (feeProfile.netFee || feeProfile.grossFee || 0) : 0;
       totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-      totalDue = Math.max(0, totalFee - totalPaid);
-      if (totalPaid >= totalFee && totalFee > 0) status = 'Paid';
-      else if (totalPaid > 0) status = 'Partial';
-      else status = 'Pending';
+      totalDue  = Math.max(0, totalFee - totalPaid);
+      status    = totalPaid >= totalFee && totalFee > 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : 'Pending';
     }
 
     return {
       student,
       invoice,
-      feeStructure,
+      feeProfile,
+      feeStructure: null,  // backward-compat key — always null now
       payments,
       installments,
       summary: { totalFee, totalPaid, totalDue, status },
     };
   }
+
 
   // ═══════════════════════════════════════════════════════════
   //  DUE LIST
@@ -453,33 +314,44 @@ class FeesService {
    * Filtered by classId, status (unpaid|partial|all).
    */
   static async getDueList(filters = {}) {
-    const query = { status: { $in: ['unpaid', 'partial'] } };
+    const query = { status: { $in: ['unpaid', 'partial', 'overdue'] } };
     if (filters.status === 'unpaid') query.status = 'unpaid';
     else if (filters.status === 'partial') query.status = 'partial';
+    else if (filters.status === 'overdue') query.status = 'overdue';
 
     if (filters.classId && mongoose.isValidObjectId(filters.classId)) {
       query.classId = filters.classId;
     }
 
+    const PenaltyEngine = require('../../utils/penaltyEngine');
+
     const invoices = await FeeInvoice.find(query)
-      .populate('studentId', 'name rollNo parentPhone')
+      .populate('studentId', 'name rollNo admissionNumber parentPhone')
       .populate('classId', 'name')
       .populate('academicYearId', 'name')
       .sort({ dueAmount: -1 })
       .lean();
 
-    return invoices.map((inv) => ({
-      invoiceId: inv._id,
-      invoiceNumber: inv.invoiceNumber,
-      student: inv.studentId,
-      class: inv.classId,
-      academicYear: inv.academicYearId,
-      totalAmount: inv.totalAmount,
-      paidAmount: inv.paidAmount,
-      dueAmount: inv.dueAmount,
-      status: inv.status,
-      dueDate: inv.dueDate,
-    }));
+    return invoices.map((inv) => {
+      const penalty = PenaltyEngine.computeInvoicePenalty(inv, null);
+      return {
+        invoiceId:    inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        student:      inv.studentId,
+        class:        inv.classId,
+        academicYear: inv.academicYearId,
+        totalAmount:  inv.totalAmount,
+        paidAmount:   inv.paidAmount,
+        dueAmount:    inv.dueAmount,
+        storedPenalty: inv.penaltyAmount || 0,
+        livePenalty:  penalty.totalPenalty,
+        totalPayable: (inv.dueAmount || 0) + penalty.totalPenalty,
+        daysOverdue:  penalty.daysOverdue,
+        status:       inv.status,
+        dueDate:      inv.dueDate,
+        isOverdue:    PenaltyEngine.isOverdue(inv.dueDate, inv.status),
+      };
+    });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -487,8 +359,7 @@ class FeesService {
   // ═══════════════════════════════════════════════════════════
 
   /**
-   * Fee overview: if invoices exist use them, otherwise fall back to
-   * per-student FeeStructure+FeePayment computation.
+   * Fee overview: invoice-based. Falls back to StudentFeeProfile if no invoice.
    */
   static async getFeeOverview(filters = {}) {
     const studentQuery = { isActive: true };
@@ -502,23 +373,16 @@ class FeesService {
     if (!students.length) return [];
 
     const studentIds = students.map((s) => s._id);
-    const classIds = [...new Set(students.map((s) => s.classId?._id?.toString()))];
 
-    // Load invoices for these students
+    // Load invoices
     const invoices = await FeeInvoice.find({ studentId: { $in: studentIds } }).lean();
     const invoiceMap = {};
-    for (const inv of invoices) {
-      invoiceMap[inv.studentId.toString()] = inv;
-    }
+    for (const inv of invoices) invoiceMap[inv.studentId.toString()] = inv;
 
-    // Load fee structures for fallback
-    const structures = await FeeStructure.find({ classId: { $in: classIds } })
-      .sort({ createdAt: -1 }).lean();
-    const structureMap = {};
-    for (const s of structures) {
-      const key = s.classId.toString();
-      if (!structureMap[key]) structureMap[key] = s;
-    }
+    // Load profiles for fallback (no FeeStructure)
+    const profiles = await StudentFeeProfile.find({ studentId: { $in: studentIds } }).lean();
+    const profileMap = {};
+    for (const p of profiles) profileMap[p.studentId.toString()] = p;
 
     // Load payments for fallback
     const payments = await FeePayment.find({ studentId: { $in: studentIds } }).lean();
@@ -529,37 +393,39 @@ class FeesService {
     }
 
     return students.map((student) => {
-      const inv = invoiceMap[student._id.toString()];
+      const inv     = invoiceMap[student._id.toString()];
+      const profile = profileMap[student._id.toString()];
       let totalFee, totalPaid, totalDue, status;
 
       if (inv) {
-        totalFee = inv.totalAmount;
+        totalFee  = inv.totalAmount;
         totalPaid = inv.paidAmount;
-        totalDue = inv.dueAmount;
-        status = inv.status === 'paid' ? 'Paid' : inv.status === 'partial' ? 'Partial' : 'Pending';
-      } else {
-        const struct = structureMap[student.classId?._id?.toString()];
-        totalFee = struct ? struct.totalAmount : 0;
+        totalDue  = inv.dueAmount;
+        status    = inv.status === 'paid' ? 'Paid' : inv.status === 'partial' ? 'Partial' : 'Pending';
+      } else if (profile) {
+        totalFee  = profile.netFee || profile.grossFee || 0;
         totalPaid = paidMap[student._id.toString()] || 0;
-        totalDue = Math.max(0, totalFee - totalPaid);
-        if (totalPaid >= totalFee && totalFee > 0) status = 'Paid';
-        else if (totalPaid > 0) status = 'Partial';
-        else status = 'Pending';
+        totalDue  = Math.max(0, totalFee - totalPaid);
+        status    = totalPaid >= totalFee && totalFee > 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : 'Pending';
+      } else {
+        totalFee = totalPaid = totalDue = 0;
+        status   = 'Pending';
       }
 
       return {
-        _id: student._id,
-        name: student.name,
-        rollNo: student.rollNo,
-        className: student.classId?.name || '—',
-        classId: student.classId?._id,
-        invoiceId: inv?._id || null,
+        _id:           student._id,
+        name:          student.name,
+        rollNo:        student.rollNo,
+        className:     student.classId?.name || '—',
+        classId:       student.classId?._id,
+        invoiceId:     inv?._id || null,
         invoiceNumber: inv?.invoiceNumber || null,
         totalFee,
         totalPaid,
         totalDue,
         status,
-        dueDate: inv?.dueDate || null,
+        dueDate:     inv?.dueDate || null,
+        nextDueDate: inv?.nextDueDate || null,
       };
     });
   }
@@ -569,10 +435,8 @@ class FeesService {
   // ═══════════════════════════════════════════════════════════
 
   /**
-   * Generate invoices for ALL students in a class (+ optional section).
+   * Generate invoices for ALL students in a class that have a fee profile.
    * Idempotent — skips students who already have an invoice for the academic year.
-   * @param {{ classId, academicYearId, sectionId? }} params
-   * @returns {{ generated: number, skipped: number, total: number }}
    */
   static async applyStructureToClass({ classId, academicYearId, sectionId }) {
     if (!classId) throw new AppError('classId is required', 400);
@@ -580,36 +444,23 @@ class FeesService {
     const SetupService = require('../setup/service');
     const resolvedYearId = await SetupService.resolveAcademicYearId(academicYearId);
 
-    // Find the fee structure
-    const structure = await FeeStructure.findOne({ classId, academicYearId: resolvedYearId })
-      .sort({ createdAt: -1 });
-    if (!structure) {
-      throw new AppError('No fee structure found for this class and academic year', 404);
-    }
-
-    // Find matching students
     const studentQuery = { classId, isActive: true };
     if (sectionId && mongoose.isValidObjectId(sectionId)) studentQuery.sectionId = sectionId;
 
-    const students = await Student.find(studentQuery).select('_id classId academicYearId feeStructureId').lean();
+    const students = await Student.find(studentQuery).select('_id classId').lean();
     if (!students.length) return { generated: 0, skipped: 0, total: 0 };
 
-    let generated = 0;
-    let skipped = 0;
+    let generated = 0, skipped = 0;
 
     for (const student of students) {
       try {
-        const existing = await FeeInvoice.findOne({
-          studentId: student._id,
-          academicYearId: resolvedYearId,
-        });
+        const existing = await FeeInvoice.findOne({ studentId: student._id, academicYearId: resolvedYearId });
         if (existing) { skipped++; continue; }
 
         await FeesService.generateInvoice({
-          studentId: student._id,
-          classId: student.classId,
+          studentId:      student._id,
+          classId:        student.classId,
           academicYearId: resolvedYearId,
-          feeStructureId: structure._id,
         });
         generated++;
       } catch (e) {
@@ -868,8 +719,9 @@ class FeesService {
       }
     }
 
-    // Update invoice totals
-    invoice.paidAmount = (invoice.paidAmount || 0) + amount;
+    // Update invoice totals + advance nextDueDate to next unpaid installment
+    invoice.paidAmount  = (invoice.paidAmount || 0) + amount;
+    invoice.nextDueDate = FeesService._computeNextDueDate(invoice.installments);
     await invoice.save(); // pre-save hook updates dueAmount + status
 
     // Notify parent
@@ -894,7 +746,7 @@ class FeesService {
   // ═══════════════════════════════════════════════════════════
 
   /**
-   * Enhanced getStudentFees — includes StudentFeeProfile if it exists.
+   * Enhanced getStudentFees — includes StudentFeeProfile + auto-penalty.
    * Backward compatible with old class-wise invoice system.
    */
   static async getEnhancedStudentFees(studentId) {
@@ -902,7 +754,7 @@ class FeesService {
 
     const baseData = await FeesService.getStudentFees(studentId);
 
-    // Also try to load the StudentFeeProfile
+    // Load the StudentFeeProfile
     const StudentFeeProfile = require('../../models/StudentFeeProfile');
     const profile = await StudentFeeProfile.findOne({ studentId })
       .populate('selectedComponents.componentId', 'name code amount mandatory recurringType lateFeeConfig')
@@ -910,7 +762,135 @@ class FeesService {
       .populate('lockedBy', 'name')
       .lean();
 
-    return { ...baseData, feeProfile: profile || null };
+    // Auto-compute live penalty (non-destructive — does NOT write to DB)
+    const PenaltyEngine = require('../../utils/penaltyEngine');
+    const penaltySummary = PenaltyEngine.computeInvoicePenalty(
+      baseData.invoice || {},
+      profile
+    );
+
+    // Enrich summary with live penalty
+    const summary = { ...baseData.summary };
+    if (penaltySummary.totalPenalty > 0) {
+      const storedPenalty = baseData.invoice?.penaltyAmount || 0;
+      const effectivePenalty = Math.max(penaltySummary.totalPenalty, storedPenalty);
+      summary.livePenalty      = penaltySummary.totalPenalty;
+      summary.effectivePenalty = effectivePenalty;
+      summary.daysOverdue      = penaltySummary.daysOverdue;
+      summary.penaltyBreakdown = penaltySummary.breakdown;
+      summary.totalPayable     = (summary.totalDue || 0) + effectivePenalty;
+      summary.penaltyDetails   = penaltySummary.details;
+    } else {
+      summary.livePenalty    = 0;
+      summary.effectivePenalty = baseData.invoice?.penaltyAmount || 0;
+      summary.daysOverdue    = penaltySummary.daysOverdue;
+      summary.totalPayable   = (summary.totalDue || 0) + (baseData.invoice?.penaltyAmount || 0);
+    }
+
+    return { ...baseData, feeProfile: profile || null, penaltySummary, summary };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  REGENERATE SCHEDULE
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Regenerate the installment schedule for an invoice from its StudentFeeProfile.
+   * SOURCE OF TRUTH: StudentFeeProfile.installments
+   * Preserves already-paid amounts by index (primary), then label (fallback).
+   * @param {string} invoiceId
+   * @param {string} userId
+   */
+  static async regenerateSchedule(invoiceId, userId) {
+    const invoice = await FeeInvoice.findById(invoiceId);
+    if (!invoice) throw new AppError('Invoice not found', 404);
+    if (invoice.locked) throw new AppError('Invoice is locked. Cannot regenerate schedule.', 403);
+
+    // Resolve StudentFeeProfile
+    const profile = await StudentFeeProfile.findOne({
+      studentId:      invoice.studentId,
+      academicYearId: invoice.academicYearId,
+    }).sort({ createdAt: -1 });
+
+    if (!profile) {
+      throw new AppError(
+        'No fee profile found for this student. Assign fee components first in Fees → Assign Fees.',
+        400
+      );
+    }
+
+    if (!profile.installments || profile.installments.length === 0) {
+      throw new AppError('Fee profile has no installment schedule defined.', 400);
+    }
+
+    // Map existing paid amounts by index and label to preserve payment history
+    const existingByIndex = new Map();
+    const existingByLabel = new Map();
+    (invoice.installments || []).forEach((inst, i) => {
+      if (inst.paidAmount > 0) {
+        existingByIndex.set(i, inst.paidAmount);
+        existingByLabel.set((inst.label || '').trim().toLowerCase(), inst.paidAmount);
+      }
+    });
+
+    const now = new Date();
+    const newInstallments = profile.installments.map((inst, i) => {
+      const labelKey    = (inst.label || '').trim().toLowerCase();
+      const previousPaid = existingByIndex.has(i)
+        ? existingByIndex.get(i)
+        : (existingByLabel.get(labelKey) || 0);
+
+      return {
+        installmentNo: inst.installmentNo || i + 1,
+        label:         inst.label,
+        amount:        inst.amount,
+        dueDate:       inst.dueDate || null,
+        paidAmount:    previousPaid,
+        status:        previousPaid >= inst.amount ? 'paid'
+                     : previousPaid > 0            ? 'partial'
+                     : inst.dueDate && new Date(inst.dueDate) < now ? 'overdue'
+                     : 'pending',
+      };
+    });
+
+    // Rebuild legacy feeItems from selectedComponents
+    const newFeeItems = (profile.selectedComponents || []).map(c => ({
+      name:   c.name,
+      amount: c.amount,
+    }));
+
+    const dueDates = newInstallments
+      .filter(i => i.dueDate)
+      .map(i => new Date(i.dueDate))
+      .sort((a, b) => a - b);
+    const dueDate    = dueDates[0] || null;
+    const nextDueDate = FeesService._computeNextDueDate(newInstallments);
+
+    invoice.installments   = newInstallments;
+    invoice.feeItems       = newFeeItems;
+    invoice.totalAmount    = profile.grossFee;
+    invoice.discountAmount = profile.discountAmt;
+    invoice.feeProfileId   = profile._id;
+    invoice.dueDate        = dueDate;
+    invoice.nextDueDate    = nextDueDate;
+
+    // Recalculate invoice-level dueAmount and status
+    const net = invoice.totalAmount + (invoice.penaltyAmount || 0) - (invoice.discountAmount || 0);
+    invoice.dueAmount = Math.max(0, net - (invoice.paidAmount || 0));
+    invoice.status = invoice.paidAmount >= net && net > 0 ? 'paid'
+                   : invoice.paidAmount > 0 ? 'partial'
+                   : 'unpaid';
+
+    await invoice.save();
+
+    ActivityService.log({
+      studentId: invoice.studentId,
+      action:    `Installment schedule regenerated for invoice ${invoice.invoiceNumber}`,
+      module:    'fee',
+      metadata:  { invoiceId, userId },
+    }).catch(() => {});
+
+    return invoice;
   }
 }
 

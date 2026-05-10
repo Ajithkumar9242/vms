@@ -4,8 +4,7 @@ const AcademicTerm = require('../../models/AcademicTerm');
 const ClassConfig = require('../../models/ClassConfig');
 const ClassGroup = require('../../models/ClassGroup');
 const SchoolSetting = require('../../models/SchoolSetting');
-const FeeGroup = require('../../models/FeeGroup');
-const FeeStructure = require('../../models/FeeStructure');
+
 const GradeConfig = require('../../models/GradeConfig');
 const AttendanceConfig = require('../../models/AttendanceConfig');
 const PaymentSetting = require('../../models/PaymentSetting');
@@ -107,7 +106,7 @@ class SetupService {
   // ═══════════════════════════════════════════════════════════
 
   static async upsertClassConfig(data) {
-    const { academicYearId, classId, sections, subjects, feeStructureId } = data;
+    const { academicYearId, classId, sections, subjects } = data;
 
     // ── Required fields ───────────────────────────────────────
     if (!academicYearId || !mongoose.isValidObjectId(academicYearId)) {
@@ -171,7 +170,6 @@ class SetupService {
     if (config) {
       config.sections      = uniqueSectionIds;
       config.subjects      = uniqueSubjectIds;
-      if (feeStructureId !== undefined) config.feeStructureId = feeStructureId || null;
       await config.save();
     } else {
       config = await ClassConfig.create({
@@ -179,7 +177,6 @@ class SetupService {
         classId,
         sections:      uniqueSectionIds,
         subjects:      uniqueSubjectIds,
-        feeStructureId: feeStructureId || null,
       });
     }
 
@@ -304,52 +301,6 @@ class SetupService {
     const group = await ClassGroup.findByIdAndDelete(id);
     if (!group) throw new AppError('Class Group not found', 404);
     return { deleted: true };
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  //  FEE GROUPS
-  // ═══════════════════════════════════════════════════════════
-
-  static async createFeeGroup(data) {
-    return FeeGroup.create(data);
-  }
-
-  static async getFeeGroups() {
-    return FeeGroup.find({ isActive: true }).sort({ name: 1 });
-  }
-
-  static async updateFeeGroup(id, data) {
-    if (!mongoose.isValidObjectId(id)) throw new AppError('Invalid ID', 400);
-    const group = await FeeGroup.findByIdAndUpdate(id, data, { new: true, runValidators: true });
-    if (!group) throw new AppError('Fee Group not found', 404);
-    return group;
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  //  FEE STRUCTURE (admin side — by group)
-  // ═══════════════════════════════════════════════════════════
-
-  static async upsertFeeStructure(data) {
-    const { academicYearId: rawYearId, classId, feeGroupId, totalAmount, installments } = data;
-    const academicYearId = await SetupService.resolveAcademicYearId(rawYearId);
-    if (!classId) throw new AppError('classId is required', 400);
-
-    const filter = { classId, academicYearId };
-    if (feeGroupId) filter.feeGroupId = feeGroupId;
-
-    const update = { classId, academicYearId, feeGroupId: feeGroupId || null, totalAmount, installments };
-    const structure = await FeeStructure.findOneAndUpdate(filter, update, {
-      new: true, upsert: true, runValidators: true,
-    }).populate('classId', 'name code');
-    return structure;
-  }
-
-  static async getFeeStructures(filters = {}) {
-    const query = {};
-    if (filters.classId) query.classId = filters.classId;
-    if (filters.academicYearId) query.academicYearId = filters.academicYearId;
-    else if (filters.academicYear) query.academicYearId = filters.academicYear;
-    return FeeStructure.find(query).populate('classId', 'name code').sort({ createdAt: -1 });
   }
 
   // ═══════════════════════════════════════════════════════════

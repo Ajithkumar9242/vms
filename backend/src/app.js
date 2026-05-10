@@ -77,8 +77,9 @@ app.use(rateLimiter({ windowMs: 60 * 1000, max: 100 }));
 //  ROUTE-SPECIFIC RATE LIMITING
 // ═══════════════════════════════════════════════════════════
 
-// Auth routes — stricter limit (20 req/min to prevent brute force)
-app.use('/api/auth', rateLimiter({ windowMs: 60 * 1000, max: 20, message: 'Too many login attempts. Please wait and try again.' }));
+// Auth route-level OTP limits are defined in auth/route.js per route.
+// No blanket /api/auth prefix limiter — it shared state with per-route limiters.
+
 
 // ═══════════════════════════════════════════════════════════
 //  API ROUTES

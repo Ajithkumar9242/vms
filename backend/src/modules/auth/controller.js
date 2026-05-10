@@ -50,12 +50,38 @@ class AuthController {
   static async verifyOtp(req, res, next) {
     try {
       const { phone, otp } = req.body;
-      const result = await OtpService.verifyOtp(phone?.replace(/\D/g, ''), otp);
+      const result = await OtpService.verifyOtp(phone?.replace(/\D/g, ''), otp, 'parent');
       return ApiResponse.success(res, {
         user:         result.user,
-        token:        result.accessToken,   // keep same `token` key as email login
+        token:        result.accessToken,
         refreshToken: result.refreshToken,
       }, 'Login successful');
+    } catch (error) { next(error); }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  FACULTY OTP LOGIN
+  // ═══════════════════════════════════════════════════════════
+
+  /** POST /api/auth/faculty/otp/send */
+  static async sendFacultyOtp(req, res, next) {
+    try {
+      const { phone } = req.body;
+      const result = await OtpService.sendOtp(phone?.replace(/\D/g, ''), 'faculty');
+      return ApiResponse.success(res, result, result.message);
+    } catch (error) { next(error); }
+  }
+
+  /** POST /api/auth/faculty/otp/verify */
+  static async verifyFacultyOtp(req, res, next) {
+    try {
+      const { phone, otp } = req.body;
+      const result = await OtpService.verifyOtp(phone?.replace(/\D/g, ''), otp, 'faculty');
+      return ApiResponse.success(res, {
+        user:         result.user,
+        token:        result.accessToken,
+        refreshToken: result.refreshToken,
+      }, 'Faculty login successful');
     } catch (error) { next(error); }
   }
 

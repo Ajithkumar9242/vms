@@ -58,19 +58,20 @@ router.patch(
 
 const rateLimiter = require('../../middlewares/rateLimiter');
 
-// ─── Separate OTP Rate Limiters ────────────────────────────
+// ─── Isolated OTP Rate Limiters (each has its own counter store) ──
 
-// Send OTP → strict
+// Send OTP — 5 per minute (strict to prevent SMS abuse)
 const otpSendRateLimit = rateLimiter({
-  windowMs: 60 * 1000, // 1 minute
-  max: 3,
-  message: 'Too many OTP requests. Wait 1 minute.',
+  windowMs: 60 * 1000,
+  max: 5,
+  message: 'Too many OTP requests. Please wait 1 minute.',
 });
 
-// Verify OTP → more relaxed
+// Verify OTP — 20 per 5 minutes (relaxed; user may mistype)
+// This NEVER shares a counter with otpSendRateLimit.
 const otpVerifyRateLimit = rateLimiter({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 10,
+  windowMs: 5 * 60 * 1000,
+  max: 20,
   message: 'Too many verification attempts. Please wait a few minutes.',
 });
 // ─── OTP / Phone Login ─────────────────────────────────────
@@ -87,6 +88,21 @@ router.post('/otp/verify', otpVerifyRateLimit, [
   body('otp').trim().notEmpty().withMessage('OTP is required').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
   validate,
 ], AuthController.verifyOtp);
+
+// ─── Faculty OTP Login (separate from parent) ──────────────
+
+/** POST /api/auth/faculty/otp/send */
+router.post('/faculty/otp/send', otpSendRateLimit, [
+  body('phone').trim().notEmpty().withMessage('Phone number is required'),
+  validate,
+], AuthController.sendFacultyOtp);
+
+/** POST /api/auth/faculty/otp/verify */
+router.post('/faculty/otp/verify', otpVerifyRateLimit, [
+  body('phone').trim().notEmpty().withMessage('Phone is required'),
+  body('otp').trim().notEmpty().withMessage('OTP is required').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
+  validate,
+], AuthController.verifyFacultyOtp);
 
 /** POST /api/auth/refresh — get new access token from refresh token */
 router.post('/refresh', [

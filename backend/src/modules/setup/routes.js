@@ -36,14 +36,7 @@ router.get('/class-groups', C.getClassGroups);
 router.put('/class-groups/:id', C.updateClassGroup);
 router.delete('/class-groups/:id', C.deleteClassGroup);
 
-// ─── Fee Groups ───────────────────────────────────────────────
-router.post('/fee-groups', C.createFeeGroup);
-router.get('/fee-groups', C.getFeeGroups);
-router.put('/fee-groups/:id', C.updateFeeGroup);
 
-// ─── Fee Structure (admin config) ─────────────────────────────
-router.post('/fee-structures', C.upsertFeeStructure);
-router.get('/fee-structures', C.getFeeStructures);
 
 // ─── Grade Config ─────────────────────────────────────────────
 router.post('/grades', C.createGradeConfig);
@@ -58,6 +51,15 @@ router.get('/attendance-config', C.getAttendanceConfig);
 // ─── Payment Settings ─────────────────────────────────────────
 router.get('/payment-settings', C.getPaymentSettings);
 router.put('/payment-settings', C.upsertPaymentSettings);
+
+// ─── Sections alias ───────────────────────────────────────────
+// Frontend historically called /api/setup/sections?classId=...
+// The actual route lives at /api/school/sections — proxy it here.
+const SchoolController = require('../school/controller');
+router.get('/sections', SchoolController.getSections);
+
+// ─── Academic Years alias (also used by some frontend pages) ─
+router.get('/classes', require('../school/controller').getClasses);
 
 module.exports = router;
 

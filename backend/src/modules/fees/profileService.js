@@ -101,7 +101,8 @@ class StudentFeeProfileService {
         discounts: profile?.discounts || [],
         grossFee: profile?.grossFee || 0,
         discountAmt: profile?.discountAmt || 0,
-        totalFee: profile?.totalFee || 0,
+        netFee: profile?.netFee || profile?.totalFee || 0,
+        installments: profile?.installments || [],
         componentChecks, // { componentId: true/false }
       };
     });
@@ -160,6 +161,7 @@ class StudentFeeProfileService {
           academicYearId: resolvedYearId,
           selectedComponents,
           discounts: discounts || [],
+          installments: row.installments || existing?.installments || [],
           updatedBy: userId,
         };
 
@@ -281,60 +283,30 @@ class StudentFeeProfileService {
    */
   static async _upsertInvoice(profile, academicYearId, userId) {
     try {
+      const FeesService = require('./service');
       const existingInvoice = await FeeInvoice.findOne({
         studentId: profile.studentId,
         academicYearId,
       });
 
-      const student = await Student.findById(profile.studentId).select('classId').lean();
-
       if (existingInvoice) {
-        // Only update if not locked
         if (!existingInvoice.locked) {
-          // Rebuild installments from current selected components.
-          // Preserve paidAmount for lines already paid (match by label).
-          const existingMap = {};
-          for (const inst of existingInvoice.installments || []) {
-            existingMap[inst.label] = inst;
-          }
-          const freshInstallments = (profile.selectedComponents || []).map((comp, idx) => {
-            const prev = existingMap[comp.name];
-            return {
-              installmentNo: idx + 1,
-              label:      comp.name,
-              amount:     comp.amount,
-              paidAmount: prev?.paidAmount || 0,
-              status:     prev?.status    || 'pending',
-            };
-          });
-
-          existingInvoice.totalAmount    = profile.totalFee;
+          // Sync amounts and profile link first, THEN regenerate schedule
+          existingInvoice.totalAmount    = profile.grossFee;
           existingInvoice.discountAmount = profile.discountAmt;
           existingInvoice.feeProfileId   = profile._id;
-          existingInvoice.installments   = freshInstallments;
           await existingInvoice.save();
+
+          // Regenerate schedule from profile.installments — preserves paid history
+          await FeesService.regenerateSchedule(existingInvoice._id.toString(), userId);
         }
-
       } else {
-        // Build installments from selected components
-        const installments = (profile.selectedComponents || []).map((comp, idx) => ({
-          installmentNo: idx + 1,
-          label: comp.name,
-          amount: comp.amount,
-          paidAmount: 0,
-          status: 'pending',
-        }));
-
-        await FeeInvoice.create({
-          studentId: profile.studentId,
-          classId: student?.classId || profile.classId,
+        const student = await Student.findById(profile.studentId).select('classId').lean();
+        // generateInvoice now reads profile.installments as source of truth
+        await FeesService.generateInvoice({
+          studentId:      profile.studentId,
+          classId:        student?.classId || profile.classId,
           academicYearId,
-          feeProfileId: profile._id,
-          totalAmount: profile.totalFee,
-          discountAmount: profile.discountAmt,
-          paidAmount: 0,
-          installments,
-          createdBy: userId,
         });
       }
     } catch (e) {
