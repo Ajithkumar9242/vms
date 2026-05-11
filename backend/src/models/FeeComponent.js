@@ -5,16 +5,6 @@ const mongoose = require('mongoose');
  * Mandatory components auto-apply to ALL students.
  * Optional components can be selectively assigned.
  */
-const lateFeeConfigSchema = new mongoose.Schema(
-  {
-    enabled:   { type: Boolean, default: false },
-    type:      { type: String, enum: ['percent', 'fixed'], default: 'fixed' },
-    value:     { type: Number, default: 0, min: 0 },
-    frequency: { type: String, enum: ['daily', 'monthly'], default: 'monthly' },
-  },
-  { _id: false }
-);
-
 const feeComponentSchema = new mongoose.Schema(
   {
     name: {
@@ -47,18 +37,11 @@ const feeComponentSchema = new mongoose.Schema(
       enum: ['yearly', 'monthly', 'quarterly', 'one_time'],
       default: 'yearly',
     },
-    allowInstallments: {
-      type: Boolean,
-      default: true,
-    },
     active: {
       type: Boolean,
       default: true,
     },
-    lateFeeConfig: {
-      type: lateFeeConfigSchema,
-      default: () => ({ enabled: false, type: 'fixed', value: 0, frequency: 'monthly' }),
-    },
+
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

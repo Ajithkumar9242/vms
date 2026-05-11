@@ -1,21 +1,24 @@
 const mongoose = require('mongoose');
 
 /**
- * StudentFeeProfile — one record per student per academic year.
+ * StudentFeeProfile — SINGLE SOURCE OF TRUTH per student per academic year.
  *
- * SINGLE SOURCE OF TRUTH for:
+ * Holds:
  *   - Which fee components a student pays  (selectedComponents)
- *   - The payment schedule                  (installments)
+ *   - Payment schedule with due dates       (installments)
  *   - Discounts                             (discounts)
+ *   - Penalty configuration                 (penaltyConfig)
  *   - Computed totals                       (grossFee, discountAmt, netFee)
- *
- * FeeStructure is NO LONGER the schedule source.
  */
 
 // ── Discount sub-schema ────────────────────────────────────────
 const discountSchema = new mongoose.Schema(
   {
-    type:         { type: String, enum: ['scholarship', 'sibling', 'staff_child', 'custom'], required: true },
+    type:         {
+      type: String,
+      enum: ['scholarship', 'sibling', 'staff_child', 'custom'],
+      required: true,
+    },
     label:        { type: String, trim: true, default: '' },
     discountType: { type: String, enum: ['percent', 'fixed'], required: true },
     value:        { type: Number, required: true, min: 0 },
@@ -26,19 +29,25 @@ const discountSchema = new mongoose.Schema(
   { _id: true }
 );
 
-// ── Selected fee component sub-schema ─────────────────────────
+// ── Selected fee component sub-schema ──────────────────────────
 const selectedComponentSchema = new mongoose.Schema(
   {
-    componentId: { type: mongoose.Schema.Types.ObjectId, ref: 'FeeComponent', required: true },
-    name:        { type: String, trim: true },
-    code:        { type: String, trim: true },
-    amount:      { type: Number, min: 0 },
-    mandatory:   { type: Boolean, default: false },
+    componentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FeeComponent',
+      required: true,
+    },
+    name:      { type: String, trim: true },
+    code:      { type: String, trim: true },
+    amount:    { type: Number, min: 0 },
+    mandatory: { type: Boolean, default: false },
   },
   { _id: false }
 );
 
-// ── Installment sub-schema (payment schedule) ─────────────────
+// ── Installment sub-schema (payment schedule definition) ───────
+// These are the PLANNED installments with due dates.
+// Actual payment tracking lives in FeeInvoice.installments.
 const installmentSchema = new mongoose.Schema(
   {
     installmentNo: { type: Number, required: true },
@@ -68,21 +77,36 @@ const studentFeeProfileSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Fee components this student pays (what they owe)
+    // Which fee components this student pays
     selectedComponents: [selectedComponentSchema],
 
-    // Payment schedule — when and how much each installment is due
+    // Payment schedule: when + how much per installment
     // Rule: sum(installments.amount) === netFee  (±1 rounding tolerance)
     installments: [installmentSchema],
 
     // Discounts applied to this student
     discounts: [discountSchema],
 
+    // Penalty configuration for this student
+    penaltyConfig: {
+      enabled:   { type: Boolean, default: false },
+      type:      { type: String, enum: ['percent', 'fixed'], default: 'fixed' },
+      value:     { type: Number, default: 0, min: 0 },
+      frequency: { type: String, enum: ['daily', 'weekly', 'monthly'], default: 'monthly' },
+    },
+
     // Computed totals — auto-updated by pre-save hook
-    grossFee:    { type: Number, default: 0 },   // sum of selectedComponents.amount
-    discountAmt: { type: Number, default: 0 },   // total discount value
-    netFee:      { type: Number, default: 0 },   // grossFee - discountAmt  (renamed from totalFee)
-    totalFee:    { type: Number, default: 0 },   // ALIAS of netFee for backward-compat
+    grossFee:    { type: Number, default: 0 },  // sum(selectedComponents.amount)
+    discountAmt: { type: Number, default: 0 },  // computed from discounts[]
+    netFee:      { type: Number, default: 0 },  // grossFee - discountAmt
+
+    // Admin notes
+    notes: { type: String, trim: true, default: '' },
+
+    // Schedule sync state
+    // true  = discount changed netFee after a schedule was set — admin must re-save schedule
+    // false = schedule is in sync with current netFee (or no schedule yet)
+    scheduleOutOfSync: { type: Boolean, default: false },
 
     // Locking
     locked:     { type: Boolean, default: false },
@@ -101,7 +125,7 @@ const studentFeeProfileSchema = new mongoose.Schema(
 studentFeeProfileSchema.index({ studentId: 1, academicYearId: 1 }, { unique: true });
 studentFeeProfileSchema.index({ classId: 1, academicYearId: 1 });
 
-// ── Pre-save: compute grossFee, discountAmt, netFee; auto-create installments ──
+// ── Pre-save: compute grossFee, discountAmt, netFee; validate schedule ──
 studentFeeProfileSchema.pre('save', function () {
   // 1. Gross fee = sum of selected components
   this.grossFee = (this.selectedComponents || []).reduce(
@@ -111,6 +135,7 @@ studentFeeProfileSchema.pre('save', function () {
 
   // 2. Discount amount
   let disc = 0;
+  const prevNetFee = this.netFee || 0; // capture before update
   for (const d of this.discounts || []) {
     if (d.discountType === 'percent') {
       disc += Math.round((this.grossFee * d.value) / 100);
@@ -119,27 +144,34 @@ studentFeeProfileSchema.pre('save', function () {
     }
   }
   this.discountAmt = disc;
-  this.netFee      = Math.max(0, this.grossFee - disc);
-  this.totalFee    = this.netFee;  // keep backward-compat alias in sync
+  const newNetFee  = Math.max(0, this.grossFee - disc);
+  this.netFee      = newNetFee;
 
-  // 3. Auto-create a single "Full Payment" installment if none set
+  // 3. NO auto-fallback installment.
+  //    If installments is empty, profile saves fine — but invoice generation
+  //    will be blocked until admin manually adds a schedule.
+
   if (!this.installments || this.installments.length === 0) {
-    this.installments = [{
-      installmentNo: 1,
-      label:         'Full Payment',
-      amount:        this.netFee,
-      dueDate:       null,
-    }];
-    return;  // skip sum validation — single installment always matches
+    // No schedule yet — nothing to validate, clear out-of-sync flag
+    this.scheduleOutOfSync = false;
+    return;
   }
 
-  // 4. Validate: installments must sum to netFee (±1 rounding tolerance)
+  // 4. Schedule exists — check whether it is still in sync with netFee.
+  //    If netFee changed (e.g. discount added/removed) mark out-of-sync
+  //    so invoice generation is blocked until admin re-saves the schedule.
   const instSum = this.installments.reduce((s, i) => s + (i.amount || 0), 0);
-  if (Math.abs(instSum - this.netFee) > 1) {
-    throw new Error(
-      `Installment amounts sum to Rs.${instSum} but netFee is Rs.${this.netFee}. They must match.`
-    );
+  const outOfSync = Math.abs(instSum - newNetFee) > 1;
+
+  if (outOfSync) {
+    // Mark out-of-sync but DO NOT throw — allow the profile save to succeed.
+    // This lets addDiscount() work even when a schedule exists.
+    this.scheduleOutOfSync = true;
+    return;
   }
+
+  // 5. Schedule is valid — clear out-of-sync flag
+  this.scheduleOutOfSync = false;
 });
 
 module.exports = mongoose.model('StudentFeeProfile', studentFeeProfileSchema);

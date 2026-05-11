@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import ParentLayout from '@/components/mobile/ParentLayout';
-import { feesAPI, studentAPI, setupAPI } from '@/services/api';
+import { feesAPI, studentAPI } from '@/services/api';
 import useAuthStore from '@/store/authStore';
 import dayjs from 'dayjs';
 
@@ -12,49 +12,50 @@ const loadRazorpay = () =>
     if (_rzpLoaded && window.Razorpay) { resolve(true); return; }
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.onload  = () => { _rzpLoaded = true; resolve(true); };
+    script.onload = () => { _rzpLoaded = true; resolve(true); };
     script.onerror = () => resolve(false);
     document.head.appendChild(script);
   });
 
 // ─── Fee status helpers ──────────────────────────────────────
-const isFeeConfigured = (summary) =>
-  summary && summary.totalFee > 0;
+const isFeeConfigured = (feeData) => {
+  const inv = feeData?.invoice;
+  const total = feeData?.summary?.totalFee ?? inv?.netFee ?? 0;
+  return total > 0;
+};
 
-const feeStatusBadge = (summary) => {
-  if (!isFeeConfigured(summary)) return 'm-badge-neutral';
-  if (summary.status === 'Paid')    return 'm-badge-success';
-  if (summary.status === 'Partial') return 'm-badge-warning';
+const feeStatusBadge = (feeData) => {
+  const summary = feeData?.summary;
+  if (!isFeeConfigured(feeData)) return 'm-badge-neutral';
+  if (summary?.status === 'Paid') return 'm-badge-success';
+  if (summary?.status === 'Partial') return 'm-badge-warning';
   return 'm-badge-danger';
 };
 
-const feeStatusLabel = (summary) => {
-  if (!isFeeConfigured(summary)) return 'Not Configured';
-  return summary.status;
+const feeStatusLabel = (feeData) => {
+  const summary = feeData?.summary;
+  if (!isFeeConfigured(feeData)) return 'Not Configured';
+  return summary?.status || 'Unpaid';
 };
-
 const ParentFees = () => {
   const user = useAuthStore((s) => s.user);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState(null);
-  const [feeData, setFeeData]       = useState(null);
-  const [studentId, setStudentId]   = useState(null);
-  const [student, setStudent]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [feeData, setFeeData] = useState(null);
+  const [studentId, setStudentId] = useState(null);
+  const [student, setStudent] = useState(null);
   const [showManual, setShowManual] = useState(false);
   const [manualForm, setManualForm] = useState({ amount: '', transactionId: '', proofUrl: '' });
   const [submitting, setSubmitting] = useState(false);
   const [rzpLoading, setRzpLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [msg, setMsg]               = useState(null);
+  const [msg, setMsg] = useState(null);
   const [schoolName, setSchoolName] = useState('VMS School');
 
   useEffect(() => {
     resolveStudent();
     // Load school name for PDF
-    setupAPI.getSchoolSetting().then((res) => {
-      const name = res?.data?.schoolName || res?.data?.name;
-      if (name) setSchoolName(name);
-    }).catch(() => {});
+    setSchoolName('VSS School')
   }, []);
 
   const resolveStudent = useCallback(async () => {
@@ -70,7 +71,7 @@ const ParentFees = () => {
     }
     try {
       const res = await studentAPI.getAll({ limit: 1 });
-      const s   = res?.data?.students?.[0] || res?.data?.[0];
+      const s = res?.data?.students?.[0] || res?.data?.[0];
       if (s) {
         setStudentId(s._id);
         setStudent(s);
@@ -89,11 +90,60 @@ const ParentFees = () => {
     setLoading(true);
     setError(null);
     try {
-      const res  = await feesAPI.getStudentFees(sid);
-      const data = res?.data || res;
-      setFeeData(data);
-      // Also grab student from fee data if not already set
-      if (data?.student && !student) setStudent(data.student);
+      const res = await feesAPI.getInvoice(sid);
+
+      // ─── Robust normalization ─────────────────────────────────
+      // Handle all possible API response shapes:
+      //   Shape A (new service): res.data = { success, data: { invoice, summary, feeProfile, payments, student } }
+      //   Shape B (old service): res.data = { success, data: <FeeInvoice doc> }
+      //   Shape C (edge):        res.data = <FeeInvoice doc>  (no envelope)
+
+      const envelope = res?.data;                          // axios response.data
+      const innerData = envelope?.data ?? envelope;         // unwrap { success, data } envelope if present
+
+      let normalized;
+
+      if (innerData && innerData.invoice !== undefined) {
+        // Shape A: already structured — accept as-is, but validate summary exists
+        const inv = innerData.invoice;
+        normalized = {
+          ...innerData,
+          summary: innerData.summary || (inv ? {
+            totalFee: inv.netFee || 0,
+            totalPaid: inv.paidAmount || 0,
+            totalDue: inv.dueAmount || 0,
+            status: ({ paid: 'Paid', partial: 'Partial', overdue: 'Overdue' })[inv.status] || 'Unpaid',
+            livePenalty: inv.penaltyAmount || 0,
+            daysOverdue: 0,
+          } : null),
+          feeProfile: innerData.feeProfile || inv?.feeProfileId || null,
+          payments: innerData.payments || [],
+          student: innerData.student || inv?.studentId || null,
+        };
+      } else if (innerData && (innerData.netFee != null || innerData._id)) {
+        // Shape B: flat FeeInvoice document — wrap it
+        const inv = innerData;
+        normalized = {
+          invoice: inv,
+          feeProfile: inv.feeProfileId || null,
+          summary: {
+            totalFee: inv.netFee || 0,
+            totalPaid: inv.paidAmount || 0,
+            totalDue: inv.dueAmount || 0,
+            status: ({ paid: 'Paid', partial: 'Partial', overdue: 'Overdue' })[inv.status] || 'Unpaid',
+            livePenalty: inv.penaltyAmount || 0,
+            daysOverdue: 0,
+          },
+          payments: inv.payments || [],
+          student: inv.studentId || null,
+        };
+      } else {
+        // Shape C / null: no invoice for this student
+        normalized = { invoice: null, feeProfile: null, summary: null, payments: [], student: null };
+      }
+
+      setFeeData(normalized);
+      if (normalized.student && !student) setStudent(normalized.student);
     } catch (e) {
       setError(e.message || 'Failed to load fee data.');
     } finally {
@@ -147,10 +197,10 @@ const ParentFees = () => {
         amount: Math.round(due * 100),       // paise
         currency: 'INR',
         name: 'VMS School ERP',
-        description: `Fee payment — ${feeData?.resolvedStudent?.name || 'Student'}`,
+        description: `Fee payment — ${resolvedStudent?.name || 'Student'}`,
         image: '/icons/icon-192.png',
         prefill: {
-          name:  user?.name  || '',
+          name: user?.name || '',
           email: user?.email || '',
           contact: user?.phone || '',
         },
@@ -163,13 +213,14 @@ const ParentFees = () => {
         handler: async (response) => {
           // Record payment via fees API
           try {
-            await feesAPI.pay({
-              studentId,
-              amount: due,
-              paymentMode: 'razorpay',
-              transactionId: response.razorpay_payment_id,
-              invoiceId: feeData?.invoice?._id || undefined,
-            });
+            await feesAPI.payInstallment(
+              feeData?.invoice?._id,
+              {
+                amount: due,
+                paymentMode: 'razorpay',
+                transactionId: response.razorpay_payment_id,
+              }
+            );
             setMsg({ type: 'success', text: `✅ Payment of ₹${due.toLocaleString('en-IN')} recorded! Receipt will be sent.` });
             await loadFees(studentId);
           } catch (e) {
@@ -210,14 +261,15 @@ const ParentFees = () => {
     setSubmitting(true);
     setMsg(null);
     try {
-      await feesAPI.manualPayment({
-        studentId,
-        amount: parseFloat(manualForm.amount),
-        paymentMode: 'upi',
-        transactionId: manualForm.transactionId.trim(),
-        proofUrl: manualForm.proofUrl.trim() || undefined,
-        invoiceId: feeData?.invoice?._id || undefined,
-      });
+      await feesAPI.payInstallment(
+        feeData?.invoice?._id,
+        {
+          amount: parseFloat(manualForm.amount),
+          paymentMode: 'upi',
+          transactionId: manualForm.transactionId.trim(),
+          proofUrl: manualForm.proofUrl.trim() || undefined,
+        }
+      );
       setMsg({ type: 'success', text: '✅ Payment submitted! Awaiting admin approval (usually 1–2 hours).' });
       setShowManual(false);
       setManualForm({ amount: '', transactionId: '', proofUrl: '' });
@@ -232,13 +284,13 @@ const ParentFees = () => {
   const { summary, invoice, payments = [], student: feeStudent } = feeData || {};
   // Prefer state student (more complete), fall back to feeData.student
   const resolvedStudent = student || feeStudent;
-  const configured = isFeeConfigured(summary);
-  const progressPct = configured && summary.totalFee > 0
-    ? Math.min(100, Math.round((summary.totalPaid / summary.totalFee) * 100))
+  const configured = isFeeConfigured(feeData);
+  const progressPct = (configured && (summary?.totalFee ?? 0) > 0)
+    ? Math.min(100, Math.round(((summary?.totalPaid ?? 0) / (summary?.totalFee ?? 1)) * 100))
     : 0;
   // Live penalty from enhanced fees endpoint
-  const livePenalty   = summary?.livePenalty || 0;
-  const daysOverdueNo = summary?.daysOverdue  || 0;
+  const livePenalty = summary?.livePenalty || 0;
+  const daysOverdueNo = summary?.daysOverdue || 0;
 
   return (
     <ParentLayout title="Fee Details" subtitle="Payments & Invoices">
@@ -267,7 +319,7 @@ const ParentFees = () => {
       {!loading && !error && (
         <>
           {/* Fee Not Configured banner */}
-          {!configured && (
+          {(!invoice && !feeData?.feeProfile) && (
             <div className="m-card" style={{ background: '#FFF7ED', borderLeft: '3px solid #F59E0B', textAlign: 'center', padding: '20px 16px' }}>
               <div style={{ fontSize: 36, marginBottom: 8 }}>📋</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>
@@ -282,19 +334,19 @@ const ParentFees = () => {
           )}
 
           {/* Fee Summary Card */}
-          {summary && (
+          {(summary || invoice) && (
             <div className="m-card">
               <div className="m-card-header">
                 <div>
                   <div className="m-card-title">
-                    {resolvedStudent?.name ? `${student.name}'s Fees` : 'Annual Fees'}
+                    {resolvedStudent?.name ? `${resolvedStudent.name}'s Fees` : 'Annual Fees'}
                   </div>
                   <div className="m-card-sub">
                     {invoice?.invoiceNumber ? `Invoice: ${invoice.invoiceNumber}` : 'Current Year'}
                   </div>
                 </div>
-                <span className={`m-badge ${feeStatusBadge(summary)}`}>
-                  {feeStatusLabel(summary)}
+                <span className={`m-badge ${feeStatusBadge(feeData)}`}>
+                  {feeStatusLabel(feeData)}
                 </span>
               </div>
 
@@ -331,9 +383,9 @@ const ParentFees = () => {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748B', marginTop: 4 }}>
                     <span>{progressPct}% paid</span>
-                    {invoice?.dueDate && (
-                      <span>Due: <strong style={{ color: dayjs(invoice.dueDate).isBefore(dayjs()) && summary.totalDue > 0 ? '#DC2626' : '#0F172A' }}>
-                        {dayjs(invoice.dueDate).format('DD MMM YYYY')}
+                    {invoice?.nextDueDate && (
+                      <span>Due: <strong style={{ color: dayjs(invoice.nextDueDate).isBefore(dayjs()) && summary.totalDue > 0 ? '#DC2626' : '#0F172A' }}>
+                        {dayjs(invoice.nextDueDate).format('DD MMM YYYY')}
                       </strong></span>
                     )}
                   </div>
@@ -350,20 +402,29 @@ const ParentFees = () => {
           {feeData?.feeProfile?.selectedComponents?.length > 0 && configured && (
             <div className="m-card">
               <div className="m-card-title" style={{ marginBottom: 10 }}>Fee Breakdown</div>
-              {feeData.feeProfile.selectedComponents.map((comp, i) => (
-                <div key={i} className="m-list-item">
-                  <div className="m-list-icon" style={{ background: comp.mandatory ? '#FEF2F2' : '#EFF6FF', fontSize: 16 }}>
-                    {comp.mandatory ? '📌' : '✅'}
+              {feeData.feeProfile.selectedComponents.map((comp, i) => {
+                // comp may be a subdoc { componentId: populated obj, name, amount } or
+                // a populated component object directly
+                const name = comp.name || comp.componentId?.name || '—';
+                const code = comp.code || comp.componentId?.code || '';
+                const recurring = comp.recurringType || comp.componentId?.recurringType || 'yearly';
+                const amount = comp.amount ?? comp.componentId?.amount ?? 0;
+                const mandatory = comp.mandatory ?? comp.componentId?.mandatory ?? false;
+                return (
+                  <div key={i} className="m-list-item">
+                    <div className="m-list-icon" style={{ background: mandatory ? '#FEF2F2' : '#EFF6FF', fontSize: 16 }}>
+                      {mandatory ? '📌' : '✅'}
+                    </div>
+                    <div className="m-list-body">
+                      <div className="m-list-title">{name}</div>
+                      <div className="m-list-desc">{code} · {recurring}</div>
+                    </div>
+                    <div className="m-list-right">
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>₹{amount.toLocaleString('en-IN')}</div>
+                    </div>
                   </div>
-                  <div className="m-list-body">
-                    <div className="m-list-title">{comp.name}</div>
-                    <div className="m-list-desc">{comp.code} · {comp.recurringType || 'yearly'}</div>
-                  </div>
-                  <div className="m-list-right">
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>₹{(comp.amount || 0).toLocaleString('en-IN')}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {/* Discounts */}
               {feeData.feeProfile.discounts?.length > 0 && (
                 <>
@@ -382,7 +443,7 @@ const ParentFees = () => {
               <div style={{ borderTop: '1px solid #E2E8F0', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontWeight: 700, fontSize: 14, color: '#0F172A' }}>Net Total</span>
                 <span style={{ fontWeight: 700, fontSize: 14, color: '#1B3A5C' }}>
-                  ₹{(feeData.feeProfile.totalFee || 0).toLocaleString('en-IN')}
+                  ₹{(feeData.feeProfile.netFee || 0).toLocaleString('en-IN')}
                 </span>
               </div>
             </div>
@@ -412,10 +473,10 @@ const ParentFees = () => {
 
           {/* Installments */}
 
-          {invoice?.feeItems?.length > 0 && configured && (
+          {invoice?.installments?.length > 0 && configured && (
             <div className="m-card">
               <div className="m-card-title" style={{ marginBottom: 10 }}>Installments</div>
-              {invoice.feeItems.map((item, i) => {
+              {invoice.installments.map((item, i) => {
                 const overdue = item.dueDate && dayjs(item.dueDate).isBefore(dayjs());
                 return (
                   <div key={i} className="m-list-item">
@@ -423,7 +484,7 @@ const ParentFees = () => {
                       {overdue ? '⚠️' : '📅'}
                     </div>
                     <div className="m-list-body">
-                      <div className="m-list-title">{item.name}</div>
+                      <div className="m-list-title">{item.label || item.name}</div>
                       <div className="m-list-desc" style={{ color: overdue ? '#DC2626' : undefined }}>
                         {item.dueDate ? dayjs(item.dueDate).format('DD MMM YYYY') : 'No due date'}
                         {overdue ? ' • Overdue' : ''}
@@ -555,55 +616,23 @@ const ParentFees = () => {
           )}
 
           {/* ─── Fee Receipt Card ─── */}
-          {configured && payments.length > 0 && (
+          {configured && invoice?._id && (
             <div className="m-card" style={{
               background: 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)',
               border: '1.5px solid #DBEAFE',
             }}>
               <div className="m-card-header" style={{ marginBottom: 16 }}>
                 <div>
-                  <div className="m-card-title" style={{ color: '#1B3A5C' }}>📄 Fee Receipt</div>
+                  <div className="m-card-title" style={{ color: '#1B3A5C' }}>📄 Fee Invoice</div>
                   <div className="m-card-sub">
                     {invoice?.invoiceNumber ? `Invoice #${invoice.invoiceNumber}` : 'Current year'}
                   </div>
                 </div>
-                <span className={`m-badge ${feeStatusBadge(summary)}`}>
-                  {feeStatusLabel(summary)}
+                <span className={`m-badge ${feeStatusBadge(feeData)}`}>
+                  {feeStatusLabel(feeData)}
                 </span>
               </div>
 
-              {/* Receipt Preview */}
-              <div style={{ background: '#fff', borderRadius: 10, padding: '14px', marginBottom: 14, border: '1px solid #E2E8F0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: '#64748B' }}>Student</span>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{resolvedStudent?.name || user?.name || '—'}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: '#64748B' }}>Class</span>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{student?.classId?.name || '—'}</span>
-                </div>
-                <div style={{ borderTop: '1px dashed #E2E8F0', margin: '10px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: '#64748B' }}>Total Fees</span>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>₹{summary?.totalFee?.toLocaleString('en-IN')}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: '#16A34A' }}>Paid</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>₹{summary?.totalPaid?.toLocaleString('en-IN')}</span>
-                </div>
-                {summary?.totalDue > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 12, color: '#DC2626' }}>Balance Due</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#DC2626' }}>₹{summary?.totalDue?.toLocaleString('en-IN')}</span>
-                  </div>
-                )}
-                <div style={{ borderTop: '1px dashed #E2E8F0', margin: '10px 0' }} />
-                <div style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center' }}>
-                  Generated: {dayjs().format('DD MMM YYYY, hh:mm A')} · {schoolName}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   className="m-btn m-btn-primary"

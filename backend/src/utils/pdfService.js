@@ -53,10 +53,10 @@ function drawTableRow(doc, cols, widths, y, isHeader = false) {
     if (isHeader) {
       doc.rect(x, y - 3, w, 18).fill(hexToRgb(COLORS.primary));
       applyColor(doc, '#FFFFFF');
-      doc.fontSize(8).font('Helvetica-Bold').text(col, x + 3, y + 1, { width: w - 6, ellipsis: true });
+      doc.fontSize(8).font('Roboto-Bold').text(col, x + 3, y + 1, { width: w - 6, ellipsis: true });
     } else {
       applyColor(doc, COLORS.text);
-      doc.fontSize(8).font('Helvetica').text(col, x + 3, y + 1, { width: w - 6, ellipsis: true });
+      doc.fontSize(8).font('Roboto').text(col, x + 3, y + 1, { width: w - 6, ellipsis: true });
     }
     x += w;
   });
@@ -76,6 +76,10 @@ function drawTableRow(doc, cols, widths, y, isHeader = false) {
 function generateInvoicePDF(invoice, school, penaltySummary = null) {
   const doc = new PDFDocument({ margin: 50, size: 'A4', bufferPages: true });
 
+  const path = require('path');
+  doc.registerFont('Roboto', path.join(__dirname, 'Roboto-Regular.ttf'));
+  doc.registerFont('Roboto-Bold', path.join(__dirname, 'Roboto-Bold.ttf'));
+  
   const schoolName  = school?.schoolName || school?.name || 'VMS School ERP';
   const schoolAddr  = school?.contact?.address || school?.address || '';
   const schoolPhone = school?.contact?.phone   || school?.phone   || '';
@@ -92,23 +96,26 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
   const storedPenalty = invoice.penaltyAmount || 0;
   const effectivePenalty = Math.max(livePenalty, storedPenalty);
 
-  const netTotal = (invoice.totalAmount || 0) + effectivePenalty - (invoice.discountAmount || 0);
-  const balanceDue = Math.max(0, netTotal - (invoice.paidAmount || 0));
+  // Use netFee (new schema) or fall back to totalAmount (legacy)
+  const grossFee   = invoice.grossFee || invoice.totalAmount || 0;
+  const netFee     = invoice.netFee || Math.max(0, grossFee - (invoice.discountAmount || 0));
+  const netTotal   = netFee + effectivePenalty - (invoice.waivedAmount || 0);
+  const balanceDue = invoice.dueAmount || Math.max(0, netTotal - (invoice.paidAmount || 0));
 
   // ─── Header Band ──────────────────────────────────────────
   doc.rect(0, 0, 595, 85).fill(hexToRgb(COLORS.primary));
 
   applyColor(doc, '#FFFFFF');
-  doc.fontSize(18).font('Helvetica-Bold').text(schoolName, 50, 18, { width: 340 });
-  if (schoolAddr)  doc.fontSize(8).font('Helvetica').text(schoolAddr, 50, 42, { width: 340 });
+  doc.fontSize(18).font('Roboto-Bold').text(schoolName, 50, 18, { width: 340 });
+  if (schoolAddr)  doc.fontSize(8).font('Roboto').text(schoolAddr, 50, 42, { width: 340 });
   const contactLine = [schoolPhone && `📞 ${schoolPhone}`, schoolEmail && `✉ ${schoolEmail}`].filter(Boolean).join('   ');
   if (contactLine) doc.fontSize(8).text(contactLine, 50, 53);
 
   // Right: label + invoice number
   applyColor(doc, '#93C5FD');
-  doc.fontSize(12).font('Helvetica-Bold').text('FEE INVOICE', 370, 18, { width: 175, align: 'right' });
+  doc.fontSize(12).font('Roboto-Bold').text('FEE INVOICE', 370, 18, { width: 175, align: 'right' });
   applyColor(doc, '#FFFFFF');
-  doc.fontSize(9).font('Helvetica').text(invoice.invoiceNumber || '—', 370, 34, { width: 175, align: 'right' });
+  doc.fontSize(9).font('Roboto').text(invoice.invoiceNumber || '—', 370, 34, { width: 175, align: 'right' });
   doc.fontSize(8).text(`Generated: ${fmt(new Date(), true)}`, 370, 46, { width: 175, align: 'right' });
   doc.fontSize(8).text(`Academic Year: ${ay.name || ay.label || '—'}`, 370, 57, { width: 175, align: 'right' });
 
@@ -120,12 +127,12 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
     ? COLORS.warning : COLORS.danger;
   doc.rect(430, 90, 115, 22).fill(hexToRgb(statusColor));
   applyColor(doc, '#FFFFFF');
-  doc.fontSize(9).font('Helvetica-Bold')
+  doc.fontSize(9).font('Roboto-Bold')
      .text((invoice.status || 'UNPAID').toUpperCase(), 432, 96, { width: 111, align: 'center' });
 
   // ─── Student Info Box ─────────────────────────────────────
   applyColor(doc, COLORS.primary);
-  doc.fontSize(11).font('Helvetica-Bold').text('Student Details', 50, 103);
+  doc.fontSize(11).font('Roboto-Bold').text('Student Details', 50, 103);
   drawLine(doc, 118);
   doc.y = 122;
 
@@ -139,20 +146,20 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
     ['Roll No',      student.rollNo || student.admissionNumber || '—', 'Academic Year', ay.name || ay.label || '—'],
     ['Parent Name',  student.parentName || '—',     'Parent Phone',     parentPhone],
     ['Invoice No',   invoice.invoiceNumber || '—',  'Parent Email',     parentEmail || '—'],
-    ['Due Date',     invoice.dueDate ? fmt(invoice.dueDate) : '—', 'Invoice Date', fmt(invoice.createdAt || new Date())],
+    ['Next Due Date', invoice.nextDueDate ? fmt(invoice.nextDueDate) : '—', 'Invoice Date', fmt(invoice.createdAt || new Date())],
   ];
 
   infoRows.forEach(([l1, v1, l2, v2]) => {
     const y = doc.y;
     applyColor(doc, COLORS.gray);
-    doc.fontSize(8).font('Helvetica').text(l1 + ':', 50, y);
+    doc.fontSize(8).font('Roboto').text(l1 + ':', 50, y);
     applyColor(doc, COLORS.text);
-    doc.fontSize(9).font('Helvetica-Bold').text(v1, 145, y, { width: 165 });
+    doc.fontSize(9).font('Roboto-Bold').text(v1, 145, y, { width: 165 });
 
     applyColor(doc, COLORS.gray);
-    doc.fontSize(8).font('Helvetica').text(l2 + ':', 325, y);
+    doc.fontSize(8).font('Roboto').text(l2 + ':', 325, y);
     applyColor(doc, COLORS.text);
-    doc.fontSize(9).font('Helvetica-Bold').text(v2, 420, y, { width: 125 });
+    doc.fontSize(9).font('Roboto-Bold').text(v2, 420, y, { width: 125 });
 
     doc.y = y + 16;
   });
@@ -163,47 +170,35 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
 
   // ─── Fee Component Breakdown ───────────────────────────────
   applyColor(doc, COLORS.primary);
-  doc.fontSize(11).font('Helvetica-Bold').text('Fee Breakdown');
+  doc.fontSize(11).font('Roboto-Bold').text('Fee Breakdown');
   doc.moveDown(0.3);
 
   const COMP_WIDTHS = [30, 180, 90, 100, 95];
   let tableY = doc.y;
   tableY = drawTableRow(doc, ['#', 'Fee Component', 'Type', 'Amount (₹)', 'Mandatory'], COMP_WIDTHS, tableY, true);
 
-  const components = profile?.selectedComponents || [];
-  const feeItems   = invoice.feeItems || [];
+  // Use selectedComponents from feeProfileId (populated) or directly from profile param
+  const components = (profile?.selectedComponents || invoice.feeProfileId?.selectedComponents || []);
 
   if (components.length > 0) {
     components.forEach((comp, i) => {
+      const compData = comp.componentId || comp;
       const bg = i % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
       doc.rect(50, tableY - 3, 495, 18).fill(hexToRgb(bg));
       applyColor(doc, COLORS.text);
       tableY = drawTableRow(doc, [
         String(i + 1),
-        comp.name   || `Fee ${i + 1}`,
-        comp.recurringType || 'yearly',
-        `₹${(comp.amount || 0).toLocaleString('en-IN')}`,
-        comp.mandatory ? 'Yes' : 'No',
-      ], COMP_WIDTHS, tableY);
-    });
-  } else if (feeItems.length > 0) {
-    feeItems.forEach((item, i) => {
-      const bg = i % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-      doc.rect(50, tableY - 3, 495, 18).fill(hexToRgb(bg));
-      applyColor(doc, COLORS.text);
-      tableY = drawTableRow(doc, [
-        String(i + 1),
-        item.name || `Fee ${i + 1}`,
-        'yearly',
-        `₹${(item.amount || 0).toLocaleString('en-IN')}`,
-        '—',
+        comp.name   || compData.name || `Fee ${i + 1}`,
+        comp.recurringType || compData.recurringType || 'yearly',
+        `₹${(comp.amount || compData.amount || 0).toLocaleString('en-IN')}`,
+        (comp.mandatory || compData.mandatory) ? 'Yes' : 'No',
       ], COMP_WIDTHS, tableY);
     });
   } else {
     doc.rect(50, tableY - 3, 495, 18).fill(hexToRgb('#F8FAFC'));
     applyColor(doc, COLORS.text);
     tableY = drawTableRow(doc,
-      ['1', 'Annual Fee', 'yearly', `₹${(invoice.totalAmount || 0).toLocaleString('en-IN')}`, '—'],
+      ['1', 'Annual Fee', 'yearly', `₹${grossFee.toLocaleString('en-IN')}`, '—'],
       COMP_WIDTHS, tableY
     );
   }
@@ -217,12 +212,13 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
   const waived   = invoice.waivedAmount   || 0;
 
   const summaryRows = [
-    ['Gross Fee Total',          invoice.totalAmount  || 0,  COLORS.text,    false],
-    ['Discount Applied',        -(discount),                  COLORS.success, true],
-    ['Waiver Applied',          -(waived),                    COLORS.success, true],
-    ['Late Fee / Penalty',       effectivePenalty,            COLORS.danger,  true],
-    ['Amount Paid',             -(invoice.paidAmount || 0),   COLORS.success, true],
-    ['Balance Due',              balanceDue,                  balanceDue > 0 ? COLORS.danger : COLORS.success, false],
+    ['Gross Fee Total',   grossFee,                          COLORS.text,    false],
+    ['Discount Applied', -(discount),                        COLORS.success, true],
+    ['Waiver Applied',   -(waived),                          COLORS.success, true],
+    ['Net Fee',          netFee,                             COLORS.text,    false],
+    ['Late Fee / Penalty', effectivePenalty,                 COLORS.danger,  true],
+    ['Amount Paid',      -(invoice.paidAmount || 0),         COLORS.success, true],
+    ['Balance Due',      balanceDue,                         balanceDue > 0 ? COLORS.danger : COLORS.success, false],
   ];
 
   summaryRows.forEach(([label, value, color, indent]) => {
@@ -232,10 +228,10 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
     const prefix     = value < 0 ? '- ' : '';
     const lx         = indent ? 320 : 300;
     applyColor(doc, COLORS.gray);
-    doc.fontSize(9).font('Helvetica').text(label, lx, y, { width: 140 });
+    doc.fontSize(9).font('Roboto').text(label, lx, y, { width: 140 });
     applyColor(doc, color);
     doc.fontSize(label === 'Balance Due' ? 11 : 9)
-       .font(label === 'Balance Due' ? 'Helvetica-Bold' : 'Helvetica')
+       .font(label === 'Balance Due' ? 'Roboto-Bold' : 'Roboto')
        .text(`${prefix}₹${displayVal.toLocaleString('en-IN')}`, 460, y, { width: 85, align: 'right' });
     doc.y = y + (label === 'Balance Due' ? 16 : 14);
   });
@@ -244,7 +240,7 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
   if (penaltySummary?.daysOverdue > 0) {
     const y = doc.y + 2;
     applyColor(doc, COLORS.danger);
-    doc.fontSize(8).font('Helvetica-Oblique')
+    doc.fontSize(8).font('Roboto')
        .text(`⚡ Auto-calculated: ${penaltySummary.breakdown || `${penaltySummary.daysOverdue} days overdue`}`, 50, y);
     doc.y = y + 12;
   }
@@ -257,12 +253,12 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
   if (installments.length > 0) {
     doc.moveDown(0.6);
     applyColor(doc, COLORS.primary);
-    doc.fontSize(11).font('Helvetica-Bold').text('Installment Schedule');
+    doc.fontSize(11).font('Roboto-Bold').text('Installment Schedule');
     doc.moveDown(0.3);
 
-    const INST_WIDTHS = [30, 120, 90, 80, 80, 95];
+    const INST_WIDTHS = [25, 110, 85, 75, 75, 75, 50];
     let iy = doc.y;
-    iy = drawTableRow(doc, ['#', 'Label', 'Due Date', 'Amount', 'Paid', 'Status'], INST_WIDTHS, iy, true);
+    iy = drawTableRow(doc, ['#', 'Label', 'Due Date', 'Amount', 'Paid', 'Balance', 'Status'], INST_WIDTHS, iy, true);
 
     installments.forEach((inst, i) => {
       const bg = i % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
@@ -275,6 +271,7 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
         inst.dueDate ? fmt(inst.dueDate) + overdueFlag : '—',
         `₹${(inst.amount || 0).toLocaleString('en-IN')}`,
         `₹${(inst.paidAmount || 0).toLocaleString('en-IN')}`,
+        `₹${(inst.balanceAmount != null ? inst.balanceAmount : Math.max(0, (inst.amount || 0) - (inst.paidAmount || 0))).toLocaleString('en-IN')}`,
         (inst.status || 'pending').toUpperCase(),
       ], INST_WIDTHS, iy);
     });
@@ -284,18 +281,19 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
   }
 
   // ─── Discounts Detail ─────────────────────────────────────
-  if (profile?.discounts?.length > 0) {
+  const discounts = profile?.discounts || invoice.feeProfileId?.discounts || [];
+  if (discounts.length > 0) {
     doc.moveDown(0.6);
     applyColor(doc, COLORS.primary);
-    doc.fontSize(10).font('Helvetica-Bold').text('Discounts Applied');
+    doc.fontSize(10).font('Roboto-Bold').text('Discounts Applied');
     doc.moveDown(0.2);
 
-    profile.discounts.forEach((d, i) => {
+    discounts.forEach((d, i) => {
       const y = doc.y;
       applyColor(doc, COLORS.gray);
-      doc.fontSize(8).font('Helvetica').text(`${i + 1}. ${d.label || d.type}`, 50, y, { width: 200 });
+      doc.fontSize(8).font('Roboto').text(`${i + 1}. ${d.label || d.type}`, 50, y, { width: 200 });
       applyColor(doc, COLORS.success);
-      doc.fontSize(8).font('Helvetica-Bold').text(
+      doc.fontSize(8).font('Roboto-Bold').text(
         d.discountType === 'percent' ? `-${d.value}%` : `-₹${d.value.toLocaleString('en-IN')}`,
         260, y, { width: 120, align: 'right' }
       );
@@ -308,14 +306,14 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
   drawLine(doc);
   doc.moveDown(0.4);
   applyColor(doc, COLORS.gray);
-  doc.fontSize(8).font('Helvetica-Oblique')
+  doc.fontSize(8).font('Roboto')
      .text('This is a computer-generated invoice. No physical signature required.', { align: 'center' });
-  doc.fontSize(7).font('Helvetica').text(`Generated on ${fmt(new Date(), true)} · ${schoolName}`, { align: 'center' });
+  doc.fontSize(7).font('Roboto').text(`Generated on ${fmt(new Date(), true)} · ${schoolName}`, { align: 'center' });
 
   if (invoice.locked) {
     doc.moveDown(0.3);
     applyColor(doc, COLORS.danger);
-    doc.fontSize(8).font('Helvetica-Bold').text('⚠ LOCKED — This invoice cannot be modified.', { align: 'center' });
+    doc.fontSize(8).font('Roboto-Bold').text('⚠ LOCKED — This invoice cannot be modified.', { align: 'center' });
   }
 
   return doc;
@@ -330,6 +328,10 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
 function generateReceiptPDF(payment, invoice, school) {
   const doc = new PDFDocument({ margin: 40, size: 'A5' });
 
+  const path = require('path');
+  doc.registerFont('Roboto', path.join(__dirname, 'Roboto-Regular.ttf'));
+  doc.registerFont('Roboto-Bold', path.join(__dirname, 'Roboto-Bold.ttf'));
+
   const schoolName = school?.schoolName || school?.name || 'VMS School ERP';
   const student    = payment.studentId || {};
   const cls        = invoice?.classId  || student.classId || {};
@@ -337,14 +339,14 @@ function generateReceiptPDF(payment, invoice, school) {
   // ─── Header ──────────────────────────────────────────────
   doc.rect(0, 0, 420, 70).fill(hexToRgb(COLORS.primary));
   applyColor(doc, '#FFFFFF');
-  doc.fontSize(15).font('Helvetica-Bold').text(schoolName, 30, 14, { width: 260 });
-  doc.fontSize(8).font('Helvetica').text('PAYMENT RECEIPT', 30, 36);
+  doc.fontSize(15).font('Roboto-Bold').text(schoolName, 30, 14, { width: 260 });
+  doc.fontSize(8).font('Roboto').text('PAYMENT RECEIPT', 30, 36);
   doc.fontSize(8).text(payment.receiptNumber || '—', 30, 47);
 
   // PAID stamp circle
   doc.circle(370, 35, 28).fill(hexToRgb('#2563EB'));
   applyColor(doc, '#FFFFFF');
-  doc.fontSize(8).font('Helvetica-Bold').text('PAID', 345, 30, { width: 52, align: 'center' });
+  doc.fontSize(8).font('Roboto-Bold').text('PAID', 345, 30, { width: 52, align: 'center' });
 
   doc.y = 83;
 
@@ -364,9 +366,9 @@ function generateReceiptPDF(payment, invoice, school) {
   infoRows.forEach(([label, value]) => {
     const y = doc.y;
     applyColor(doc, COLORS.gray);
-    doc.fontSize(8).font('Helvetica').text(label + ':', 30, y, { width: 110 });
+    doc.fontSize(8).font('Roboto').text(label + ':', 30, y, { width: 110 });
     applyColor(doc, COLORS.text);
-    doc.fontSize(8).font('Helvetica-Bold').text(value, 145, y, { width: 245 });
+    doc.fontSize(8).font('Roboto-Bold').text(value, 145, y, { width: 245 });
     doc.y = y + 14;
   });
 
@@ -378,8 +380,8 @@ function generateReceiptPDF(payment, invoice, school) {
   const amtBoxY = doc.y;
   doc.rect(30, amtBoxY, 360, 40).fill(hexToRgb(COLORS.accent));
   applyColor(doc, '#FFFFFF');
-  doc.fontSize(10).font('Helvetica').text('Amount Paid', 40, amtBoxY + 6, { width: 160 });
-  doc.fontSize(17).font('Helvetica-Bold').text(
+  doc.fontSize(10).font('Roboto').text('Amount Paid', 40, amtBoxY + 6, { width: 160 });
+  doc.fontSize(17).font('Roboto-Bold').text(
     `₹${(payment.amount || 0).toLocaleString('en-IN')}`,
     40, amtBoxY + 8, { width: 340, align: 'right' }
   );
@@ -391,9 +393,9 @@ function generateReceiptPDF(payment, invoice, school) {
     const dueColor = due > 0 ? COLORS.danger : COLORS.success;
     const y = doc.y;
     applyColor(doc, COLORS.gray);
-    doc.fontSize(9).font('Helvetica').text('Balance Due After Payment:', 30, y, { width: 220 });
+    doc.fontSize(9).font('Roboto').text('Balance Due After Payment:', 30, y, { width: 220 });
     applyColor(doc, dueColor);
-    doc.fontSize(10).font('Helvetica-Bold').text(`₹${due.toLocaleString('en-IN')}`, 250, y, { width: 140, align: 'right' });
+    doc.fontSize(10).font('Roboto-Bold').text(`₹${due.toLocaleString('en-IN')}`, 250, y, { width: 140, align: 'right' });
     doc.y = y + 16;
   }
 
@@ -401,7 +403,7 @@ function generateReceiptPDF(payment, invoice, school) {
   drawLine(doc);
   doc.moveDown(0.4);
   applyColor(doc, COLORS.gray);
-  doc.fontSize(7).font('Helvetica-Oblique')
+  doc.fontSize(7).font('Roboto')
      .text('This is a computer-generated receipt. No physical signature required.', { align: 'center' });
   doc.fontSize(7).text(`Generated: ${fmt(new Date(), true)}`, { align: 'center' });
 

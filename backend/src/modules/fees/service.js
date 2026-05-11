@@ -1,42 +1,151 @@
-// FeeStructure is kept as a lazy import ONLY for backward-compat reads on legacy invoices.
-// All NEW operations use StudentFeeProfile as the single source of truth.
-const FeePayment = require('../../models/FeePayment');
-const FeeInvoice = require('../../models/FeeInvoice');
-const Student = require('../../models/Student');
-const AppError = require('../../utils/AppError');
-const mongoose = require('mongoose');
-const ActivityService = require('../activity/service');
-const NotificationService = require('../notification/service');
-const StudentFeeProfile = require('../../models/StudentFeeProfile');
+'use strict';
 
 /**
- * Fees Service — business logic for fee structures, invoices, and payments.
+ * FeesService — clean installment-first fee system.
+ * SOURCE OF TRUTH: StudentFeeProfile
+ * NO FeeStructure. NO legacy fallbacks. DB is fresh.
  */
+
+const FeePayment        = require('../../models/FeePayment');
+const FeeInvoice        = require('../../models/FeeInvoice');
+const Student           = require('../../models/Student');
+const StudentFeeProfile = require('../../models/StudentFeeProfile');
+const AppError          = require('../../utils/AppError');
+const mongoose          = require('mongoose');
+const ActivityService   = require('../activity/service');
+const NotificationService = require('../notification/service');
+
 class FeesService {
+
   static async getModuleStatus() {
     return { module: 'fees', status: 'Fees module is operational' };
   }
 
-
   // ═══════════════════════════════════════════════════════════
-  //  FEE INVOICE (core)
+  //  NEXT DUE DATE HELPER
   // ═══════════════════════════════════════════════════════════
 
   /**
-   * Generate (or retrieve existing) FeeInvoice for a student.
-   * SOURCE OF TRUTH: StudentFeeProfile — installments, amounts, discounts.
-   * Safe to call multiple times — idempotent (one invoice per student/year).
-   *
-   * @param {{ studentId, classId, academicYearId }} params
-   * @returns {FeeInvoice}
+   * Find the earliest unpaid installment due date.
+   * Used after every payment to advance nextDueDate.
+   */
+  static _computeNextDueDate(installments) {
+    if (!Array.isArray(installments) || !installments.length) return null;
+    const unpaid = installments
+      .filter(i => i.status !== 'paid' && i.dueDate)
+      .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+    return unpaid[0]?.dueDate || null;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  GET INVOICE (for student / parent portal)
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Fetch invoice + profile + payments for a student.
+   * Returns a structured object so the parent portal can render
+   * summary, feeProfile, installments, and payment history.
+   */
+  static async getInvoice(studentId, academicYearId) {
+    const query = { studentId };
+    if (academicYearId && mongoose.isValidObjectId(academicYearId)) {
+      query.academicYearId = academicYearId;
+    }
+
+    const invoice = await FeeInvoice.findOne(query)
+      .sort({ createdAt: -1 })
+      .populate('studentId', 'name rollNo classId parentName parentPhone admissionNumber')
+      .populate('classId', 'name code')
+      .populate('academicYearId', 'name')
+      .populate('feeProfileId')
+      .lean();
+
+    if (!invoice) {
+      // No invoice — check for profile (fee assigned but no invoice yet)
+      const profile = await StudentFeeProfile.findOne(
+        academicYearId && mongoose.isValidObjectId(academicYearId)
+          ? { studentId, academicYearId }
+          : { studentId }
+      ).sort({ createdAt: -1 }).lean();
+
+      return {
+        invoice:    null,
+        feeProfile: profile || null,
+        summary:    profile ? {
+          totalFee:  profile.netFee || 0,
+          totalPaid: 0,
+          totalDue:  profile.netFee || 0,
+          status:    'Pending',
+          livePenalty: 0,
+          daysOverdue: 0,
+        } : null,
+        payments: [],
+        student:  null,
+      };
+    }
+
+    // Build feeProfile from populated feeProfileId or fetch separately
+    let feeProfile = invoice.feeProfileId || null;
+    if (!feeProfile || !feeProfile.selectedComponents) {
+      feeProfile = await StudentFeeProfile.findOne(
+        { studentId: invoice.studentId?._id || studentId }
+      ).sort({ createdAt: -1 }).lean();
+    }
+
+    // Fetch payments for this invoice
+    const payments = await FeePayment.find({ invoiceId: invoice._id })
+      .sort({ paidAt: -1 })
+      .lean();
+
+    // Build summary
+    const grossFee       = invoice.grossFee || invoice.totalAmount || 0;
+    const discountAmount = invoice.discountAmount || 0;
+    const netFee         = invoice.netFee || Math.max(0, grossFee - discountAmount);
+    const paidAmount     = invoice.paidAmount || 0;
+    const dueAmount      = invoice.dueAmount  || Math.max(0, netFee - paidAmount);
+    const penaltyAmount  = invoice.penaltyAmount || 0;
+
+    const statusMap = { paid: 'Paid', partial: 'Partial', overdue: 'Overdue', unpaid: 'Pending' };
+    const status = statusMap[invoice.status] || 'Pending';
+
+    // Compute days overdue from nextDueDate
+    let daysOverdue = 0;
+    if (invoice.nextDueDate && invoice.status !== 'paid') {
+      const diff = Math.floor((Date.now() - new Date(invoice.nextDueDate)) / 86400000);
+      if (diff > 0) daysOverdue = diff;
+    }
+
+    const summary = {
+      totalFee:    netFee,
+      totalPaid:   paidAmount,
+      totalDue:    dueAmount,
+      grossFee,
+      discountAmount,
+      penaltyAmount,
+      status,
+      livePenalty: penaltyAmount,
+      daysOverdue,
+    };
+
+    return { invoice, feeProfile, summary, payments, student: invoice.studentId || null };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  INVOICE GENERATION
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Generate a FeeInvoice from a StudentFeeProfile.
+   * Idempotent — returns existing invoice if one exists for this student+year.
    */
   static async generateInvoice({ studentId, classId, academicYearId }) {
-    // Idempotent — return existing if present
+    // Idempotency guard
     const existing = await FeeInvoice.findOne({ studentId, academicYearId });
     if (existing) return existing;
 
-    // Resolve the StudentFeeProfile (must exist before generating invoice)
-    const profile = await StudentFeeProfile.findOne({ studentId, academicYearId }).sort({ createdAt: -1 });
+    // Load profile — must exist
+    const profile = await StudentFeeProfile.findOne({ studentId, academicYearId })
+      .sort({ createdAt: -1 });
     if (!profile) {
       throw new AppError(
         'No fee profile found for this student. Please assign fee components first in Fees → Assign Fees.',
@@ -44,78 +153,96 @@ class FeesService {
       );
     }
     if (!profile.grossFee || profile.grossFee <= 0) {
-      throw new AppError('Fee profile has no components assigned. Total fee is Rs.0.', 400);
+      throw new AppError('Fee profile has no components. Total fee is ₹0.', 400);
     }
 
-    // ── Build invoice installments from profile schedule ──────────────────
+    // ── Schedule validation gate ────────────────────────────────────────────
+    // Invoice cannot be generated until admin has set a valid payment schedule.
+    if (!profile.installments || profile.installments.length === 0) {
+      throw new AppError(
+        'Payment schedule is missing. Open Assign Fees → click Sch. to add installments with due dates before generating an invoice.',
+        400
+      );
+    }
+
+    const missingDue = profile.installments.filter(i => !i.dueDate);
+    if (missingDue.length > 0) {
+      throw new AppError(
+        `${missingDue.length} installment(s) are missing a due date. Open Assign Fees → Sch. and set due dates for all installments.`,
+        400
+      );
+    }
+
+    if (profile.scheduleOutOfSync) {
+      throw new AppError(
+        'The payment schedule is out of sync with the current net fee (a discount may have been applied). ' +
+        'Open Assign Fees → Sch., update installment amounts to match ₹' + profile.netFee + ', then save before generating an invoice.',
+        400
+      );
+    }
+
+    const instSum = profile.installments.reduce((s, i) => s + (i.amount || 0), 0);
+    if (Math.abs(instSum - profile.netFee) > 1) {
+      throw new AppError(
+        `Installment total (₹${instSum}) does not match net fee (₹${profile.netFee}). Adjust the schedule and save.`,
+        400
+      );
+    }
+    // ──────────────────────────────────────────────────────────────────────────────
+
     const now = new Date();
-    const scheduleInstallments = (profile.installments || []).map((inst, i) => ({
-      installmentNo: inst.installmentNo || i + 1,
-      label:         inst.label,
-      amount:        inst.amount,
-      dueDate:       inst.dueDate || null,
-      paidAmount:    0,
-      status:        inst.dueDate && new Date(inst.dueDate) < now ? 'overdue' : 'pending',
-    }));
 
-    // ── Build legacy feeItems (backward-compat) ───────────────────────────
-    const feeItems = (profile.selectedComponents || []).map(c => ({
-      name:   c.name,
-      amount: c.amount,
-    }));
+    // Build installments from profile schedule
+    const installments = (profile.installments || []).map((inst, i) => {
+      const isOverdue = inst.dueDate && new Date(inst.dueDate) < now;
+      return {
+        installmentNo: inst.installmentNo || i + 1,
+        label:         inst.label,
+        amount:        inst.amount,
+        dueDate:       inst.dueDate || null,
+        paidAmount:    0,
+        balanceAmount: inst.amount,
+        status:        isOverdue ? 'overdue' : 'pending',
+      };
+    });
 
-    // ── Compute due dates ─────────────────────────────────────────────────
-    const dueDates = scheduleInstallments
-      .filter(i => i.dueDate)
-      .map(i => new Date(i.dueDate))
-      .sort((a, b) => a - b);
-    const dueDate    = dueDates[0] || null;
-    const nextDueDate = FeesService._computeNextDueDate(scheduleInstallments);
-
-    const totalAmount    = profile.grossFee;
-    const discountAmount = profile.discountAmt;
+    const nextDueDate = FeesService._computeNextDueDate(installments);
 
     const invoice = await FeeInvoice.create({
       studentId,
       classId,
       academicYearId:  academicYearId || null,
       feeProfileId:    profile._id,
-      feeItems,
-      installments:    scheduleInstallments,
-      totalAmount,
-      discountAmount,
+      installments,
+      grossFee:        profile.grossFee,
+      discountAmount:  profile.discountAmt,
+      netFee:          profile.netFee,
       paidAmount:      0,
-      dueAmount:       Math.max(0, totalAmount - discountAmount),
+      dueAmount:       profile.netFee,
       status:          'unpaid',
-      dueDate,
       nextDueDate,
+      penaltyConfig:   profile.penaltyConfig,
     });
+
+    ActivityService.log({
+      studentId,
+      action: `Invoice ${invoice.invoiceNumber} generated`,
+      module: 'fee',
+      metadata: { invoiceId: invoice._id, grossFee: profile.grossFee, netFee: profile.netFee },
+    }).catch(() => {});
 
     return invoice;
   }
 
-  /**
-   * Compute the next upcoming unpaid installment dueDate from an installments array.
-   * Returns null if no future unpaid installments exist.
-   * @param {Array} installments
-   * @returns {Date|null}
-   */
-  static _computeNextDueDate(installments) {
-    if (!Array.isArray(installments) || !installments.length) return null;
-    const now = new Date();
-    const upcoming = installments
-      .filter(i => i.status !== 'paid' && i.dueDate && new Date(i.dueDate) >= now)
-      .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
-    return upcoming[0]?.dueDate || null;
-  }
+  // ═══════════════════════════════════════════════════════════
+  //  GET INVOICE
+  // ═══════════════════════════════════════════════════════════
 
-
-  /**
-   * Get invoice for a student (+ academic year).
-   */
   static async getInvoice(studentId, academicYearId) {
     const query = { studentId };
-    if (academicYearId && mongoose.isValidObjectId(academicYearId)) query.academicYearId = academicYearId;
+    if (academicYearId && mongoose.isValidObjectId(academicYearId)) {
+      query.academicYearId = academicYearId;
+    }
     return FeeInvoice.findOne(query)
       .populate('feeProfileId')
       .populate('classId', 'name')
@@ -124,484 +251,154 @@ class FeesService {
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  FEE PAYMENTS
+  //  INSTALLMENT PAYMENT
   // ═══════════════════════════════════════════════════════════
 
   /**
-   * Record a fee payment for a student.
-   * - Enforces overpay prevention via FeeInvoice
-   * - Updates invoice paidAmount / dueAmount / status atomically
-   * - Applies payment to earliest unpaid installments in FeeStructure
-   * - Falls back to FeeStructure if no invoice exists (backward compat)
+   * Record a payment against a specific installment (or auto-select first unpaid).
+   * Distributes payment across installments in chronological order.
    */
-  static async recordPayment({ studentId, amount, paymentMode, transactionId, invoiceId }) {
-    if (!mongoose.isValidObjectId(studentId)) throw new AppError('Invalid student ID format', 400);
+  static async recordInstallmentPayment({ invoiceId, installmentId, amount, paymentMode, transactionId, userId }) {
+    const invoice = await FeeInvoice.findById(invoiceId);
+    if (!invoice) throw new AppError('Invoice not found', 404);
+    if (invoice.locked) throw new AppError('Invoice is locked. Cannot record payment.', 403);
+    if (invoice.status === 'paid') throw new AppError('Invoice is already fully paid.', 400);
 
-    const student = await Student.findById(studentId).populate('classId');
-    if (!student) throw new AppError('Student not found', 404);
-
-    // ─── Find or resolve invoice ───────────────────────────
-    let invoice = null;
-    if (invoiceId && mongoose.isValidObjectId(invoiceId)) {
-      invoice = await FeeInvoice.findById(invoiceId);
+    // Guard: invoice must have a payment schedule
+    if (!invoice.installments || invoice.installments.length === 0) {
+      throw new AppError(
+        'This invoice has no payment schedule. Regenerate the schedule from the invoice detail page after setting installments in Assign Fees.',
+        400
+      );
     }
-    if (!invoice) {
-      invoice = await FeeInvoice.findOne({ studentId }).sort({ createdAt: -1 });
+    if (!invoice.nextDueDate) {
+      throw new AppError(
+        'No due date is set on this invoice. Ensure all installments have due dates and regenerate the schedule.',
+        400
+      );
     }
 
-    // ─── Overpay prevention ────────────────────────────────
-    if (invoice) {
-      if (amount > invoice.dueAmount) {
-        throw new AppError(
-          `Cannot overpay. Due: ₹${invoice.dueAmount}, Max allowed: ₹${invoice.dueAmount}`,
-          400
-        );
+    // Validate amount ≤ dueAmount
+    if (amount > invoice.dueAmount + 0.01) {
+      throw new AppError(`Cannot overpay. Balance due: ₹${invoice.dueAmount}`, 400);
+    }
+
+    // Determine target installment
+    let targetInst = null;
+    if (installmentId) {
+      targetInst = invoice.installments.id(installmentId);
+      if (!targetInst) throw new AppError('Installment not found in this invoice', 404);
+      if (targetInst.status === 'paid') throw new AppError('Installment is already fully paid', 400);
+      const remaining = (targetInst.amount || 0) - (targetInst.paidAmount || 0);
+      if (amount > remaining + 0.01) {
+        throw new AppError(`Amount exceeds installment balance of ₹${remaining}`, 400);
       }
     } else {
-    // Fallback to FeePayments (backward compat for students without invoice)
-      const existingPayments = await FeePayment.find({ studentId }).lean();
-      const totalPaid = existingPayments.reduce((sum, p) => sum + p.amount, 0);
-      const feeProfile = await StudentFeeProfile.findOne({ studentId }).sort({ createdAt: -1 }).lean();
-      const maxFee = feeProfile ? feeProfile.netFee || feeProfile.grossFee || 0 : 0;
-      if (maxFee > 0 && totalPaid + amount > maxFee) {
-        const maxAllowed = maxFee - totalPaid;
-        throw new AppError(
-          `Cannot overpay. Total fee: Rs.${maxFee}, Already paid: Rs.${totalPaid}. Max allowed: Rs.${maxAllowed}`,
-          400
-        );
-      }
+      // Auto-distribute to earliest unpaid installments in order
+      targetInst = invoice.installments
+        .filter(i => i.status !== 'paid')
+        .sort((a, b) => {
+          if (a.dueDate && b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate);
+          return (a.installmentNo || 0) - (b.installmentNo || 0);
+        })[0] || null;
     }
 
-    // ─── Create payment record ─────────────────────────────
+    // Create payment record
+    const student = await Student.findById(invoice.studentId);
     const payment = await FeePayment.create({
-      studentId,
+      studentId:     invoice.studentId,
       amount,
       paymentMode,
       transactionId: transactionId || null,
-      invoiceId: invoice?._id || null,
-      paidAt: new Date(),
+      invoiceId:     invoice._id,
+      installmentId: targetInst?._id || null,
+      installmentNo: targetInst?.installmentNo || null,
+      collectedBy:   userId || null,
+      status:        'approved',
+      paidAt:        new Date(),
     });
 
-    // ─── Update invoice atomically ─────────────────────────
-    if (invoice) {
-      invoice.paidAmount = invoice.paidAmount + amount;
-      invoice.dueAmount = Math.max(0, invoice.totalAmount - invoice.paidAmount);
-      if (invoice.paidAmount >= invoice.totalAmount) {
-        invoice.status = 'paid';
-      } else if (invoice.paidAmount > 0) {
-        invoice.status = 'partial';
-      }
-      await invoice.save();
+    // Distribute payment across installments (auto-distribute if no specific target)
+    let remaining = amount;
+    const sortedInsts = invoice.installments
+      .filter(i => i.status !== 'paid')
+      .sort((a, b) => {
+        if (a.dueDate && b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate);
+        return (a.installmentNo || 0) - (b.installmentNo || 0);
+      });
+
+    // If targeting a specific installment, only apply to that one
+    const instsToApply = targetInst
+      ? [targetInst]
+      : sortedInsts;
+
+    for (const inst of instsToApply) {
+      if (remaining <= 0) break;
+      const instBalance = (inst.amount || 0) - (inst.paidAmount || 0);
+      if (instBalance <= 0) continue;
+
+      const payToInst = Math.min(remaining, instBalance);
+      inst.paidAmount    = (inst.paidAmount || 0) + payToInst;
+      inst.balanceAmount = Math.max(0, (inst.amount || 0) - inst.paidAmount);
+      inst.paidAt        = new Date();
+      inst.paymentMode   = paymentMode;
+      inst.receiptNumber = payment.receiptNumber;
+      inst.collectedBy   = userId || null;
+      inst.transactionId = transactionId || null;
+      inst.status        = inst.paidAmount >= inst.amount ? 'paid' : 'partial';
+      remaining -= payToInst;
     }
 
-    // ─── Apply payment to invoice installments ─────────────────
-    // (handled inline by recordInstallmentPayment; legacy path skips)
-    if (invoice && invoice.installments?.length > 0) {
-      // Already handled by invoice.save() above — installments tracked per invoice
-    }
+    // Update invoice totals
+    invoice.paidAmount  = (invoice.paidAmount || 0) + amount;
+    invoice.nextDueDate = FeesService._computeNextDueDate(invoice.installments);
+    await invoice.save(); // pre-save hook recalculates dueAmount, netFee, status
 
-    // Activity + notification (non-blocking)
-    FeesService._triggerPaymentActivity(student, amount, paymentMode, payment.receiptNumber);
-    FeesService._triggerPaymentNotification(student, amount, payment.receiptNumber);
+    // Notify parent (non-blocking)
+    FeesService._notifyPayment(student, invoice.studentId, amount, payment.receiptNumber);
+
+    // Activity log
+    ActivityService.log({
+      studentId: invoice.studentId,
+      action:    `Fee payment of ₹${amount} via ${paymentMode} recorded. Receipt: ${payment.receiptNumber}`,
+      module:    'fee',
+      metadata:  { invoiceId, amount, paymentMode, receiptNumber: payment.receiptNumber },
+    }).catch(() => {});
 
     return { payment, invoice };
-  }
-
-  // _applyPaymentToInstallments now handled by recordInstallmentPayment directly on invoice.installments
-  // Legacy FeeStructure installment update removed.
-
-  static _triggerPaymentActivity(student, amount, paymentMode, receiptNumber) {
-    ActivityService.log({
-      studentId: student._id,
-      action: `Fee payment of ₹${amount} via ${paymentMode} (${receiptNumber})`,
-      module: 'fee',
-      metadata: { amount, paymentMode, receiptNumber, studentName: student.name },
-    }).catch((e) => console.error('Activity log failed:', e.message));
-  }
-
-  static _triggerPaymentNotification(student, amount, receiptNumber) {
-    if (!student.parentId) return;
-    const Parent = require('../../models/Parent');
-    Parent.findById(student.parentId).then((parent) => {
-      if (!parent?.userId) return;
-      NotificationService.create(parent.userId, {
-        title: 'Fee Payment Received',
-        message: `₹${amount} paid for ${student.name}. Receipt: ${receiptNumber}`,
-        type: 'info',
-        metadata: { studentId: student._id, amount, receiptNumber },
-      });
-    }).catch((e) => console.error('Payment notification failed:', e.message));
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  //  STUDENT FEE DETAILS
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Get full fee details for a student — invoice + payments + installment breakdown + summary.
-   * Returns { student, invoice, feeProfile, payments, installments, summary }
-   */
-  static async getStudentFees(studentId) {
-    if (!mongoose.isValidObjectId(studentId)) throw new AppError('Invalid student ID format', 400);
-
-    const student = await Student.findById(studentId)
-      .populate('classId', 'name code')
-      .lean();
-    if (!student) throw new AppError('Student not found', 404);
-
-    // Fetch invoice
-    const invoice = await FeeInvoice.findOne({ studentId })
-      .populate('feeProfileId')
-      .populate('classId', 'name')
-      .populate('academicYearId', 'name')
-      .sort({ createdAt: -1 })
-      .lean();
-
-    // Fetch StudentFeeProfile for fallback
-    const feeProfile = invoice?.feeProfileId
-      || await StudentFeeProfile.findOne({ studentId }).sort({ createdAt: -1 }).lean();
-
-    // Fetch all approved payments
-    const payments = await FeePayment.find({ studentId, status: { $ne: 'rejected' } })
-      .sort({ paidAt: -1 }).lean();
-
-    // ── Installment breakdown — from invoice.installments (canonical) ──────
-    const rawInstallments = invoice?.installments || [];
-    const installments = rawInstallments.map((inst) => ({
-      _id:        inst._id,
-      label:      inst.label,
-      name:       inst.label,    // backward-compat alias
-      amount:     inst.amount,
-      dueDate:    inst.dueDate,
-      paidAmount: inst.paidAmount || 0,
-      due:        Math.max(0, inst.amount - (inst.paidAmount || 0)),
-      status:     inst.status || 'pending',
-      overdue:    inst.dueDate && new Date(inst.dueDate) < new Date() && inst.status !== 'paid',
-    }));
-
-    // Compute summary from invoice (preferred) or from feeProfile+payments
-    let totalFee, totalPaid, totalDue, status;
-    if (invoice) {
-      totalFee  = invoice.totalAmount;
-      totalPaid = invoice.paidAmount;
-      totalDue  = invoice.dueAmount;
-      status    = invoice.status === 'paid' ? 'Paid' : invoice.status === 'partial' ? 'Partial' : 'Pending';
-    } else {
-      totalFee  = feeProfile ? (feeProfile.netFee || feeProfile.grossFee || 0) : 0;
-      totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-      totalDue  = Math.max(0, totalFee - totalPaid);
-      status    = totalPaid >= totalFee && totalFee > 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : 'Pending';
-    }
-
-    return {
-      student,
-      invoice,
-      feeProfile,
-      feeStructure: null,  // backward-compat key — always null now
-      payments,
-      installments,
-      summary: { totalFee, totalPaid, totalDue, status },
-    };
-  }
-
-
-  // ═══════════════════════════════════════════════════════════
-  //  DUE LIST
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Get list of students with unpaid or partial fees.
-   * Filtered by classId, status (unpaid|partial|all).
-   */
-  static async getDueList(filters = {}) {
-    const query = { status: { $in: ['unpaid', 'partial', 'overdue'] } };
-    if (filters.status === 'unpaid') query.status = 'unpaid';
-    else if (filters.status === 'partial') query.status = 'partial';
-    else if (filters.status === 'overdue') query.status = 'overdue';
-
-    if (filters.classId && mongoose.isValidObjectId(filters.classId)) {
-      query.classId = filters.classId;
-    }
-
-    const PenaltyEngine = require('../../utils/penaltyEngine');
-
-    const invoices = await FeeInvoice.find(query)
-      .populate('studentId', 'name rollNo admissionNumber parentPhone')
-      .populate('classId', 'name')
-      .populate('academicYearId', 'name')
-      .sort({ dueAmount: -1 })
-      .lean();
-
-    return invoices.map((inv) => {
-      const penalty = PenaltyEngine.computeInvoicePenalty(inv, null);
-      return {
-        invoiceId:    inv._id,
-        invoiceNumber: inv.invoiceNumber,
-        student:      inv.studentId,
-        class:        inv.classId,
-        academicYear: inv.academicYearId,
-        totalAmount:  inv.totalAmount,
-        paidAmount:   inv.paidAmount,
-        dueAmount:    inv.dueAmount,
-        storedPenalty: inv.penaltyAmount || 0,
-        livePenalty:  penalty.totalPenalty,
-        totalPayable: (inv.dueAmount || 0) + penalty.totalPenalty,
-        daysOverdue:  penalty.daysOverdue,
-        status:       inv.status,
-        dueDate:      inv.dueDate,
-        isOverdue:    PenaltyEngine.isOverdue(inv.dueDate, inv.status),
-      };
-    });
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  //  FEE OVERVIEW
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Fee overview: invoice-based. Falls back to StudentFeeProfile if no invoice.
-   */
-  static async getFeeOverview(filters = {}) {
-    const studentQuery = { isActive: true };
-    if (filters.classId) studentQuery.classId = filters.classId;
-
-    const students = await Student.find(studentQuery)
-      .populate('classId', 'name code')
-      .sort({ name: 1 })
-      .lean();
-
-    if (!students.length) return [];
-
-    const studentIds = students.map((s) => s._id);
-
-    // Load invoices
-    const invoices = await FeeInvoice.find({ studentId: { $in: studentIds } }).lean();
-    const invoiceMap = {};
-    for (const inv of invoices) invoiceMap[inv.studentId.toString()] = inv;
-
-    // Load profiles for fallback (no FeeStructure)
-    const profiles = await StudentFeeProfile.find({ studentId: { $in: studentIds } }).lean();
-    const profileMap = {};
-    for (const p of profiles) profileMap[p.studentId.toString()] = p;
-
-    // Load payments for fallback
-    const payments = await FeePayment.find({ studentId: { $in: studentIds } }).lean();
-    const paidMap = {};
-    for (const p of payments) {
-      const key = p.studentId.toString();
-      paidMap[key] = (paidMap[key] || 0) + p.amount;
-    }
-
-    return students.map((student) => {
-      const inv     = invoiceMap[student._id.toString()];
-      const profile = profileMap[student._id.toString()];
-      let totalFee, totalPaid, totalDue, status;
-
-      if (inv) {
-        totalFee  = inv.totalAmount;
-        totalPaid = inv.paidAmount;
-        totalDue  = inv.dueAmount;
-        status    = inv.status === 'paid' ? 'Paid' : inv.status === 'partial' ? 'Partial' : 'Pending';
-      } else if (profile) {
-        totalFee  = profile.netFee || profile.grossFee || 0;
-        totalPaid = paidMap[student._id.toString()] || 0;
-        totalDue  = Math.max(0, totalFee - totalPaid);
-        status    = totalPaid >= totalFee && totalFee > 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : 'Pending';
-      } else {
-        totalFee = totalPaid = totalDue = 0;
-        status   = 'Pending';
-      }
-
-      return {
-        _id:           student._id,
-        name:          student.name,
-        rollNo:        student.rollNo,
-        className:     student.classId?.name || '—',
-        classId:       student.classId?._id,
-        invoiceId:     inv?._id || null,
-        invoiceNumber: inv?.invoiceNumber || null,
-        totalFee,
-        totalPaid,
-        totalDue,
-        status,
-        dueDate:     inv?.dueDate || null,
-        nextDueDate: inv?.nextDueDate || null,
-      };
-    });
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  //  APPLY FEE STRUCTURE TO CLASS (bulk invoice generation)
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Generate invoices for ALL students in a class that have a fee profile.
-   * Idempotent — skips students who already have an invoice for the academic year.
-   */
-  static async applyStructureToClass({ classId, academicYearId, sectionId }) {
-    if (!classId) throw new AppError('classId is required', 400);
-
-    const SetupService = require('../setup/service');
-    const resolvedYearId = await SetupService.resolveAcademicYearId(academicYearId);
-
-    const studentQuery = { classId, isActive: true };
-    if (sectionId && mongoose.isValidObjectId(sectionId)) studentQuery.sectionId = sectionId;
-
-    const students = await Student.find(studentQuery).select('_id classId').lean();
-    if (!students.length) return { generated: 0, skipped: 0, total: 0 };
-
-    let generated = 0, skipped = 0;
-
-    for (const student of students) {
-      try {
-        const existing = await FeeInvoice.findOne({ studentId: student._id, academicYearId: resolvedYearId });
-        if (existing) { skipped++; continue; }
-
-        await FeesService.generateInvoice({
-          studentId:      student._id,
-          classId:        student.classId,
-          academicYearId: resolvedYearId,
-        });
-        generated++;
-      } catch (e) {
-        console.error(`Invoice generation failed for student ${student._id}:`, e.message);
-      }
-    }
-
-    return { generated, skipped, total: students.length };
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  //  MANUAL PAYMENT (parent submits, admin approves/rejects)
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Submit a manual payment (status = 'pending').
-   * No invoice update until admin approves.
-   */
-  static async recordManualPayment({ studentId, amount, paymentMode, transactionId, proofUrl, invoiceId }) {
-    if (!mongoose.isValidObjectId(studentId)) throw new AppError('Invalid student ID', 400);
-    const student = await Student.findById(studentId);
-    if (!student) throw new AppError('Student not found', 404);
-
-    const payment = await FeePayment.create({
-      studentId,
-      amount,
-      paymentMode: paymentMode || 'online',
-      transactionId: transactionId || null,
-      proofUrl: proofUrl || null,
-      invoiceId: invoiceId || null,
-      status: 'pending',
-      paidAt: new Date(),
-    });
-
-    return payment;
-  }
-
-  /**
-   * Admin approves a pending payment → updates invoice.
-   */
-  static async approvePayment(paymentId, adminUserId) {
-    if (!mongoose.isValidObjectId(paymentId)) throw new AppError('Invalid payment ID', 400);
-
-    const payment = await FeePayment.findById(paymentId);
-    if (!payment) throw new AppError('Payment not found', 404);
-    if (payment.status === 'approved') throw new AppError('Payment already approved', 400);
-    if (payment.status === 'rejected') throw new AppError('Cannot approve a rejected payment', 400);
-
-    payment.status = 'approved';
-    await payment.save();
-
-    // Update invoice if linked
-    if (payment.invoiceId) {
-      const invoice = await FeeInvoice.findById(payment.invoiceId);
-      if (invoice) {
-        invoice.paidAmount = invoice.paidAmount + payment.amount;
-        invoice.dueAmount = Math.max(0, invoice.totalAmount - invoice.paidAmount);
-        invoice.status = invoice.paidAmount >= invoice.totalAmount ? 'paid' : 'partial';
-        await invoice.save();
-      }
-    }
-
-    return payment;
-  }
-
-  /**
-   * Admin rejects a pending payment.
-   */
-  static async rejectPayment(paymentId, reason) {
-    if (!mongoose.isValidObjectId(paymentId)) throw new AppError('Invalid payment ID', 400);
-
-    const payment = await FeePayment.findById(paymentId);
-    if (!payment) throw new AppError('Payment not found', 404);
-    if (payment.status !== 'pending') throw new AppError('Only pending payments can be rejected', 400);
-
-    payment.status = 'rejected';
-    if (reason) payment.remarks = reason;
-    await payment.save();
-
-    return payment;
-  }
-
-  /**
-   * Get all pending payments (admin view).
-   */
-  static async getPendingPayments(filters = {}) {
-    const query = { status: 'pending' };
-    if (filters.classId) {
-      // Join through studentId
-      const students = await Student.find({ classId: filters.classId }).select('_id').lean();
-      query.studentId = { $in: students.map((s) => s._id) };
-    }
-    return FeePayment.find(query)
-      .populate('studentId', 'name rollNo classId')
-      .populate('invoiceId', 'invoiceNumber totalAmount')
-      .sort({ paidAt: -1 })
-      .lean();
   }
 
   // ═══════════════════════════════════════════════════════════
   //  PENALTY ENGINE
   // ═══════════════════════════════════════════════════════════
 
-  /**
-   * Calculate and apply late fee to an invoice.
-   * @param {string} invoiceId
-   * @param {{ type: 'fixed'|'percent', value: number }} overrideConfig - optional override
-   */
-  static async applyPenalty(invoiceId, overrideConfig, userId) {
+  static async applyPenalty(invoiceId, { type, value }, userId) {
     const invoice = await FeeInvoice.findById(invoiceId);
     if (!invoice) throw new AppError('Invoice not found', 404);
-    if (invoice.locked) throw new AppError('Invoice is locked. Cannot modify.', 403);
+    if (invoice.locked) throw new AppError('Invoice is locked.', 403);
     if (invoice.status === 'paid') throw new AppError('Invoice is fully paid. No penalty applicable.', 400);
 
-    const config = overrideConfig || {};
     let penaltyAmt = 0;
-
-    if (config.type === 'percent') {
-      penaltyAmt = Math.round((invoice.dueAmount * config.value) / 100);
+    if (type === 'percent') {
+      penaltyAmt = Math.round((invoice.dueAmount * value) / 100);
     } else {
-      penaltyAmt = config.value || 0;
+      penaltyAmt = value || 0;
     }
-
-    if (penaltyAmt <= 0) throw new AppError('Penalty amount must be greater than 0', 400);
+    if (penaltyAmt <= 0) throw new AppError('Penalty amount must be greater than ₹0', 400);
 
     invoice.penaltyAmount = (invoice.penaltyAmount || 0) + penaltyAmt;
     await invoice.save();
 
     ActivityService.log({
       studentId: invoice.studentId,
-      action: `Penalty of ₹${penaltyAmt} applied to invoice ${invoice.invoiceNumber}`,
-      module: 'fee',
-      metadata: { invoiceId, penaltyAmt, userId },
+      action:    `Penalty of ₹${penaltyAmt} applied to invoice ${invoice.invoiceNumber}`,
+      module:    'fee',
+      metadata:  { invoiceId, penaltyAmt, userId },
     }).catch(() => {});
 
     return invoice;
   }
 
-  /**
-   * Waive penalty (partially or fully) on an invoice.
-   */
   static async waivePenalty(invoiceId, { waiveAmount, reason }, userId) {
     const invoice = await FeeInvoice.findById(invoiceId);
     if (!invoice) throw new AppError('Invoice not found', 404);
@@ -619,9 +416,9 @@ class FeesService {
 
     ActivityService.log({
       studentId: invoice.studentId,
-      action: `Penalty of ₹${toWaive} waived on invoice ${invoice.invoiceNumber}. Reason: ${reason || 'N/A'}`,
-      module: 'fee',
-      metadata: { invoiceId, toWaive, reason, userId },
+      action:    `Penalty of ₹${toWaive} waived on invoice ${invoice.invoiceNumber}. Reason: ${reason || 'N/A'}`,
+      module:    'fee',
+      metadata:  { invoiceId, toWaive, reason, userId },
     }).catch(() => {});
 
     return invoice;
@@ -635,7 +432,6 @@ class FeesService {
     const invoice = await FeeInvoice.findById(invoiceId);
     if (!invoice) throw new AppError('Invoice not found', 404);
     if (invoice.locked) throw new AppError('Invoice is already locked', 400);
-
     invoice.locked   = true;
     invoice.lockedAt = new Date();
     invoice.lockedBy = userId;
@@ -647,7 +443,6 @@ class FeesService {
     const invoice = await FeeInvoice.findById(invoiceId);
     if (!invoice) throw new AppError('Invoice not found', 404);
     if (!invoice.locked) throw new AppError('Invoice is not locked', 400);
-
     invoice.locked     = false;
     invoice.unlockedAt = new Date();
     invoice.unlockedBy = userId;
@@ -656,243 +451,192 @@ class FeesService {
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  INSTALLMENT PAYMENT (student-wise invoice)
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Record payment against a specific installment in a FeeInvoice.
-   */
-  static async recordInstallmentPayment({ invoiceId, installmentId, amount, paymentMode, transactionId, userId }) {
-    const invoice = await FeeInvoice.findById(invoiceId);
-    if (!invoice) throw new AppError('Invoice not found', 404);
-    if (invoice.locked) throw new AppError('Invoice is locked. Cannot record payment.', 403);
-    if (invoice.status === 'paid') throw new AppError('Invoice is already fully paid', 400);
-
-    let targetInstallment = null;
-    if (installmentId) {
-      targetInstallment = invoice.installments.id(installmentId);
-    }
-    // Fallback to first pending installment
-    if (!targetInstallment) {
-      targetInstallment = invoice.installments.find(i => i.status !== 'paid');
-    }
-
-    if (!targetInstallment) {
-      // No installments — treat as full payment
-      if (amount > invoice.dueAmount) {
-        throw new AppError(`Cannot overpay. Due: ₹${invoice.dueAmount}`, 400);
-      }
-    } else {
-      const remaining = targetInstallment.amount - (targetInstallment.paidAmount || 0);
-      if (amount > remaining) {
-        throw new AppError(`Amount exceeds installment due of ₹${remaining}`, 400);
-      }
-    }
-
-    // Create payment record
-    const student = await Student.findById(invoice.studentId);
-    const payment = await FeePayment.create({
-      studentId:     invoice.studentId,
-      amount,
-      paymentMode,
-      transactionId: transactionId || null,
-      invoiceId:     invoice._id,
-      installmentId: targetInstallment?._id || null,
-      installmentNo: targetInstallment?.installmentNo || null,
-      collectedBy:   userId,
-      status:        'approved',
-      paidAt:        new Date(),
-    });
-
-    // Update installment
-    if (targetInstallment) {
-      targetInstallment.paidAmount  = (targetInstallment.paidAmount || 0) + amount;
-      targetInstallment.paidAt      = new Date();
-      targetInstallment.paymentMode = paymentMode;
-      targetInstallment.receiptNumber = payment.receiptNumber;
-      targetInstallment.collectedBy   = userId;
-      targetInstallment.transactionId = transactionId || null;
-      if (targetInstallment.paidAmount >= targetInstallment.amount) {
-        targetInstallment.status = 'paid';
-      } else {
-        targetInstallment.status = 'partial';
-      }
-    }
-
-    // Update invoice totals + advance nextDueDate to next unpaid installment
-    invoice.paidAmount  = (invoice.paidAmount || 0) + amount;
-    invoice.nextDueDate = FeesService._computeNextDueDate(invoice.installments);
-    await invoice.save(); // pre-save hook updates dueAmount + status
-
-    // Notify parent
-    if (student?.parentId) {
-      const Parent = require('../../models/Parent');
-      Parent.findById(student.parentId).then((parent) => {
-        if (!parent?.userId) return;
-        NotificationService.create(parent.userId, {
-          title:   'Fee Payment Received',
-          message: `₹${amount} paid for ${student.name}. Receipt: ${payment.receiptNumber}`,
-          type:    'info',
-          metadata: { studentId: student._id, amount, receiptNumber: payment.receiptNumber },
-        });
-      }).catch(() => {});
-    }
-
-    return { payment, invoice };
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  //  ENHANCED STUDENT FEES (includes profile data)
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Enhanced getStudentFees — includes StudentFeeProfile + auto-penalty.
-   * Backward compatible with old class-wise invoice system.
-   */
-  static async getEnhancedStudentFees(studentId) {
-    if (!mongoose.isValidObjectId(studentId)) throw new AppError('Invalid student ID', 400);
-
-    const baseData = await FeesService.getStudentFees(studentId);
-
-    // Load the StudentFeeProfile
-    const StudentFeeProfile = require('../../models/StudentFeeProfile');
-    const profile = await StudentFeeProfile.findOne({ studentId })
-      .populate('selectedComponents.componentId', 'name code amount mandatory recurringType lateFeeConfig')
-      .populate('discounts.approvedBy', 'name')
-      .populate('lockedBy', 'name')
-      .lean();
-
-    // Auto-compute live penalty (non-destructive — does NOT write to DB)
-    const PenaltyEngine = require('../../utils/penaltyEngine');
-    const penaltySummary = PenaltyEngine.computeInvoicePenalty(
-      baseData.invoice || {},
-      profile
-    );
-
-    // Enrich summary with live penalty
-    const summary = { ...baseData.summary };
-    if (penaltySummary.totalPenalty > 0) {
-      const storedPenalty = baseData.invoice?.penaltyAmount || 0;
-      const effectivePenalty = Math.max(penaltySummary.totalPenalty, storedPenalty);
-      summary.livePenalty      = penaltySummary.totalPenalty;
-      summary.effectivePenalty = effectivePenalty;
-      summary.daysOverdue      = penaltySummary.daysOverdue;
-      summary.penaltyBreakdown = penaltySummary.breakdown;
-      summary.totalPayable     = (summary.totalDue || 0) + effectivePenalty;
-      summary.penaltyDetails   = penaltySummary.details;
-    } else {
-      summary.livePenalty    = 0;
-      summary.effectivePenalty = baseData.invoice?.penaltyAmount || 0;
-      summary.daysOverdue    = penaltySummary.daysOverdue;
-      summary.totalPayable   = (summary.totalDue || 0) + (baseData.invoice?.penaltyAmount || 0);
-    }
-
-    return { ...baseData, feeProfile: profile || null, penaltySummary, summary };
-  }
-
-  // ═══════════════════════════════════════════════════════════
   //  REGENERATE SCHEDULE
   // ═══════════════════════════════════════════════════════════
 
   /**
-   * Regenerate the installment schedule for an invoice from its StudentFeeProfile.
-   * SOURCE OF TRUTH: StudentFeeProfile.installments
-   * Preserves already-paid amounts by index (primary), then label (fallback).
-   * @param {string} invoiceId
-   * @param {string} userId
+   * Re-sync invoice installments from the StudentFeeProfile.
+   * Preserves already-paid amounts by matching installmentNo (then label).
    */
   static async regenerateSchedule(invoiceId, userId) {
     const invoice = await FeeInvoice.findById(invoiceId);
     if (!invoice) throw new AppError('Invoice not found', 404);
     if (invoice.locked) throw new AppError('Invoice is locked. Cannot regenerate schedule.', 403);
 
-    // Resolve StudentFeeProfile
     const profile = await StudentFeeProfile.findOne({
       studentId:      invoice.studentId,
       academicYearId: invoice.academicYearId,
     }).sort({ createdAt: -1 });
 
     if (!profile) {
-      throw new AppError(
-        'No fee profile found for this student. Assign fee components first in Fees → Assign Fees.',
-        400
-      );
+      throw new AppError('No fee profile found. Assign fee components first.', 400);
     }
-
     if (!profile.installments || profile.installments.length === 0) {
       throw new AppError('Fee profile has no installment schedule defined.', 400);
     }
 
-    // Map existing paid amounts by index and label to preserve payment history
-    const existingByIndex = new Map();
-    const existingByLabel = new Map();
+    // Preserve paid amounts by index and by label
+    const paidByIndex = new Map();
+    const paidByLabel = new Map();
     (invoice.installments || []).forEach((inst, i) => {
-      if (inst.paidAmount > 0) {
-        existingByIndex.set(i, inst.paidAmount);
-        existingByLabel.set((inst.label || '').trim().toLowerCase(), inst.paidAmount);
+      if ((inst.paidAmount || 0) > 0) {
+        paidByIndex.set(i, inst);
+        paidByLabel.set((inst.label || '').trim().toLowerCase(), inst);
       }
     });
 
     const now = new Date();
     const newInstallments = profile.installments.map((inst, i) => {
-      const labelKey    = (inst.label || '').trim().toLowerCase();
-      const previousPaid = existingByIndex.has(i)
-        ? existingByIndex.get(i)
-        : (existingByLabel.get(labelKey) || 0);
+      const labelKey = (inst.label || '').trim().toLowerCase();
+      const prev = paidByIndex.get(i) || paidByLabel.get(labelKey);
+      const paidAmt = prev?.paidAmount || 0;
+      const isOverdue = inst.dueDate && new Date(inst.dueDate) < now && paidAmt < inst.amount;
 
       return {
         installmentNo: inst.installmentNo || i + 1,
         label:         inst.label,
         amount:        inst.amount,
         dueDate:       inst.dueDate || null,
-        paidAmount:    previousPaid,
-        status:        previousPaid >= inst.amount ? 'paid'
-                     : previousPaid > 0            ? 'partial'
-                     : inst.dueDate && new Date(inst.dueDate) < now ? 'overdue'
-                     : 'pending',
+        paidAmount:    paidAmt,
+        balanceAmount: Math.max(0, inst.amount - paidAmt),
+        paidAt:        prev?.paidAt || null,
+        paymentMode:   prev?.paymentMode || null,
+        receiptNumber: prev?.receiptNumber || null,
+        collectedBy:   prev?.collectedBy || null,
+        status:        paidAmt >= inst.amount ? 'paid'
+                     : paidAmt > 0           ? 'partial'
+                     : isOverdue             ? 'overdue'
+                     :                         'pending',
       };
     });
 
-    // Rebuild legacy feeItems from selectedComponents
-    const newFeeItems = (profile.selectedComponents || []).map(c => ({
-      name:   c.name,
-      amount: c.amount,
-    }));
-
-    const dueDates = newInstallments
-      .filter(i => i.dueDate)
-      .map(i => new Date(i.dueDate))
-      .sort((a, b) => a - b);
-    const dueDate    = dueDates[0] || null;
-    const nextDueDate = FeesService._computeNextDueDate(newInstallments);
-
     invoice.installments   = newInstallments;
-    invoice.feeItems       = newFeeItems;
-    invoice.totalAmount    = profile.grossFee;
+    invoice.grossFee       = profile.grossFee;
     invoice.discountAmount = profile.discountAmt;
+    invoice.netFee         = profile.netFee;
     invoice.feeProfileId   = profile._id;
-    invoice.dueDate        = dueDate;
-    invoice.nextDueDate    = nextDueDate;
+    invoice.penaltyConfig  = profile.penaltyConfig;
+    invoice.nextDueDate    = FeesService._computeNextDueDate(newInstallments);
 
-    // Recalculate invoice-level dueAmount and status
-    const net = invoice.totalAmount + (invoice.penaltyAmount || 0) - (invoice.discountAmount || 0);
-    invoice.dueAmount = Math.max(0, net - (invoice.paidAmount || 0));
-    invoice.status = invoice.paidAmount >= net && net > 0 ? 'paid'
-                   : invoice.paidAmount > 0 ? 'partial'
-                   : 'unpaid';
+    // Recompute paidAmount from installments
+    invoice.paidAmount = newInstallments.reduce((s, i) => s + (i.paidAmount || 0), 0);
 
     await invoice.save();
 
     ActivityService.log({
       studentId: invoice.studentId,
-      action:    `Installment schedule regenerated for invoice ${invoice.invoiceNumber}`,
+      action:    `Payment schedule regenerated for invoice ${invoice.invoiceNumber}`,
       module:    'fee',
       metadata:  { invoiceId, userId },
     }).catch(() => {});
 
     return invoice;
   }
+
+  // ═══════════════════════════════════════════════════════════
+  //  FEE OVERVIEW (for main fees table)
+  // ═══════════════════════════════════════════════════════════
+
+  static async getFeeOverview(filters = {}) {
+    const studentQuery = { isActive: true };
+    if (filters.classId && mongoose.isValidObjectId(filters.classId)) {
+      studentQuery.classId = filters.classId;
+    }
+
+    const students = await Student.find(studentQuery)
+      .populate('classId', 'name code')
+      .sort({ name: 1 })
+      .lean();
+
+    if (!students.length) return [];
+
+    const studentIds = students.map(s => s._id);
+
+    // Load invoices
+    const invoices = await FeeInvoice.find({ studentId: { $in: studentIds } }).lean();
+    const invoiceMap = {};
+    for (const inv of invoices) invoiceMap[inv.studentId.toString()] = inv;
+
+    // Load profiles (for students without invoices — show assigned fee totals)
+    const profiles = await StudentFeeProfile.find({ studentId: { $in: studentIds } }).lean();
+    const profileMap = {};
+    for (const p of profiles) profileMap[p.studentId.toString()] = p;
+
+    const PenaltyEngine = require('../../utils/penaltyEngine');
+
+    return students.map(student => {
+      const inv     = invoiceMap[student._id.toString()];
+      const profile = profileMap[student._id.toString()];
+
+      let grossFee, discountAmount, netFee, paidAmount, dueAmount, status, livePenalty = 0;
+
+      if (inv) {
+        grossFee       = inv.grossFee || inv.totalAmount || 0;
+        discountAmount = inv.discountAmount || 0;
+        netFee         = inv.netFee || Math.max(0, grossFee - discountAmount);
+        paidAmount     = inv.paidAmount || 0;
+        dueAmount      = inv.dueAmount || 0;
+        status         = inv.status === 'paid'    ? 'Paid'
+                       : inv.status === 'partial' ? 'Partial'
+                       : inv.status === 'overdue' ? 'Overdue'
+                       :                            'Pending';
+        // Compute live penalty
+        const penaltySummary = PenaltyEngine.computeInvoicePenalty(inv, null);
+        livePenalty = Math.max(penaltySummary.totalPenalty, inv.penaltyAmount || 0);
+      } else if (profile) {
+        grossFee       = profile.grossFee || 0;
+        discountAmount = profile.discountAmt || 0;
+        netFee         = profile.netFee || 0;
+        paidAmount     = 0;
+        dueAmount      = netFee;
+        status         = 'No Invoice';
+      } else {
+        grossFee = discountAmount = netFee = paidAmount = dueAmount = 0;
+        status   = 'No Profile';
+      }
+
+      return {
+        _id:           student._id,
+        name:          student.name,
+        rollNo:        student.rollNo,
+        className:     student.classId?.name || '—',
+        classId:       student.classId?._id,
+        invoiceId:     inv?._id || null,
+        invoiceNumber: inv?.invoiceNumber || null,
+        grossFee,
+        discountAmount,
+        netFee,
+        totalFee:      netFee, // alias
+        paidAmount,
+        totalPaid:     paidAmount, // alias
+        dueAmount,
+        totalDue:      dueAmount, // alias
+        livePenalty,
+        status,
+        nextDueDate:   inv?.nextDueDate || null,
+        hasProfile:    !!profile,
+        profileId:     profile?._id || null,
+      };
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  HELPERS
+  // ═══════════════════════════════════════════════════════════
+
+  static _notifyPayment(student, studentId, amount, receiptNumber) {
+    if (!student?.parentId) return;
+    const Parent = require('../../models/Parent');
+    Parent.findById(student.parentId).then(parent => {
+      if (!parent?.userId) return;
+      NotificationService.create(parent.userId, {
+        title:    'Fee Payment Received',
+        message:  `₹${amount} paid for ${student?.name || 'student'}. Receipt: ${receiptNumber}`,
+        type:     'info',
+        metadata: { studentId, amount, receiptNumber },
+      });
+    }).catch(() => {});
+  }
 }
 
 module.exports = FeesService;
-

@@ -28,7 +28,7 @@ class FeeAnalyticsService {
       {
         $group: {
           _id: null,
-          totalExpected:   { $sum: '$totalAmount' },
+          totalExpected:   { $sum: { $ifNull: ['$netFee', '$totalAmount'] } },
           totalCollected:  { $sum: '$paidAmount' },
           totalDue:        { $sum: '$dueAmount' },
           totalPenalty:    { $sum: '$penaltyAmount' },
@@ -191,6 +191,35 @@ class FeeAnalyticsService {
       totalExpected: profileMap[comp._id.toString()]?.total || 0,
     }));
   }
+  /**
+   * Students with overdue installments.
+   */
+  static async getOverdueStudents(filters = {}) {
+    const matchStage = { status: { $in: ['overdue', 'partial', 'unpaid'] } };
+    if (filters.classId && mongoose.isValidObjectId(filters.classId)) {
+      matchStage.classId = new mongoose.Types.ObjectId(filters.classId);
+    }
+
+    const invoices = await FeeInvoice.find(matchStage)
+      .populate('studentId', 'name rollNo')
+      .populate('classId', 'name')
+      .lean();
+
+    const now = new Date();
+    return invoices
+      .filter(inv => inv.nextDueDate && new Date(inv.nextDueDate) < now)
+      .map(inv => ({
+        invoiceId:    inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        student:      inv.studentId,
+        class:        inv.classId,
+        dueAmount:    inv.dueAmount,
+        nextDueDate:  inv.nextDueDate,
+        daysOverdue:  Math.floor((now - new Date(inv.nextDueDate)) / (1000 * 60 * 60 * 24)),
+        status:       inv.status,
+      }));
+  }
 }
 
 module.exports = FeeAnalyticsService;
+

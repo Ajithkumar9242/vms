@@ -20,21 +20,33 @@ const CollectFeeModal = ({ open, student, onClose, onSuccess }) => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+
+      // Guard: invoiceId is required — without it we cannot post a payment
+      if (!student?.invoiceId) {
+        message.error(
+          'No invoice found for this student. Generate an invoice first from Assign Fees or click "+ Invoice" in the overview.'
+        );
+        return;
+      }
+
       setSubmitting(true);
 
-      await feesAPI.pay({
-        studentId: student._id,
-        amount: values.amount,
-        paymentMode: values.paymentMode,
-        transactionId: values.transactionId || null,
+      await feesAPI.payInstallment(student.invoiceId, {
+        amount:        values.amount,
+        paymentMode:   values.paymentMode,
+        transactionId: values.transactionId || undefined,
+        // installmentId not sent here — backend auto-distributes to earliest unpaid
       });
 
-      message.success(`₹${values.amount.toLocaleString('en-IN')} payment recorded for ${student.name}`);
+      message.success(
+        `₹${values.amount.toLocaleString('en-IN')} payment recorded for ${student.name}`
+      );
       form.resetFields();
       onSuccess?.();
     } catch (err) {
-      if (err.errorFields) return; // validation error — AntD handles display
-      message.error(err.message || 'Payment failed');
+      if (err.errorFields) return; // AntD form validation — already shown inline
+      // Surface API errors (404 / 500 / network) clearly to the user
+      message.error(err.message || 'Payment failed. Please try again.');
     } finally {
       setSubmitting(false);
     }

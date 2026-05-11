@@ -80,16 +80,23 @@ function computeInvoicePenalty(invoice, feeProfile, asOf) {
 
   const now = asOf ? new Date(asOf) : new Date();
 
-  let due = invoice.dueDate ? new Date(invoice.dueDate) : null;
+  // ── Due date resolution (priority order) ─────────────────────────
+  // 1. invoice.nextDueDate (set by recordInstallmentPayment / generateInvoice)
+  // 2. earliest unpaid installment with a dueDate
+  // 3. invoice.dueDate (legacy fallback — field was removed but may still exist on old docs)
+  let due = invoice.nextDueDate ? new Date(invoice.nextDueDate) : null;
 
   if (!due && invoice.installments && invoice.installments.length > 0) {
     const unpaidInsts = invoice.installments
       .filter(i => i.dueDate && (i.amount > (i.paidAmount || 0)))
       .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
-      
     if (unpaidInsts.length > 0) {
       due = new Date(unpaidInsts[0].dueDate);
     }
+  }
+
+  if (!due && invoice.dueDate) {
+    due = new Date(invoice.dueDate); // legacy fallback
   }
 
   if (due && now > due) {
@@ -112,29 +119,7 @@ function computeInvoicePenalty(invoice, feeProfile, asOf) {
     }
   }
 
-  // ── 2. Per-component late fee config from fee profile ─────────
-  if (feeProfile?.selectedComponents?.length > 0 && due) {
-    for (const comp of feeProfile.selectedComponents) {
-      const lateFee = comp.lateFeeConfig || comp.componentId?.lateFeeConfig;
-      if (!lateFee?.enabled) continue;
 
-      const result = calculatePenalty({
-        dueDate: due,
-        baseAmount: comp.amount || 0,
-        penaltyConfig: lateFee,
-        asOf: now,
-      });
-      summary.totalPenalty += result.penaltyAmount;
-      summary.daysOverdue = Math.max(summary.daysOverdue, result.daysOverdue);
-      if (result.penaltyAmount > 0) {
-        summary.details.push({
-          source: comp.name || 'component',
-          componentId: comp.componentId?._id || comp.componentId,
-          ...result,
-        });
-      }
-    }
-  }
 
   return summary;
 }

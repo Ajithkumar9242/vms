@@ -1,3 +1,5 @@
+'use strict';
+
 const router      = require('express').Router();
 const C           = require('./controller');
 const { protect, authorize } = require('../../middlewares/auth');
@@ -9,13 +11,11 @@ router.use(protect);
 // ─── Health ───────────────────────────────────────────────────
 router.get('/health', C.health);
 
-
-
 // ═══════════════════════════════════════════════════════════
 //  FEE COMPONENTS
 // ═══════════════════════════════════════════════════════════
-router.get('/components', C.getComponents);
-router.get('/components/:id', mongoIdParam('id'), validate, C.getComponent);
+router.get('/components',       C.getComponents);
+router.get('/components/:id',   mongoIdParam('id'), validate, C.getComponent);
 
 router.post(
   '/components',
@@ -26,7 +26,6 @@ router.post(
     body('amount').isFloat({ min: 0 }).withMessage('Amount must be non-negative'),
     body('mandatory').optional().isBoolean(),
     body('recurringType').optional().isIn(['yearly', 'monthly', 'quarterly', 'one_time']),
-    body('allowInstallments').optional().isBoolean(),
     body('active').optional().isBoolean(),
   ],
   validate,
@@ -114,23 +113,26 @@ router.post(
 // ═══════════════════════════════════════════════════════════
 router.post(
   '/invoice/generate',
-  authorize('admin', 'super_admin'),
-  [body('studentId').isMongoId()],
+  authorize('admin', 'super_admin', 'principal'),
+  [body('studentId').isMongoId().withMessage('Valid studentId required')],
   validate,
   C.generateInvoice
 );
 
-router.get('/invoice/:studentId', mongoIdParam('studentId'), validate, C.getInvoice);
-router.get('/invoices/:invoiceId', mongoIdParam('invoiceId'), validate, C.getInvoiceById);
+router.get('/invoice/:studentId',     mongoIdParam('studentId'), validate, C.getInvoice);
+router.get('/invoices/:invoiceId',    mongoIdParam('invoiceId'), validate, C.getInvoiceById);
 
-// Installment payment on invoice
+// ─── Pay an installment ───────────────────────────────────
 router.post(
   '/invoices/:invoiceId/pay',
   authorize('admin', 'super_admin', 'principal'),
+  idempotency(),
   mongoIdParam('invoiceId'),
   [
-    body('amount').isFloat({ min: 1 }).withMessage('Amount must be at least 1'),
-    body('paymentMode').isIn(['cash', 'upi', 'online', 'razorpay', 'cheque', 'bank_transfer']).withMessage('Invalid payment mode'),
+    body('amount').isFloat({ min: 1 }).withMessage('Amount must be at least ₹1'),
+    body('paymentMode')
+      .isIn(['cash', 'upi', 'online', 'razorpay', 'cheque', 'bank_transfer'])
+      .withMessage('Invalid payment mode'),
     body('installmentId').optional().isMongoId(),
     body('transactionId').optional().isString(),
   ],
@@ -138,7 +140,7 @@ router.post(
   C.recordInstallmentPayment
 );
 
-// Penalty
+// ─── Penalty ──────────────────────────────────────────────
 router.post(
   '/invoices/:invoiceId/penalty',
   authorize('admin', 'super_admin', 'principal'),
@@ -160,7 +162,7 @@ router.put(
   C.waivePenalty
 );
 
-// locking and structure logic
+// ─── Schedule Regeneration ────────────────────────────────
 router.post(
   '/invoices/:id/regenerate-schedule',
   authorize('admin', 'super_admin'),
@@ -168,7 +170,7 @@ router.post(
   C.regenerateSchedule
 );
 
-// Locking
+// ─── Locking ──────────────────────────────────────────────
 router.post(
   '/invoices/:invoiceId/lock',
   authorize('admin', 'super_admin'),
@@ -183,62 +185,14 @@ router.post(
   C.unlockInvoice
 );
 
-// Invoice PDF
+// ─── PDF ──────────────────────────────────────────────────
 router.get('/invoices/:invoiceId/pdf', mongoIdParam('invoiceId'), validate, C.generateInvoicePDF);
 
-// ═══════════════════════════════════════════════════════════
-//  DUE LIST
-// ═══════════════════════════════════════════════════════════
-router.get('/due', C.getDueList);
+// ─── Receipt PDF ──────────────────────────────────────────
+router.get('/:id/receipt', mongoIdParam('id'), validate, C.generateReceipt);
 
 // ═══════════════════════════════════════════════════════════
-//  PAYMENTS (legacy)
-// ═══════════════════════════════════════════════════════════
-router.post(
-  '/pay',
-  idempotency(),
-  [
-    body('studentId').isMongoId(),
-    body('amount').isFloat({ min: 1 }),
-    body('paymentMode').isIn(['cash', 'upi', 'online', 'razorpay', 'cheque', 'bank_transfer']),
-    body('transactionId').optional({ nullable: true }).isString(),
-    body('invoiceId').optional({ nullable: true }).isMongoId(),
-  ],
-  validate,
-  C.recordPayment
-);
-
-router.get('/student/:studentId', mongoIdParam('studentId'), validate, C.getStudentFees);
-
-router.post(
-  '/apply-structure',
-  authorize('admin', 'super_admin'),
-  [body('classId').isMongoId()],
-  validate,
-  C.applyStructure
-);
-
-// Manual payment
-router.post(
-  '/manual-payment',
-  [
-    body('studentId').isMongoId(),
-    body('amount').isFloat({ min: 1 }),
-    body('transactionId').optional().isString(),
-    body('proofUrl').optional().isURL(),
-    body('invoiceId').optional({ nullable: true }).isMongoId(),
-  ],
-  validate,
-  C.manualPayment
-);
-
-router.get('/payments/pending', authorize('admin', 'super_admin'), C.getPendingPayments);
-
-router.put('/payment/:id/approve', authorize('admin', 'super_admin'), mongoIdParam('id'), validate, C.approvePayment);
-router.put('/payment/:id/reject',  authorize('admin', 'super_admin'), mongoIdParam('id'), validate, C.rejectPayment);
-
-// ═══════════════════════════════════════════════════════════
-//  OVERVIEW
+//  FEE OVERVIEW
 // ═══════════════════════════════════════════════════════════
 router.get('/overview', C.getOverview);
 
@@ -249,10 +203,6 @@ router.get('/analytics/dashboard',  C.getDashboardStats);
 router.get('/analytics/monthly',    C.getMonthlyCollection);
 router.get('/analytics/classwise',  C.getClasswiseDues);
 router.get('/analytics/components', C.getComponentSummary);
-
-// ═══════════════════════════════════════════════════════════
-//  PDF RECEIPT (legacy + enhanced)
-// ═══════════════════════════════════════════════════════════
-router.get('/:id/receipt', mongoIdParam('id'), validate, C.generateReceipt);
+router.get('/analytics/overdue',    C.getOverdueStudents);
 
 module.exports = router;

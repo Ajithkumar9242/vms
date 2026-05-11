@@ -2,8 +2,9 @@ const mongoose = require('mongoose');
 
 /**
  * FeeInvoice — one invoice per student per academic year.
- * Enhanced: supports student-wise fee profiles, penalties, discounts, installments, locking.
- * Backward compatible — all new fields are optional with safe defaults.
+ * SOURCE OF TRUTH: StudentFeeProfile.
+ * Installments are mirrored from StudentFeeProfile at generation time,
+ * then tracked here (paidAmount, status) independently.
  */
 
 const installmentDetailSchema = new mongoose.Schema(
@@ -13,11 +14,20 @@ const installmentDetailSchema = new mongoose.Schema(
     amount:        { type: Number, min: 0 },
     dueDate:       { type: Date, default: null },
     paidAmount:    { type: Number, default: 0 },
+    balanceAmount: { type: Number, default: 0 },   // amount - paidAmount
     paidAt:        { type: Date, default: null },
-    paymentMode:   { type: String, enum: ['cash', 'upi', 'online', 'razorpay', 'cheque', 'bank_transfer'], default: null },
+    paymentMode:   {
+      type: String,
+      enum: ['cash', 'upi', 'online', 'razorpay', 'cheque', 'bank_transfer'],
+      default: null,
+    },
     collectedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     receiptNumber: { type: String, default: null },
-    status:        { type: String, enum: ['pending', 'paid', 'partial', 'overdue'], default: 'pending' },
+    status: {
+      type: String,
+      enum: ['pending', 'paid', 'partial', 'overdue'],
+      default: 'pending',
+    },
     transactionId: { type: String, default: null },
   },
   { _id: true }
@@ -35,7 +45,6 @@ const feeInvoiceSchema = new mongoose.Schema(
       ref: 'Class',
       required: [true, 'Class is required'],
     },
-    // Section the student belongs to (optional — populated from student on invoice creation)
     sectionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Section',
@@ -47,71 +56,45 @@ const feeInvoiceSchema = new mongoose.Schema(
       default: null,
     },
 
-
-    // ─── NEW: Student fee profile link ───────────────────
+    // Link back to StudentFeeProfile
     feeProfileId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'StudentFeeProfile',
       default: null,
     },
 
-    // ─── Legacy fee items (installments from FeeStructure) ───
-    feeItems: [
-      {
-        name:    { type: String, trim: true },
-        amount:  { type: Number, min: 0 },
-        dueDate: { type: Date },
-      },
-    ],
-
-    // ─── NEW: Student-wise installment details ───────────
+    // Payment schedule — mirrored from StudentFeeProfile.installments at generation
     installments: [installmentDetailSchema],
 
-    // ─── Amounts ─────────────────────────────────────────
-    totalAmount: {
-      type: Number,
-      required: [true, 'Total amount is required'],
-      min: [0, 'Total amount cannot be negative'],
-    },
-    paidAmount: {
-      type: Number,
-      default: 0,
-      min: [0, 'Paid amount cannot be negative'],
-    },
-    dueAmount: {
-      type: Number,
-      default: 0,
-      min: [0, 'Due amount cannot be negative'],
-    },
+    // ── Amounts ──────────────────────────────────────────────
+    grossFee:      { type: Number, default: 0, min: 0 },   // sum of components
+    discountAmount:{ type: Number, default: 0, min: 0 },   // total discount
+    netFee:        { type: Number, default: 0, min: 0 },   // grossFee - discountAmount
+    paidAmount:    { type: Number, default: 0, min: 0 },   // total paid to date
+    dueAmount:     { type: Number, default: 0, min: 0 },   // netFee + penalty - paidAmount
 
-    // ─── NEW: Penalty & Discount ─────────────────────────
+    // ── Penalty ───────────────────────────────────────────────
     penaltyAmount: { type: Number, default: 0, min: 0 },
-
-    // Auto-penalty configuration (copied from FeeComponent.lateFeeConfig or set per invoice)
     penaltyConfig: {
       enabled:   { type: Boolean, default: false },
       type:      { type: String, enum: ['percent', 'fixed'], default: 'fixed' },
       value:     { type: Number, default: 0, min: 0 },
       frequency: { type: String, enum: ['daily', 'weekly', 'monthly'], default: 'monthly' },
     },
-
-    discountAmount:{ type: Number, default: 0, min: 0 },
     waivedAmount:  { type: Number, default: 0, min: 0 },
     waivedBy:      { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     waivedReason:  { type: String, trim: true, default: '' },
     waivedAt:      { type: Date, default: null },
 
-    // ─── Status ──────────────────────────────────────────
+    // ── Status ────────────────────────────────────────────────
     status: {
       type: String,
       enum: ['unpaid', 'partial', 'paid', 'overdue'],
       default: 'unpaid',
     },
 
-    // ─── Dates ───────────────────────────────────────────
-    // dueDate = earliest unpaid installment dueDate (or invoice-level due)
-    dueDate:     { type: Date, default: null },
-    // nextDueDate = next future unpaid installment dueDate (updated after each payment)
+    // ── Key Dates ─────────────────────────────────────────────
+    // nextDueDate = earliest unpaid installment dueDate (updated after each payment)
     nextDueDate: { type: Date, default: null },
 
     invoiceNumber: {
@@ -120,7 +103,7 @@ const feeInvoiceSchema = new mongoose.Schema(
       sparse: true,
     },
 
-    // ─── NEW: Locking system ─────────────────────────────
+    // ── Locking ───────────────────────────────────────────────
     locked:     { type: Boolean, default: false },
     lockedAt:   { type: Date, default: null },
     lockedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
@@ -132,30 +115,46 @@ const feeInvoiceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// One invoice per student per academic year
+// ── Indexes ────────────────────────────────────────────────────
 feeInvoiceSchema.index({ studentId: 1, academicYearId: 1 }, { unique: true });
 feeInvoiceSchema.index({ status: 1 });
 feeInvoiceSchema.index({ classId: 1 });
 feeInvoiceSchema.index({ feeProfileId: 1 });
 
-// Auto-generate invoiceNumber before save
+// ── Pre-save: auto-generate invoiceNumber, sync totals & status ──
 feeInvoiceSchema.pre('save', async function () {
+  // Auto-generate invoice number
   if (!this.invoiceNumber) {
     const year = new Date().getFullYear();
     const count = await mongoose.model('FeeInvoice').countDocuments();
     this.invoiceNumber = `INV-${year}-${String(count + 1).padStart(5, '0')}`;
   }
-  // Keep dueAmount in sync — net due = total + penalty - discount - paid
-  const net = this.totalAmount + (this.penaltyAmount || 0) - (this.discountAmount || 0);
+
+  // Sync netFee
+  this.netFee = Math.max(0, (this.grossFee || 0) - (this.discountAmount || 0));
+
+  // Sync dueAmount = netFee + penalty - waived - paid
+  const net = this.netFee + (this.penaltyAmount || 0) - (this.waivedAmount || 0);
   this.dueAmount = Math.max(0, net - (this.paidAmount || 0));
 
-  // Auto-update status
+  // Sync installment balanceAmount + auto-overdue
+  const now = new Date();
+  for (const inst of this.installments || []) {
+    inst.balanceAmount = Math.max(0, (inst.amount || 0) - (inst.paidAmount || 0));
+    if (inst.status !== 'paid' && inst.status !== 'partial' && inst.dueDate && new Date(inst.dueDate) < now) {
+      inst.status = 'overdue';
+    }
+  }
+
+  // Auto-update invoice status
   if (this.paidAmount >= net && net > 0) {
     this.status = 'paid';
   } else if ((this.paidAmount || 0) > 0) {
     this.status = 'partial';
-  } else if (this.dueDate && new Date(this.dueDate) < new Date() && this.status !== 'paid') {
+  } else if (this.nextDueDate && new Date(this.nextDueDate) < now && this.status !== 'paid') {
     this.status = 'overdue';
+  } else {
+    this.status = 'unpaid';
   }
 });
 

@@ -2,11 +2,11 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   Table, Typography, Button, Space, App, Modal, Form, Input,
   InputNumber, Switch, Select, Tag, Card, Tooltip, Popconfirm,
-  Row, Col, Badge, Divider,
+  Row, Col,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, PoweroffOutlined,
-  DollarCircleOutlined, CheckCircleOutlined, WarningOutlined,
+  DollarCircleOutlined, CheckCircleOutlined,
 } from '@ant-design/icons';
 import { feesAPI } from '@/services/api';
 
@@ -19,16 +19,6 @@ const RECURRING_OPTS = [
   { label: 'One-Time',  value: 'one_time' },
 ];
 
-const LATE_TYPE_OPTS = [
-  { label: 'Fixed Amount (₹)', value: 'fixed' },
-  { label: 'Percentage (%)',   value: 'percent' },
-];
-
-const FREQ_OPTS = [
-  { label: 'Monthly', value: 'monthly' },
-  { label: 'Daily',   value: 'daily' },
-];
-
 const FeeComponents = () => {
   const { message, modal } = App.useApp();
   const [components, setComponents] = useState([]);
@@ -36,7 +26,6 @@ const FeeComponents = () => {
   const [saving, setSaving]         = useState(false);
   const [modalOpen, setModalOpen]   = useState(false);
   const [editing, setEditing]       = useState(null);
-  const [lateFeeEnabled, setLateFeeEnabled] = useState(false);
   const [form] = Form.useForm();
 
   const load = useCallback(async () => {
@@ -55,31 +44,25 @@ const FeeComponents = () => {
 
   const openCreate = () => {
     setEditing(null);
-    setLateFeeEnabled(false);
     form.resetFields();
     form.setFieldsValue({
       recurringType: 'yearly',
-      mandatory: false,
-      allowInstallments: true,
-      active: true,
-      lateFeeConfig: { enabled: false, type: 'fixed', value: 0, frequency: 'monthly' },
+      mandatory:     false,
+      active:        true,
     });
     setModalOpen(true);
   };
 
   const openEdit = (record) => {
     setEditing(record);
-    setLateFeeEnabled(record.lateFeeConfig?.enabled || false);
     form.setFieldsValue({
-      name:              record.name,
-      code:              record.code,
-      description:       record.description,
-      amount:            record.amount,
-      mandatory:         record.mandatory,
-      recurringType:     record.recurringType,
-      allowInstallments: record.allowInstallments,
-      active:            record.active,
-      lateFeeConfig:     record.lateFeeConfig,
+      name:          record.name,
+      code:          record.code,
+      description:   record.description,
+      amount:        record.amount,
+      mandatory:     record.mandatory,
+      recurringType: record.recurringType,
+      active:        record.active,
     });
     setModalOpen(true);
   };
@@ -98,7 +81,7 @@ const FeeComponents = () => {
       setModalOpen(false);
       load();
     } catch (e) {
-      if (e.errorFields) return; // validation error
+      if (e.errorFields) return;
       message.error(e.message || 'Save failed');
     } finally {
       setSaving(false);
@@ -127,7 +110,7 @@ const FeeComponents = () => {
 
   const mandatoryCount = components.filter(c => c.mandatory).length;
   const activeCount    = components.filter(c => c.active).length;
-  const totalAmount    = components.filter(c => c.active && c.mandatory).reduce((s, c) => s + c.amount, 0);
+  const baseAmount     = components.filter(c => c.active && c.mandatory).reduce((s, c) => s + c.amount, 0);
 
   const columns = [
     {
@@ -159,17 +142,6 @@ const FeeComponents = () => {
       ),
     },
     {
-      title: 'Late Fee',
-      key: 'lateFee',
-      render: (_, r) => r.lateFeeConfig?.enabled ? (
-        <Tag color="orange" icon={<WarningOutlined />}>
-          {r.lateFeeConfig.type === 'percent'
-            ? `${r.lateFeeConfig.value}% ${r.lateFeeConfig.frequency}`
-            : `₹${r.lateFeeConfig.value} ${r.lateFeeConfig.frequency}`}
-        </Tag>
-      ) : <Tag>None</Tag>,
-    },
-    {
       title: 'Status',
       key: 'active',
       render: (_, r) => (
@@ -179,7 +151,7 @@ const FeeComponents = () => {
     {
       title: 'Actions',
       key: 'actions',
-      width: 160,
+      width: 140,
       render: (_, r) => (
         <Space>
           <Tooltip title="Edit"><Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} /></Tooltip>
@@ -202,10 +174,10 @@ const FeeComponents = () => {
       {/* Summary Cards */}
       <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
         {[
-          { label: 'Total Components', value: components.length, color: '#3B82F6' },
-          { label: 'Mandatory',        value: mandatoryCount,    color: '#EF4444' },
-          { label: 'Active',           value: activeCount,       color: '#22C55E' },
-          { label: 'Base Fee (Mandatory Active)', value: `₹${totalAmount.toLocaleString('en-IN')}`, color: '#1B3A5C' },
+          { label: 'Total Components', value: components.length,          color: '#3B82F6' },
+          { label: 'Mandatory',        value: mandatoryCount,             color: '#EF4444' },
+          { label: 'Active',           value: activeCount,                color: '#22C55E' },
+          { label: 'Mandatory Base Fee', value: `₹${baseAmount.toLocaleString('en-IN')}`, color: '#1B3A5C' },
         ].map(card => (
           <Col xs={12} sm={6} key={card.label}>
             <Card size="small" style={{ borderRadius: 10, borderTop: `3px solid ${card.color}` }}>
@@ -249,7 +221,7 @@ const FeeComponents = () => {
         onOk={handleSave}
         onCancel={() => setModalOpen(false)}
         confirmLoading={saving}
-        width={600}
+        width={520}
         okText={editing ? 'Save Changes' : 'Create'}
         destroyOnClose
       >
@@ -287,12 +259,8 @@ const FeeComponents = () => {
 
           <Row gutter={12}>
             <Col span={8}>
-              <Form.Item name="mandatory" label="Mandatory" valuePropName="checked">
-                <Switch checkedChildren="Yes" unCheckedChildren="No" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="allowInstallments" label="Allow Installments" valuePropName="checked">
+              <Form.Item name="mandatory" label="Mandatory" valuePropName="checked"
+                tooltip="Mandatory components are automatically applied to all students">
                 <Switch checkedChildren="Yes" unCheckedChildren="No" />
               </Form.Item>
             </Col>
@@ -302,32 +270,6 @@ const FeeComponents = () => {
               </Form.Item>
             </Col>
           </Row>
-
-          <Divider>Late Fee Configuration</Divider>
-
-          <Form.Item name={['lateFeeConfig', 'enabled']} label="Enable Late Fee" valuePropName="checked">
-            <Switch onChange={setLateFeeEnabled} />
-          </Form.Item>
-
-          {lateFeeEnabled && (
-            <Row gutter={12}>
-              <Col span={8}>
-                <Form.Item name={['lateFeeConfig', 'type']} label="Type">
-                  <Select options={LATE_TYPE_OPTS} />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name={['lateFeeConfig', 'value']} label="Value">
-                  <InputNumber min={0} style={{ width: '100%' }} />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name={['lateFeeConfig', 'frequency']} label="Frequency">
-                  <Select options={FREQ_OPTS} />
-                </Form.Item>
-              </Col>
-            </Row>
-          )}
         </Form>
       </Modal>
     </div>

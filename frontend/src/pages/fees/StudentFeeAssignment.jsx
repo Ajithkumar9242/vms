@@ -37,6 +37,8 @@ const StudentFeeAssignment = () => {
   const [discountForm] = Form.useForm();
   const [instModal, setInstModal] = useState({ open: false, studentId: null, studentName: '', netFee: 0 });
   const [instForm] = Form.useForm();
+  const [penaltyModal, setPenaltyModal] = useState({ open: false, studentId: null, studentName: '' });
+  const [penaltyForm] = Form.useForm();
   const [hasChanges, setHasChanges] = useState(false);
 
   // Load classes
@@ -64,8 +66,10 @@ const StudentFeeAssignment = () => {
         }
         initRows[sid] = {
           checks,
-          discounts: student.discounts || [],
-          installments: student.installments || [],
+          discounts:         student.discounts || [],
+          installments:      student.installments || [],
+          scheduleOutOfSync: student.scheduleOutOfSync || false,
+          penaltyConfig:     student.penaltyConfig || { enabled: false, type: 'fixed', value: 0, frequency: 'monthly' },
         };
       }
       setRows(initRows);
@@ -114,26 +118,75 @@ const StudentFeeAssignment = () => {
     setSaving(true);
     try {
       const payloadRows = (matrixData.students || []).map(student => {
-        const studentRows = rows[student.studentId] || {};
+        const sid = String(student.studentId);
+        const studentRows = rows[sid] || {};
         const selectedComponentIds = Object.entries(studentRows.checks || {})
           .filter(([, checked]) => checked)
           .map(([compId]) => compId);
+
+        // Only send installments when the user explicitly set them this session
+        // (non-empty array). Sending [] would overwrite the existing schedule.
+        const hasInstallments = Array.isArray(studentRows.installments) && studentRows.installments.length > 0;
+
         return {
-          studentId: student.studentId,
+          studentId:            student.studentId,
           selectedComponentIds,
-          discounts: studentRows.discounts || [],
-          installments: studentRows.installments || [],
+          discounts:            studentRows.discounts    || [],
+          installments:         hasInstallments ? studentRows.installments : undefined,
+          // ⚠️ CRITICAL — always send penaltyConfig so it gets persisted
+          penaltyConfig:        studentRows.penaltyConfig || {
+            enabled: false, type: 'fixed', value: 0, frequency: 'monthly'
+          },
+          notes: studentRows.notes || '',
         };
       });
 
       const res = await feesAPI.bulkSaveProfiles({ classId, rows: payloadRows });
-      message.success(`Saved ${res.data?.saved || 0} profiles. ${res.data?.skipped || 0} locked students skipped.`);
+      const saved    = res.data?.saved    ?? 0;
+      const skipped  = res.data?.skipped  ?? 0;
+      const errors   = res.data?.errors   || [];
+      const warnings = res.data?.warnings || [];
+
+      // Surface row-level errors (e.g. installment sum mismatch)
+      if (errors.length > 0) {
+        message.warning(
+          `Saved ${saved}, skipped ${skipped}. ${errors.length} error(s): ` +
+          errors.map(e => e.error).join('; ')
+        );
+      } else {
+        message.success(
+          `Saved ${saved} profile${saved !== 1 ? 's' : ''}. ` +
+          (skipped > 0 ? `${skipped} locked — skipped. ` : '')
+        );
+      }
+
+      // Surface warnings (missing due dates) as a separate non-blocking notice
+      if (warnings.length > 0) {
+        message.warning(
+          `${warnings.length} student(s) have installments without due dates. ` +
+          `Open the Sch. button for each and set due dates for proper tracking.`,
+          6 // show for 6 seconds
+        );
+      }
+
       setHasChanges(false);
-      await loadMatrix(); // refresh
+      await loadMatrix();
     } catch (e) {
-      message.error(e.message || 'Save failed');
+      // Surface network / 500 errors clearly — do not show fake success
+      message.error(e.message || 'Save failed. Please check your connection and try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+
+  const handleGenerateInvoice = async (student) => {
+    try {
+      await feesAPI.generateInvoice(student.studentId);
+      message.success(`Invoice generated for ${student.name}`);
+      loadMatrix();
+    } catch (e) {
+      message.error(e.message || 'Failed to generate invoice');
     }
   };
 
@@ -174,8 +227,17 @@ const StudentFeeAssignment = () => {
   const handleAddDiscount = async () => {
     try {
       const values = await discountForm.validateFields();
-      await feesAPI.addDiscount(discountModal.studentId, values);
-      message.success('Discount added');
+      const res = await feesAPI.addDiscount(discountModal.studentId, values);
+      const result = res?.data || {};
+      if (result.scheduleOutOfSync) {
+        message.warning(
+          `Discount added. The payment schedule is now out of sync with the new net fee ₹${result.netFee?.toLocaleString('en-IN') || '?'}. ` +
+          `Open the Sch. button, update installment amounts, and save before generating an invoice.`,
+          8
+        );
+      } else {
+        message.success('Discount added successfully');
+      }
       setDiscountModal({ open: false, studentId: null, studentName: '' });
       loadMatrix();
     } catch (e) {
@@ -228,6 +290,30 @@ const StudentFeeAssignment = () => {
       }));
       setHasChanges(true);
       setInstModal({ open: false, studentId: null, studentName: '', netFee: 0 });
+    } catch (e) {
+      // form validation failed
+    }
+  };
+
+  const openPenaltyModal = (student) => {
+    const studentRows = rows[student.studentId];
+    const config = studentRows?.penaltyConfig || { enabled: false, type: 'fixed', value: 0, frequency: 'monthly' };
+    penaltyForm.setFieldsValue(config);
+    setPenaltyModal({ open: true, studentId: student.studentId, studentName: student.name });
+  };
+
+  const handleSavePenaltyConfig = async () => {
+    try {
+      const values = await penaltyForm.validateFields();
+      setRows(prev => ({
+        ...prev,
+        [penaltyModal.studentId]: {
+          ...prev[penaltyModal.studentId],
+          penaltyConfig: values
+        }
+      }));
+      setHasChanges(true);
+      setPenaltyModal({ open: false, studentId: null, studentName: '' });
     } catch (e) {
       // form validation failed
     }
@@ -329,6 +415,59 @@ const StudentFeeAssignment = () => {
 
     const actionCols = [
       {
+        title: 'Invoice', key: 'invoice', width: 115, align: 'center',
+        render: (_, s) => {
+          // Compute schedule status from live row state (after modal changes) or backend
+          const sid = String(s.studentId);
+          const rowEntry = rows[sid];
+          const installments = rowEntry?.installments || s.installments || [];
+          const outOfSync    = rowEntry?.scheduleOutOfSync ?? s.scheduleOutOfSync ?? false;
+          const hasSchedule  = installments.length > 0;
+          const allHaveDue   = hasSchedule && installments.every(i => i.dueDate);
+          const scheduleReady = hasSchedule && allHaveDue && !outOfSync;
+
+          if (s.invoiceId) {
+            return (
+              <Space direction="vertical" size={2} style={{ alignItems: 'center' }}>
+                <Tag color={s.invoiceStatus === 'paid' ? 'green' : s.invoiceStatus === 'partial' ? 'orange' : 'red'}
+                  style={{ fontSize: 10 }}>
+                  {(s.invoiceStatus || 'unpaid').toUpperCase()}
+                </Tag>
+                {outOfSync && (
+                  <Tag color="orange" style={{ fontSize: 9 }}>⚠ Sync Schedule</Tag>
+                )}
+              </Space>
+            );
+          }
+
+          // No invoice yet — show generate button or blocked state
+          let tooltipText = 'Generate Invoice';
+          let blocked     = s.locked || !s.netFee;
+
+          if (!blocked && !scheduleReady) {
+            blocked = true;
+            if (!hasSchedule) {
+              tooltipText = 'Schedule missing — click Sch. to add installments with due dates first';
+            } else if (!allHaveDue) {
+              tooltipText = 'Some installments have no due date — click Sch. to fix';
+            } else if (outOfSync) {
+              tooltipText = 'Schedule is out of sync with net fee — update installment amounts in Sch. and save';
+            }
+          }
+
+          return (
+            <Tooltip title={tooltipText}>
+              <Button size="small" type="dashed" style={{ fontSize: 10 }}
+                onClick={() => handleGenerateInvoice(s)}
+                disabled={blocked}
+              >
+                {!scheduleReady && !s.locked && s.netFee ? '⚠ No Sch.' : '+ Invoice'}
+              </Button>
+            </Tooltip>
+          );
+        },
+      },
+      {
         title: 'Discount', key: 'discount', width: 90, align: 'right',
         render: (_, s) => {
           const t = computedTotals[s.studentId];
@@ -359,6 +498,11 @@ const StudentFeeAssignment = () => {
                   <Button size="small" icon={<CalendarOutlined />}
                     disabled={s.locked}
                     onClick={() => openInstallmentModal(s)}>Sch.</Button>
+                </Tooltip>
+                <Tooltip title="Penalty Config">
+                  <Button size="small" icon={<ExclamationCircleOutlined />}
+                    disabled={s.locked}
+                    onClick={() => openPenaltyModal(s)}>Pen.</Button>
                 </Tooltip>
                 {s.locked ? (
                   <Tooltip title="Unlock Profile">
@@ -559,6 +703,47 @@ const StudentFeeAssignment = () => {
               </>
             )}
           </Form.List>
+        </Form>
+      </Modal>
+
+      {/* Penalty Config Modal */}
+      <Modal
+        title={`Penalty Configuration — ${penaltyModal.studentName}`}
+        open={penaltyModal.open}
+        onOk={handleSavePenaltyConfig}
+        onCancel={() => setPenaltyModal({ open: false, studentId: null, studentName: '' })}
+        okText="Save Penalty"
+        destroyOnClose
+      >
+        <Alert type="warning" message="This penalty configuration applies dynamically to the earliest unpaid installment." style={{ marginBottom: 16 }} />
+        <Form form={penaltyForm} layout="vertical">
+          <Form.Item name="enabled" valuePropName="checked">
+            <Checkbox>Enable Auto Penalty</Checkbox>
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={8}>
+              <Form.Item name="type" label="Penalty Type" rules={[{ required: true }]}>
+                <Select options={[
+                  { label: 'Fixed (₹)', value: 'fixed' },
+                  { label: 'Percentage (%)', value: 'percent' },
+                ]} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="value" label="Value" rules={[{ required: true }]}>
+                <InputNumber min={0} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="frequency" label="Frequency" rules={[{ required: true }]}>
+                <Select options={[
+                  { label: 'Daily', value: 'daily' },
+                  { label: 'Weekly', value: 'weekly' },
+                  { label: 'Monthly', value: 'monthly' },
+                ]} />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Modal>
     </div>
