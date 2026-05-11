@@ -10,6 +10,8 @@ import {
 import dayjs from 'dayjs';
 import { studentAPI, schoolAPI, attendanceAPI } from '@/services/api';
 import useAuthStore from '@/store/authStore';
+import MonthlyAttendanceEntry from './MonthlyAttendanceEntry';
+import MonthlyAttendanceReport from './MonthlyAttendanceReport';
 
 const { Title, Text } = Typography;
 
@@ -353,8 +355,18 @@ const Attendance = () => {
 
   const tabItems = [
     {
+      key: 'monthly',
+      label: '📅 Monthly Entry',
+      children: <MonthlyAttendanceEntry />,
+    },
+    {
+      key: 'monthly-report',
+      label: '📊 Monthly Report',
+      children: <MonthlyAttendanceReport />,
+    },
+    {
       key: 'mark',
-      label: 'Mark Attendance',
+      label: 'Daily Mark',
       children: (
         <>
           {/* Filters */}
@@ -662,7 +674,7 @@ const Attendance = () => {
       </div>
 
       <Tabs
-        defaultActiveKey="mark"
+        defaultActiveKey="monthly"
         items={tabItems}
         type="card"
         size="large"

@@ -275,6 +275,164 @@ class AttendanceService {
 
     return { report, stats: { totalPresent, totalAbsent, avgPercentage, studentCount: report.length } };
   }
+
+  // ═══════════════════════════════════════════════════════════
+  //  MONTHLY ATTENDANCE
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Upsert monthly attendance for a class+month.
+   * rows: [{ studentId, attendedClasses }]
+   */
+  static async upsertMonthlyAttendance({ classId, monthKey, totalClassesConducted, rows, userId, academicYearId }) {
+    if (!classId || !monthKey) throw new AppError('classId and monthKey are required', 400);
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) throw new AppError('monthKey must be YYYY-MM', 400);
+    if (typeof totalClassesConducted !== 'number' || totalClassesConducted < 0) {
+      throw new AppError('totalClassesConducted must be a non-negative number', 400);
+    }
+    if (!Array.isArray(rows)) throw new AppError('rows must be an array', 400);
+    for (const row of rows) {
+      if ((row.attendedClasses || 0) > totalClassesConducted) {
+        throw new AppError(
+          `A student has attendedClasses (${row.attendedClasses}) > totalClassesConducted (${totalClassesConducted})`,
+          400
+        );
+      }
+      if ((row.attendedClasses || 0) < 0) throw new AppError('attendedClasses cannot be negative', 400);
+    }
+
+    // Resolve academicYearId from SetupService if not supplied by caller
+    if (!academicYearId) {
+      try {
+        const SetupService = require('../setup/service');
+        academicYearId = await SetupService.resolveAcademicYearId(null);
+      } catch { /* leave null — index allows null but groups consistently */ }
+    }
+
+    const MonthlyAttendance = require('../../models/MonthlyAttendance');
+    const doc = await MonthlyAttendance.findOneAndUpdate(
+      { classId, academicYearId: academicYearId || null, monthKey },
+      {
+        $set: { totalClassesConducted, rows, updatedBy: userId || null, academicYearId: academicYearId || null },
+        $setOnInsert: { classId, monthKey, createdBy: userId || null },
+      },
+      { upsert: true, new: true, runValidators: true }
+    );
+    return doc;
+  }
+
+  /**
+   * Fetch the monthly entry doc for a class+month (for the entry UI to pre-fill).
+   */
+  static async getMonthlyClassEntry(classId, monthKey, academicYearId) {
+    if (!classId) throw new AppError('classId is required', 400);
+
+    // Resolve academicYearId
+    if (!academicYearId) {
+      try {
+        const SetupService = require('../setup/service');
+        academicYearId = await SetupService.resolveAcademicYearId(null);
+      } catch { /* leave null */ }
+    }
+
+    const MonthlyAttendance = require('../../models/MonthlyAttendance');
+    const query = { classId, academicYearId: academicYearId || null };
+    if (monthKey) query.monthKey = monthKey;
+    const doc = await MonthlyAttendance.findOne(query)
+      .sort({ monthKey: -1 })
+      .lean();
+    return doc || null;
+  }
+
+  /**
+   * Cumulative report for all students of a class across all recorded months.
+   */
+  static async getMonthlyClassReport(classId, academicYearId) {
+    if (!classId) throw new AppError('classId is required', 400);
+
+    // Resolve academicYearId
+    if (!academicYearId) {
+      try {
+        const SetupService = require('../setup/service');
+        academicYearId = await SetupService.resolveAcademicYearId(null);
+      } catch { /* leave null */ }
+    }
+
+    const MonthlyAttendance = require('../../models/MonthlyAttendance');
+    const Student = require('../../models/Student');
+
+    const monthFilter = { classId, academicYearId: academicYearId || null };
+    const months = await MonthlyAttendance.find(monthFilter).sort({ monthKey: 1 }).lean();
+    const totalConducted = months.reduce((s, m) => s + (m.totalClassesConducted || 0), 0);
+
+    const students = await Student.find({ classId, isActive: true })
+      .select('name rollNo')
+      .sort({ rollNo: 1 })
+      .lean();
+
+    const map = {};
+    for (const s of students) {
+      map[s._id.toString()] = { _id: s._id, name: s.name, rollNo: s.rollNo, totalConducted, totalAttended: 0, monthWise: [] };
+    }
+
+    for (const m of months) {
+      for (const row of (m.rows || [])) {
+        const sid = row.studentId?.toString();
+        if (sid && map[sid]) {
+          map[sid].totalAttended += row.attendedClasses || 0;
+          map[sid].monthWise.push({ monthKey: m.monthKey, conducted: m.totalClassesConducted, attended: row.attendedClasses || 0 });
+        }
+      }
+    }
+
+    const studentsList = Object.values(map).map(s => ({
+      ...s,
+      percentage: totalConducted > 0 ? Math.round((s.totalAttended / totalConducted) * 1000) / 10 : 0,
+    }));
+
+    return {
+      students: studentsList,
+      months: months.map(m => ({ monthKey: m.monthKey, totalConducted: m.totalClassesConducted })),
+      totalConducted,
+    };
+  }
+
+  /**
+   * Per-student cumulative + month-wise report (for parent portal).
+   */
+  static async getMonthlyStudentReport(studentId) {
+    if (!studentId) throw new AppError('studentId is required', 400);
+    const MonthlyAttendance = require('../../models/MonthlyAttendance');
+    const Student = require('../../models/Student');
+
+    const student = await Student.findById(studentId).select('name rollNo classId').lean();
+    if (!student) throw new AppError('Student not found', 404);
+
+    const months = await MonthlyAttendance.find({ 'rows.studentId': new mongoose.Types.ObjectId(studentId) })
+      .sort({ monthKey: 1 })
+      .lean();
+
+    let totalConducted = 0;
+    let totalAttended = 0;
+    const monthWise = [];
+
+    for (const m of months) {
+      const row = m.rows.find(r => r.studentId?.toString() === studentId.toString());
+      const attended = row?.attendedClasses || 0;
+      totalConducted += m.totalClassesConducted || 0;
+      totalAttended += attended;
+      monthWise.push({ monthKey: m.monthKey, conducted: m.totalClassesConducted, attended });
+    }
+
+    return {
+      student,
+      totalConducted,
+      totalAttended,
+      percentage: totalConducted > 0 ? Math.round((totalAttended / totalConducted) * 1000) / 10 : 0,
+      monthWise,
+    };
+  }
 }
 
 module.exports = AttendanceService;
+

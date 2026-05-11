@@ -92,6 +92,45 @@ class AttendanceController {
       next(error);
     }
   }
+
+  // ─── Monthly Attendance ──────────────────────────────────
+
+  static async upsertMonthly(req, res, next) {
+    try {
+      const { classId, monthKey, totalClassesConducted, rows, academicYearId } = req.body;
+      const result = await AttendanceService.upsertMonthlyAttendance({
+        classId, monthKey, totalClassesConducted, rows,
+        academicYearId: academicYearId || null,
+        userId: req.user?._id,
+      });
+      return ApiResponse.created(res, result, 'Monthly attendance saved');
+    } catch (error) { next(error); }
+  }
+
+  static async getMonthlyClassEntry(req, res, next) {
+    try {
+      const { classId } = req.params;
+      const { monthKey, academicYearId } = req.query;
+      const data = await AttendanceService.getMonthlyClassEntry(classId, monthKey, academicYearId || null);
+      return ApiResponse.success(res, data, 'Monthly entry fetched');
+    } catch (error) { next(error); }
+  }
+
+  static async getMonthlyClassReport(req, res, next) {
+    try {
+      const { academicYearId } = req.query;
+      const data = await AttendanceService.getMonthlyClassReport(req.params.classId, academicYearId || null);
+      return ApiResponse.success(res, data, 'Monthly class report generated');
+    } catch (error) { next(error); }
+  }
+
+  static async getMonthlyStudentReport(req, res, next) {
+    try {
+      const data = await AttendanceService.getMonthlyStudentReport(req.params.studentId);
+      return ApiResponse.success(res, data, 'Monthly student report generated');
+    } catch (error) { next(error); }
+  }
 }
 
 module.exports = AttendanceController;
+

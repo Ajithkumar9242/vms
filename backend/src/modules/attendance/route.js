@@ -7,9 +7,28 @@ const idempotency = require('../../middlewares/idempotency');
 // ─── All attendance routes require authentication ───────────
 router.use(protect);
 
-/**
- * @route   GET /api/attendance/health
- */
+// ─── Monthly Attendance routes (must be before /:param routes) ──
+router.post('/monthly/upsert',
+  authorize('admin', 'super_admin', 'faculty'),
+  AttendanceController.upsertMonthly
+);
+
+router.get('/monthly/class/:classId',
+  authorize('admin', 'super_admin', 'faculty'),
+  AttendanceController.getMonthlyClassEntry
+);
+
+router.get('/monthly/report/class/:classId',
+  authorize('admin', 'super_admin', 'faculty'),
+  AttendanceController.getMonthlyClassReport
+);
+
+router.get('/monthly/report/student/:studentId',
+  authorize('admin', 'super_admin', 'faculty', 'parent'),
+  AttendanceController.getMonthlyStudentReport
+);
+
+
 router.get('/health', AttendanceController.health);
 
 /**

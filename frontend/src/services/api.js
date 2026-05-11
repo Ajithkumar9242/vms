@@ -233,7 +233,14 @@ export const attendanceAPI = {
   lock: (data) => api.post('/attendance/lock', data),
   getByDate: (params) => api.get('/attendance', { params }),
   getReport: (params) => api.get('/attendance/report', { params }),
+  getStudentReport: (studentId, params) => api.get(`/attendance/student/${studentId}`, { params }),
+  // ─── Monthly ────────────────────────────────────────────
+  upsertMonthly: (data) => api.post('/attendance/monthly/upsert', data),
+  getMonthlyClassEntry: (classId, params) => api.get(`/attendance/monthly/class/${classId}`, { params }),
+  getMonthlyClassReport: (classId) => api.get(`/attendance/monthly/report/class/${classId}`),
+  getMonthlyStudentReport: (studentId) => api.get(`/attendance/monthly/report/student/${studentId}`),
 };
+
 
 // ─── Exams & Results ────────────────────────────────────────
 export const examAPI = {
