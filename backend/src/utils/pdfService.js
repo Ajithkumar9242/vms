@@ -1,4 +1,6 @@
 const PDFDocument = require('pdfkit');
+const { drawSingleLogoHeader } = require('./pdf/commonHeader');
+
 
 // Native date formatter (dayjs not installed on backend)
 const fmt = (date, includeTime = false) => {
@@ -73,7 +75,7 @@ function drawTableRow(doc, cols, widths, y, isHeader = false) {
  * @param {Object} [penaltySummary] - auto-calculated penalty { totalPenalty, daysOverdue, breakdown }
  * @returns {PDFDocument}
  */
-function generateInvoicePDF(invoice, school, penaltySummary = null) {
+async function generateInvoicePDF(invoice, school, penaltySummary = null) {
   const doc = new PDFDocument({ margin: 50, size: 'A4', bufferPages: true });
 
   const path = require('path');
@@ -102,24 +104,21 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
   const netTotal   = netFee + effectivePenalty - (invoice.waivedAmount || 0);
   const balanceDue = invoice.dueAmount || Math.max(0, netTotal - (invoice.paidAmount || 0));
 
-  // ─── Header Band ──────────────────────────────────────────
-  doc.rect(0, 0, 595, 85).fill(hexToRgb(COLORS.primary));
+  // ─── Dual-Logo Header ────────────────────────────────────
+  let headerEndY = 95;
+  try {
+    headerEndY = await drawSingleLogoHeader(doc, school, { startY: 20 });
+  } catch { headerEndY = 95; }
 
-  applyColor(doc, '#FFFFFF');
-  doc.fontSize(18).font('Roboto-Bold').text(schoolName, 50, 18, { width: 340 });
-  if (schoolAddr)  doc.fontSize(8).font('Roboto').text(schoolAddr, 50, 42, { width: 340 });
-  const contactLine = [schoolPhone && `📞 ${schoolPhone}`, schoolEmail && `✉ ${schoolEmail}`].filter(Boolean).join('   ');
-  if (contactLine) doc.fontSize(8).text(contactLine, 50, 53);
-
-  // Right: label + invoice number
+  // Right of header: FEE INVOICE label + invoice number
   applyColor(doc, '#93C5FD');
-  doc.fontSize(12).font('Roboto-Bold').text('FEE INVOICE', 370, 18, { width: 175, align: 'right' });
+  doc.fontSize(11).font('Roboto-Bold').text('FEE INVOICE', 370, 28, { width: 175, align: 'right' });
   applyColor(doc, '#FFFFFF');
-  doc.fontSize(9).font('Roboto').text(invoice.invoiceNumber || '—', 370, 34, { width: 175, align: 'right' });
-  doc.fontSize(8).text(`Generated: ${fmt(new Date(), true)}`, 370, 46, { width: 175, align: 'right' });
-  doc.fontSize(8).text(`Academic Year: ${ay.name || ay.label || '—'}`, 370, 57, { width: 175, align: 'right' });
+  doc.fontSize(8).font('Roboto').text(invoice.invoiceNumber || '—', 370, 42, { width: 175, align: 'right' });
+  doc.fontSize(7).text(`Generated: ${fmt(new Date(), true)}`, 370, 52, { width: 175, align: 'right' });
+  doc.fontSize(7).text(`AY: ${ay.name || ay.label || '—'}`, 370, 62, { width: 175, align: 'right' });
 
-  doc.y = 95;
+  doc.y = headerEndY;
 
   // ─── Status Badge ─────────────────────────────────────────
   const statusColor = invoice.status === 'paid'
@@ -325,7 +324,7 @@ function generateInvoicePDF(invoice, school, penaltySummary = null) {
 /**
  * Generate a professional payment receipt PDF.
  */
-function generateReceiptPDF(payment, invoice, school) {
+async function generateReceiptPDF(payment, invoice, school) {
   const doc = new PDFDocument({ margin: 40, size: 'A5' });
 
   const path = require('path');
@@ -336,19 +335,19 @@ function generateReceiptPDF(payment, invoice, school) {
   const student    = payment.studentId || {};
   const cls        = invoice?.classId  || student.classId || {};
 
-  // ─── Header ──────────────────────────────────────────────
-  doc.rect(0, 0, 420, 70).fill(hexToRgb(COLORS.primary));
-  applyColor(doc, '#FFFFFF');
-  doc.fontSize(15).font('Roboto-Bold').text(schoolName, 30, 14, { width: 260 });
-  doc.fontSize(8).font('Roboto').text('PAYMENT RECEIPT', 30, 36);
-  doc.fontSize(8).text(payment.receiptNumber || '—', 30, 47);
+  // ─── Dual-Logo Header (compact for A5) ─────────────────────
+  let headerEndY = 80;
+  try {
+    headerEndY = await drawSingleLogoHeader(doc, school, { startY: 10, logoSize: 42 });
+  } catch { headerEndY = 80; }
 
-  // PAID stamp circle
-  doc.circle(370, 35, 28).fill(hexToRgb('#2563EB'));
+  // PAID stamp circle (top right overlay on header)
+  doc.circle(375, 40, 26).fill(hexToRgb('#2563EB'));
   applyColor(doc, '#FFFFFF');
-  doc.fontSize(8).font('Roboto-Bold').text('PAID', 345, 30, { width: 52, align: 'center' });
+  doc.fontSize(8).font('Roboto-Bold').text('PAID', 350, 35, { width: 52, align: 'center' });
+  doc.fontSize(7).font('Roboto').text('RECEIPT', 350, 45, { width: 52, align: 'center' });
 
-  doc.y = 83;
+  doc.y = headerEndY;
 
   // ─── Student Info ─────────────────────────────────────────
   const infoRows = [

@@ -340,7 +340,7 @@ class FeesController {
       res.setHeader('Content-Disposition', `inline; filename="Invoice_${invoice.invoiceNumber || invoiceId}.pdf"`);
       res.setHeader('Cache-Control', 'no-store');
 
-      const doc = PdfService.generateInvoicePDF(invoice, school, penaltySummary);
+      const doc = await PdfService.generateInvoicePDF(invoice, school, penaltySummary);
       doc.pipe(res);
       doc.end();
     } catch (error) { next(error); }
@@ -370,7 +370,7 @@ class FeesController {
       res.setHeader('Content-Disposition', `inline; filename="Receipt_${payment.receiptNumber || paymentId}.pdf"`);
       res.setHeader('Cache-Control', 'no-store');
 
-      const doc = PdfService.generateReceiptPDF(payment, invoice, school);
+      const doc = await PdfService.generateReceiptPDF(payment, invoice, school);
       doc.pipe(res);
       doc.end();
     } catch (error) { next(error); }

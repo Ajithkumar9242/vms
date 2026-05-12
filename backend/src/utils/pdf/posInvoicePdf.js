@@ -2,6 +2,7 @@
 
 const path = require('path');
 const PDFDocument = require('pdfkit');
+const { drawSingleLogoHeader } = require('./commonHeader');
 
 // Roboto fonts — same as existing pdfService.js
 const FONT_REGULAR = path.join(__dirname, '..', 'Roboto-Regular.ttf');
@@ -42,8 +43,9 @@ function inr(num) {
  * @param {Object} school   - SchoolSetting document (lean)
  * @returns {Promise<Buffer>}
  */
+
 async function generatePosInvoicePdf(invoice, school) {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     const chunks = [];
     const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
 
@@ -56,18 +58,21 @@ async function generatePosInvoicePdf(invoice, school) {
 
     const pageWidth = doc.page.width - 100; // margins
 
-    // ── Header ──────────────────────────────────────────────
-    doc.rect(50, 40, pageWidth, 70).fill(COLORS.primary);
-    doc.fillColor(COLORS.white).font('Roboto-Bold').fontSize(16)
-       .text(school?.schoolName || 'VMS School', 60, 52, { width: pageWidth - 20 });
-    doc.font('Roboto').fontSize(8)
-       .text(school?.contact?.address || school?.address || '', 60, 72, { width: pageWidth - 20 });
+    // ── Dual-logo header (shared helper) ─────────────────────
+    let yAfterHeader;
+    try {
+      yAfterHeader = await drawSingleLogoHeader(doc, school, { startY: 20 });
+    } catch {
+      yAfterHeader = 115;
+    }
 
-    // "INVOICE" label on right
-    doc.font('Roboto-Bold').fontSize(20).fillColor([253, 224, 71])
-       .text('INVOICE', 400, 50, { width: 140, align: 'right' });
+    // "INVOICE" label — right aligned inside header band area
+    doc.fillColor([253, 224, 71]).font('Roboto-Bold').fontSize(14)
+       .text('INVOICE', 400, 55, { width: 140, align: 'right' });
+    doc.fillColor([203, 213, 225]).font('Roboto').fontSize(8)
+       .text(invoice.invoiceNumber || '—', 400, 72, { width: 140, align: 'right' });
 
-    doc.moveDown(3.5);
+    doc.y = yAfterHeader + 10;
 
     // ── Invoice Meta ─────────────────────────────────────────
     const metaY = doc.y;
