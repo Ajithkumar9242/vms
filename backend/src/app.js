@@ -109,7 +109,15 @@ app.use('/api/subjects', subjectRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/materials', materialRoutes);
 
-// ─── Health Check ───────────────────────────────────────────
+// ─── New Modules ────────────────────────────────────────────
+const vaultRoutes    = require('./modules/vault/route');
+const posRoutes      = require('./modules/pos/route');
+const invoiceRoutes  = require('./modules/invoices/route');
+app.use('/api/vault',            vaultRoutes);
+app.use('/api/pos',              posRoutes);
+app.use('/api/invoice-registry', invoiceRoutes);
+
+
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,

@@ -642,13 +642,13 @@ const ParentFees = () => {
                 >
                   {pdfLoading ? '⏳ Generating...' : '📥 Download PDF'}
                 </button>
-                <button
+                {/* <button
                   className="m-btn m-btn-outline"
                   style={{ flex: 1 }}
                   onClick={handlePrint}
                 >
                   🖨️ Print
-                </button>
+                </button> */}
               </div>
             </div>
           )}

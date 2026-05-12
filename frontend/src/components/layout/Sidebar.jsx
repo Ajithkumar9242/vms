@@ -19,6 +19,9 @@ import {
   SettingOutlined,
   FileTextOutlined,
   BookOutlined,
+  FolderOpenOutlined,
+  ShoppingCartOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
@@ -33,12 +36,12 @@ const allMenuItems = [
     label: 'Dashboard',
     roles: ['super_admin', 'admin', 'principal', 'faculty', 'parent'],
   },
-  {
-    key: '/setup',
-    icon: <SettingOutlined />,
-    label: 'Setup Module',
-    roles: ['super_admin', 'admin', 'principal', 'faculty', 'parent'],
-  },
+  // {
+  //   key: '/setup',
+  //   icon: <SettingOutlined />,
+  //   label: 'Setup Module',
+  //   roles: ['super_admin', 'admin', 'principal', 'faculty', 'parent'],
+  // },
   {
     key: '/students',
     icon: <TeamOutlined />,
@@ -155,6 +158,65 @@ const allMenuItems = [
     icon: <SettingOutlined />,
     label: 'Setup',
     roles: ['super_admin', 'admin'],
+  },
+  // ─── Vault / Documents ────────────────────────────────
+  {
+    type: 'divider',
+    roles: ['super_admin', 'admin', 'principal'],
+  },
+  {
+    key: '/vault/catalog',
+    icon: <FolderOpenOutlined />,
+    label: 'Document Catalog',
+    roles: ['super_admin', 'admin', 'principal'],
+  },
+  {
+    key: '/vault/requests',
+    icon: <FolderOpenOutlined />,
+    label: 'Document Requests',
+    roles: ['super_admin', 'admin', 'principal'],
+  },
+  {
+    key: '/vault/students',
+    icon: <FolderOpenOutlined />,
+    label: 'Student Vault',
+    roles: ['super_admin', 'admin', 'principal'],
+  },
+
+  // ─── POS ──────────────────────────────────────────────
+  {
+    type: 'divider',
+    roles: ['super_admin', 'admin', 'principal'],
+  },
+  {
+    key: '/pos/catalog',
+    icon: <ShoppingCartOutlined />,
+    label: 'POS Catalog',
+    roles: ['super_admin', 'admin', 'principal'],
+  },
+  {
+    key: '/pos/billing',
+    icon: <ShoppingCartOutlined />,
+    label: 'POS Billing',
+    roles: ['super_admin', 'admin', 'principal'],
+  },
+
+  // ─── Invoice Registry ─────────────────────────────────
+  {
+    type: 'divider',
+    roles: ['super_admin', 'admin', 'principal'],
+  },
+  {
+    key: '/invoices',
+    icon: <FileSearchOutlined />,
+    label: 'Invoice Registry',
+    roles: ['super_admin', 'admin', 'principal'],
+  },
+  {
+    key: '/invoices',
+    icon: <FileTextOutlined />,
+    label: 'Invoice Registry',
+    roles: ['super_admin', 'admin', 'principal'],
   },
 ];
 

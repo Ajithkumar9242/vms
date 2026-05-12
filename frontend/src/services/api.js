@@ -508,4 +508,71 @@ export const facultyDashboardAPI = {
   getStudentAttendance: (studentId, params) => api.get(`/attendance/student/${studentId}`, { params }),
 };
 
+
+// ─── Vault (Student Document Vault) ─────────────────────────
+export const vaultAPI = {
+  // Catalog
+  getCatalog:        (params) => api.get('/vault/catalog', { params }),
+  createCatalogItem: (data)   => api.post('/vault/catalog', data),
+  updateCatalogItem: (id, data) => api.put(`/vault/catalog/${id}`, data),
+  toggleCatalogItem: (id)     => api.patch(`/vault/catalog/${id}/toggle`),
+  // Requests — Admin
+  getRequests:       (params) => api.get('/vault/requests', { params }),
+  approveRequest:    (id, data) => api.post(`/vault/requests/${id}/approve`, data),
+  rejectRequest:     (id, data) => api.post(`/vault/requests/${id}/reject`, data),
+  fulfillRequest:    (id, data) => api.patch(`/vault/requests/${id}/fulfill`, data),
+  adminMarkPaid:     (id, data) => api.post(`/vault/requests/${id}/pay/admin-mark-paid`, data),
+  // Files — Admin
+  uploadFile:        (studentId, formData) => api.post(`/vault/students/${studentId}/files/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }),
+  getStudentFiles:   (studentId) => api.get(`/vault/students/${studentId}/files`),
+  deleteFile:        (fileId)   => api.delete(`/vault/files/${fileId}`),
+  // Requests — Parent
+  createRequest:     (data)    => api.post('/vault/requests', data),
+  getMyRequests:     (params)  => api.get('/vault/requests/my', { params }),
+  createPaymentOrder:(id)      => api.post(`/vault/requests/${id}/pay/razorpay`),
+  confirmPayment:    (id, data)=> api.post(`/vault/requests/${id}/pay/confirm`, data),
+  // Files — Parent
+  getMyFiles:        (params)  => api.get('/vault/files/my', { params }),
+  // Download URL (with token for auth)
+  getDownloadUrl:    (fileId)  => {
+    const token = localStorage.getItem('vms_token');
+    return `${API_BASE_URL}/vault/files/${fileId}/download${token ? '?token=' + token : ''}`;
+  },
+  // Receipt PDF
+  getReceiptUrl:     (id)      => {
+    const token = localStorage.getItem('vms_token');
+    return `${API_BASE_URL}/vault/requests/${id}/receipt${token ? '?token=' + token : ''}`;
+  },
+};
+
+// ─── POS (Counter Billing) ───────────────────────────────────
+export const posAPI = {
+  getCatalog:    (params) => api.get('/pos/catalog', { params }),
+  createItem:    (data)   => api.post('/pos/catalog', data),
+  updateItem:    (id, data) => api.put(`/pos/catalog/${id}`, data),
+  toggleItem:    (id)     => api.patch(`/pos/catalog/${id}/toggle`),
+  createInvoice: (data)   => api.post('/pos/invoices', data),
+  getInvoices:   (params) => api.get('/pos/invoices', { params }),
+  getInvoice:    (id)     => api.get(`/pos/invoices/${id}`),
+  cancelInvoice: (id, data) => api.post(`/pos/invoices/${id}/cancel`, data),
+  getPdfUrl:     (id)     => {
+    const token = localStorage.getItem('vms_token');
+    return `${API_BASE_URL}/pos/invoices/${id}/pdf${token ? '?token=' + token : ''}`;
+  },
+};
+
+// ─── Invoice Registry ────────────────────────────────────────
+export const invoiceRegistryAPI = {
+  list:       (params) => api.get('/invoice-registry', { params }),
+  getDetail:  (id, type) => api.get(`/invoice-registry/${id}`, { params: { type } }),
+  cancel:     (id, type, data) => api.post(`/invoice-registry/${id}/cancel?type=${type}`, data),
+  getAudit:   (id, type) => api.get(`/invoice-registry/${id}/audit`, { params: { type } }),
+  getPdfUrl:  (id, type) => {
+    const token = localStorage.getItem('vms_token');
+    if (type === 'pos') return `${API_BASE_URL}/pos/invoices/${id}/pdf${token ? '?token=' + token : ''}`;
+    if (type === 'fees') return `${API_BASE_URL}/fees/invoices/${id}/pdf${token ? '?token=' + token : ''}`;
+    return `${API_BASE_URL}/vault/requests/${id}/receipt${token ? '?token=' + token : ''}`;
+  },
+};
+
 export default api;

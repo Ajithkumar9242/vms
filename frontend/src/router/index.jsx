@@ -40,10 +40,10 @@ const SubjectsPage = React.lazy(() => import('@/pages/setup/Subjects'));
 const ClassConfigPage = React.lazy(() => import('@/pages/setup/ClassConfig'));
 
 // ─── Public Pages ──────────────────────────────────────────
-const OnlineAdmissionPage  = React.lazy(() => import('@/pages/admissions/OnlineAdmission'));
+const OnlineAdmissionPage = React.lazy(() => import('@/pages/admissions/OnlineAdmission'));
 const ApplicationStatusPage = React.lazy(() => import('@/pages/admissions/ApplicationStatus'));
-const ParentLoginPage       = React.lazy(() => import('@/pages/auth/ParentLogin'));
-const FacultyLoginPage      = React.lazy(() => import('@/pages/auth/FacultyLogin'));
+const ParentLoginPage = React.lazy(() => import('@/pages/auth/ParentLogin'));
+const FacultyLoginPage = React.lazy(() => import('@/pages/auth/FacultyLogin'));
 
 // ─── Parent Mobile App ─────────────────────────────────────
 const ParentDashboard = React.lazy(() => import('@/pages/parent/ParentDashboard'));
@@ -52,6 +52,18 @@ const ParentAttendance = React.lazy(() => import('@/pages/parent/ParentAttendanc
 const ParentExams = React.lazy(() => import('@/pages/parent/ParentExams'));
 const ParentNotifications = React.lazy(() => import('@/pages/parent/ParentNotifications'));
 const ParentProfile = React.lazy(() => import('@/pages/parent/ParentProfile'));
+const ParentVault = React.lazy(() => import('@/pages/parent/ParentVault'));
+const ParentDocumentRequests = React.lazy(() => import('@/pages/parent/ParentDocumentRequests'));
+const ParentDocuments = React.lazy(() => import('@/pages/parent/ParentDocuments'));
+const ParentPrivacyPolicy = React.lazy(() => import('@/pages/parent/ParentPrivacyPolicy')); //
+
+// ─── Vault / POS / Registry ────────────────────────────────
+const DocumentCatalogAdmin = React.lazy(() => import('@/pages/vault/DocumentCatalogAdmin'));
+const DocumentRequestsQueue = React.lazy(() => import('@/pages/vault/DocumentRequestsQueue'));
+const StudentVaultAdmin = React.lazy(() => import('@/pages/vault/StudentVaultAdmin'));
+const PosItemCatalogAdmin = React.lazy(() => import('@/pages/pos/PosItemCatalogAdmin'));
+const PosBilling = React.lazy(() => import('@/pages/pos/PosBilling'));
+const InvoiceRegistry = React.lazy(() => import('@/pages/invoices/InvoiceRegistry'));
 
 // ─── Faculty Mobile App ────────────────────────────────────
 const FacultyAttendance = React.lazy(() => import('@/pages/faculty/FacultyAttendance'));
@@ -102,6 +114,10 @@ const AppRouter = () => {
                   <Route path="exams" element={<ParentExams />} />
                   <Route path="notifications" element={<ParentNotifications />} />
                   <Route path="profile" element={<ParentProfile />} />
+                  <Route path="vault" element={<ParentVault />} />
+                  <Route path="requests" element={<ParentDocumentRequests />} />
+                  <Route path="documents" element={<ParentDocuments />} />
+                  <Route path="privacy-policy" element={<ParentPrivacyPolicy />} />
                 </Routes>
               </RoleRoute>
             </ProtectedRoute>
@@ -153,6 +169,14 @@ const AppRouter = () => {
 
             {/* Admin + Parent */}
             <Route path="/fees" element={<RoleRoute roles={[...ADMIN_ROLES, 'parent']}><FeesPage /></RoleRoute>} />
+
+            {/* Vault + POS + Invoice Registry (Admin only) */}
+            <Route path="/vault/catalog" element={<RoleRoute roles={ADMIN_ROLES}><DocumentCatalogAdmin /></RoleRoute>} />
+            <Route path="/vault/requests" element={<RoleRoute roles={ADMIN_ROLES}><DocumentRequestsQueue /></RoleRoute>} />
+            <Route path="/vault/students" element={<RoleRoute roles={ADMIN_ROLES}><StudentVaultAdmin /></RoleRoute>} />
+            <Route path="/pos/catalog" element={<RoleRoute roles={ADMIN_ROLES}><PosItemCatalogAdmin /></RoleRoute>} />
+            <Route path="/pos/billing" element={<RoleRoute roles={ADMIN_ROLES}><PosBilling /></RoleRoute>} />
+            <Route path="/invoices" element={<RoleRoute roles={ADMIN_ROLES}><InvoiceRegistry /></RoleRoute>} />
 
             {/* School Operations */}
             <Route path="/hostel" element={<RoleRoute roles={STAFF_ROLES}><HostelPage /></RoleRoute>} />

@@ -1,14 +1,14 @@
-const bcrypt   = require('bcryptjs');
-const jwt      = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const OtpSession = require('../../models/OtpSession');
-const User     = require('../../models/User');
-const Parent   = require('../../models/Parent');
+const User = require('../../models/User');
+const Parent = require('../../models/Parent');
 const AppError = require('../../utils/AppError');
 
-const OTP_TTL_MINUTES  = 5;
+const OTP_TTL_MINUTES = 5;
 const OTP_MAX_ATTEMPTS = 5;
-const REFRESH_SECRET   = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET + '_refresh';
-const REFRESH_EXPIRY   = process.env.JWT_REFRESH_EXPIRES_IN || '180d'; // 6 months
+const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET + '_refresh';
+const REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRES_IN || '180d'; // 6 months
 
 /**
  * OtpService — handles phone-based OTP login for parents.
@@ -57,7 +57,7 @@ class OtpService {
       }
     }
 
-    const otp     = OtpService._generateOtp();
+    const otp = OtpService._generateOtp();
     const otpHash = await bcrypt.hash(otp, 10);
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
 
@@ -142,20 +142,29 @@ class OtpService {
       }
     }
 
-    const accessToken  = OtpService.generateAccessToken(user._id, user.role);
+    // Generate tokens
+    const accessToken = OtpService.generateAccessToken(user._id, user.role);
     const refreshToken = await OtpService.generateAndStoreRefreshToken(user._id);
 
-    const userObj = user.toObject ? user.toObject() : { ...user };
-    delete userObj.password;
-
-    // Merge faculty profile fields (avatar, employeeId, department, facultyId)
-    // into the response — mirrors what AuthService.loginUser does for email login.
-    if (type === 'faculty') {
+    // Return fully enriched user object exactly like normal login
+    // so parent/faculty apps receive linkedEntity, avatar, etc.
+    let enrichedUser;
+    try {
       const AuthService = require('./service');
-      await AuthService._mergeFacultyFields(userObj);
+      enrichedUser = await AuthService.getCurrentUser(user._id); // includes linkedEntity
+    } catch (e) {
+      // fallback: never break login just because enrichment failed
+      enrichedUser = user.toObject ? user.toObject() : { ...user };
     }
 
-    return { user: userObj, accessToken, refreshToken };
+    // make sure password is never leaked (even if fallback is used)
+    delete enrichedUser.password;
+
+    return {
+      user: enrichedUser,
+      accessToken,
+      refreshToken,
+    };
   }
 
   /**
@@ -220,26 +229,26 @@ class OtpService {
    * Set MSG91_API_KEY + MSG91_TEMPLATE_ID in .env for production.
    */
   static async _dispatchSms(phone, otp) {
-    const apiKey     = process.env.MSG91_API_KEY;
+    const apiKey = process.env.MSG91_API_KEY;
     const templateId = process.env.MSG91_TEMPLATE_ID;
 
     if (apiKey && templateId) {
       try {
         // MSG91 Send OTP API
         const https = require('https');
-        const body  = JSON.stringify({
+        const body = JSON.stringify({
           template_id: templateId,
-          mobile:      `91${phone.replace(/\D/g, '')}`,
-          authkey:     apiKey,
+          mobile: `91${phone.replace(/\D/g, '')}`,
+          authkey: apiKey,
           otp,
         });
         await new Promise((resolve, reject) => {
           const req = https.request(
             {
               hostname: 'control.msg91.com',
-              path:     '/api/v5/otp',
-              method:   'POST',
-              headers:  { 'Content-Type': 'application/json', 'content-length': Buffer.byteLength(body) },
+              path: '/api/v5/otp',
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'content-length': Buffer.byteLength(body) },
             },
             (res) => { let d = ''; res.on('data', c => (d += c)); res.on('end', () => resolve(d)); }
           );

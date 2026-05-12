@@ -1,5 +1,5 @@
 const AppError = require('./AppError');
-
+const streamifier = require('streamifier');
 /**
  * File Upload Utility.
  * Uses Cloudinary when CLOUDINARY_URL is configured.
@@ -49,30 +49,43 @@ const uploadToCloudinary = async (file, folder = 'vms-erp') => {
       if (process.env.CLOUDINARY_CLOUD_NAME) {
         cloudinary.config({
           cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-          api_key:    process.env.CLOUDINARY_API_KEY,
+          api_key: process.env.CLOUDINARY_API_KEY,
           api_secret: process.env.CLOUDINARY_API_SECRET,
         });
       }
 
       const result = await new Promise((resolve, reject) => {
+        const isImage = file.mimetype.startsWith('image/');
+        const isPdfOrDoc = !isImage; // pdf/doc/docx will be raw
+
+        const ext = (file.originalname || '').split('.').pop()?.toLowerCase();
+        const base = (file.originalname || 'file')
+          .replace(/\.[^/.]+$/, '')
+          .replace(/[^a-zA-Z0-9-_]/g, '_')
+          .substring(0, 120);
+
         const stream = cloudinary.uploader.upload_stream(
           {
             folder,
-            resource_type: 'auto', // handles images, pdf, doc, docx, etc.
-            use_filename: true,
-            unique_filename: true,
+            resource_type: isImage ? 'image' : 'raw',
+            public_id: `${base}_${Date.now()}`,
+            use_filename: false,
+            unique_filename: false,
+            overwrite: false,
+            format: isImage ? undefined : ext,
           },
           (error, result) => {
             if (error) reject(error);
             else resolve(result);
           }
         );
+
         stream.end(file.buffer);
       });
-
       return {
-        url:      result.secure_url,
+        url: result.secure_url,
         publicId: result.public_id,
+        originalName: file.originalname,   // preserve real filename
       };
     } catch (error) {
       console.error('⚠️ Cloudinary upload failed:', error.message);
@@ -84,8 +97,9 @@ const uploadToCloudinary = async (file, folder = 'vms-erp') => {
   console.warn('⚠️ Cloudinary not configured — returning mock upload URL');
   const mockId = `mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   return {
-    url:      `https://via.placeholder.com/200?text=${encodeURIComponent(file.originalname)}`,
+    url: `https://via.placeholder.com/200?text=${encodeURIComponent(file.originalname)}`,
     publicId: mockId,
+    originalName: file.originalname,
   };
 };
 

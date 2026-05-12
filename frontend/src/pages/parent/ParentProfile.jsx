@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import ParentLayout from '@/components/mobile/ParentLayout';
 import { parentAPI } from '@/services/api';
 import useAuthStore from '@/store/authStore';
 import ChangePassword from '@/components/mobile/ChangePassword';
+import { useNavigate } from 'react-router-dom';
 
 const ParentProfile = () => {
   const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
   const [showLogout, setShowLogout] = useState(false);
-  const [showCp,     setShowCp]     = useState(false);
-  const [editing,    setEditing]    = useState(false);
-  const [saving,     setSaving]     = useState(false);
-  const [msg,        setMsg]        = useState(null);
+  const [showCp, setShowCp] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
   const [parentData, setParentData] = useState(null);
 
   // Form state — editable fields only
@@ -25,17 +27,17 @@ const ParentProfile = () => {
     if (linked) {
       setParentData(linked);
       setForm({
-        phone:      linked.phone      || '',
-        email:      linked.email      || '',
-        address:    linked.address    || '',
+        phone: linked.phone || '',
+        email: linked.email || '',
+        address: linked.address || '',
         occupation: linked.occupation || '',
       });
     } else {
       // Fallback: user object has partial info
       setForm({
-        phone:      user?.phone || '',
-        email:      user?.email || '',
-        address:    '',
+        phone: user?.phone || '',
+        email: user?.email || '',
+        address: '',
         occupation: '',
       });
     }
@@ -71,9 +73,9 @@ const ParentProfile = () => {
   const handleCancel = () => {
     const linked = user?.linkedEntity;
     setForm({
-      phone:      (linked?.phone      || user?.phone) || '',
-      email:      (linked?.email      || user?.email) || '',
-      address:    linked?.address    || '',
+      phone: (linked?.phone || user?.phone) || '',
+      email: (linked?.email || user?.email) || '',
+      address: linked?.address || '',
       occupation: linked?.occupation || '',
     });
     setEditing(false);
@@ -223,8 +225,8 @@ const ParentProfile = () => {
       <div className="m-card">
         <div className="m-card-title" style={{ marginBottom: 10 }}>App Info</div>
         {[
-          { icon: '📱', label: 'Version',  value: 'VMS ERP Parent App v1.0' },
-          { icon: '🔒', label: 'Session',  value: 'Active • Secured with JWT' },
+          { icon: '📱', label: 'Version', value: 'VMS ERP Parent App v1.0' },
+          { icon: '🔒', label: 'Session', value: 'Active • Secured with JWT' },
           { icon: '📶', label: 'PWA Mode', value: 'Progressive Web App' },
         ].map((f) => (
           <div key={f.label} className="m-list-item">
@@ -235,6 +237,17 @@ const ParentProfile = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Privacy Policy */}
+      <div className="m-card" style={{ marginTop: 0 }}>
+        <button
+          style={{ display: 'flex', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, alignItems: 'center' }}
+          onClick={() => navigate('/parent/privacy-policy')}
+        >
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#1E293B' }}>📄 Privacy Policy</span>
+          <span style={{ color: '#94A3B8' }}>➔</span>
+        </button>
       </div>
 
       {/* Change Password */}

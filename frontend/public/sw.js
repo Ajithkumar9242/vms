@@ -90,7 +90,7 @@ self.addEventListener('fetch', (event) => {
 // ─── Native Push (non-FCM fallback) ──────────────────────────
 self.addEventListener('push', (event) => {
   let data = {};
-  try { data = event.data ? event.data.json() : {}; } catch {}
+  try { data = event.data ? event.data.json() : {}; } catch { }
   const title = data.title || 'VMS School ERP';
   const options = {
     body: data.body || data.message || '',

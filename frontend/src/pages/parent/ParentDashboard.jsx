@@ -10,14 +10,14 @@ dayjs.extend(relativeTime);
 const ParentDashboard = () => {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState(null);
-  const [studentId,     setStudentId]     = useState(null);
-  const [classId,       setClassId]       = useState(null);
-  const [feeData,       setFeeData]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [studentId, setStudentId] = useState(null);
+  const [classId, setClassId] = useState(null);
+  const [feeData, setFeeData] = useState(null);
   const [notifications, setNotifications] = useState([]);
-  const [materials,     setMaterials]     = useState([]);
-  const [retryCount,    setRetryCount]    = useState(0);
+  const [materials, setMaterials] = useState([]);
+  const [retryCount, setRetryCount] = useState(0);
   // Multi-child support
   const [linkedStudents, setLinkedStudents] = useState([]);
   const [selectedChildIdx, setSelectedChildIdx] = useState(0);
@@ -37,23 +37,18 @@ const ParentDashboard = () => {
         const allLinked = user?.linkedEntity?.linkedStudents || [];
         if (allLinked.length > 0) {
           setLinkedStudents(allLinked);
-          // Use selected child index (clamped to available children)
           const safeIdx = Math.min(selectedChildIdx, allLinked.length - 1);
-          const linked  = allLinked[safeIdx];
+          const linked = allLinked[safeIdx];
           sid = linked?._id;
           cid = linked?.classId?._id || linked?.classId || null;
         } else {
-          // fallback: metadata on user object
           sid = user?.studentId || user?.metadata?.studentId || null;
-          cid = user?.classId   || user?.metadata?.classId   || null;
+          cid = user?.classId || user?.metadata?.classId || null;
         }
 
-        // Last resort: fetch student from API
         if (!sid) {
           const r = await studentAPI.getAll({ limit: 1 });
-          const s = r?.data?.data?.students?.[0]
-                 || r?.data?.students?.[0]
-                 || r?.data?.[0];
+          const s = r?.data?.data?.students?.[0] || r?.data?.students?.[0] || r?.data?.[0];
           if (s) {
             sid = s._id;
             cid = s.classId?._id || s.classId || null;
@@ -67,9 +62,9 @@ const ParentDashboard = () => {
 
         // ── Step 2: parallel fetch ─────────────────────────
         const [fees, notifs, mats] = await Promise.allSettled([
-          sid ? feesAPI.getStudentFees(sid)          : Promise.resolve(null),
+          sid ? feesAPI.getStudentFees(sid) : Promise.resolve(null),
           notificationAPI.getAll({ limit: 3 }),
-          cid ? materialAPI.getByClass(cid)          : Promise.resolve(null),
+          cid ? materialAPI.getByClass(cid) : Promise.resolve(null),
         ]);
 
         if (cancelled) return;
@@ -79,16 +74,13 @@ const ParentDashboard = () => {
 
         if (notifs.status === 'fulfilled' && notifs.value) {
           const d = notifs.value?.data;
-          setNotifications(
-            Array.isArray(d) ? d.slice(0, 3) : (d?.notifications?.slice(0, 3) || [])
-          );
+          setNotifications(Array.isArray(d) ? d.slice(0, 3) : (d?.notifications?.slice(0, 3) || []));
         }
 
         if (mats.status === 'fulfilled' && mats.value) {
-          // Unwrap axios + API envelope:  { data: { success, data: { materials } } }
           const envelope = mats.value?.data;
-          const payload  = envelope?.data ?? envelope;
-          const list     = payload?.materials ?? (Array.isArray(payload) ? payload : []);
+          const payload = envelope?.data ?? envelope;
+          const list = payload?.materials ?? (Array.isArray(payload) ? payload : []);
           setMaterials(list.filter(Boolean).slice(0, 8));
         }
       } catch (e) {
@@ -100,25 +92,57 @@ const ParentDashboard = () => {
 
     run();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, retryCount, selectedChildIdx]);
 
   const handleRetry = () => setRetryCount((c) => c + 1);
 
-
-
-  const summary      = feeData?.summary;
+  const summary = feeData?.summary;
   const feeConfigured = summary && summary.totalFee > 0;
+  const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const quickLinks = [
-    { label: 'Pay Fees',     icon: '₹',  to: '/parent/fees',         color: '#EFF6FF' },
-    { label: 'Attendance',   icon: '📅', to: '/parent/attendance',    color: '#F0FDF4' },
-    { label: 'Exam Results', icon: '📊', to: '/parent/exams',         color: '#FFF7ED' },
-    { label: 'Notifications',icon: '🔔', to: '/parent/notifications',  color: '#FDF4FF' },
+    { label: 'Pay Fees', icon: '₹', to: '/parent/fees', color: '#EFF6FF' },
+    { label: 'Attendance', icon: '📅', to: '/parent/attendance', color: '#F0FDF4' },
+    { label: 'Exam Results', icon: '📊', to: '/parent/exams', color: '#FFF7ED' },
+    { label: 'Notifications', icon: '🔔', to: '/parent/notifications', color: '#FDF4FF' },
+    { label: 'Vault', icon: '📂', to: '/parent/vault', color: '#E0F2FE' },
+    { label: 'My Requests', icon: '🧾', to: '/parent/requests', color: '#FEF3C7' },
+    { label: 'My Docs', icon: '⬇️', to: '/parent/documents', color: '#FCE7F3' },
   ];
 
   return (
     <ParentLayout title="Parent Portal" subtitle={`Welcome back, ${user?.name?.split(' ')[0] || 'Parent'}`}>
+
+      {/* Top Blue Header Row inside Page Content */}
+      <div style={{
+        background: '#2563EB', color: '#fff', padding: '16px', display: 'flex',
+        justifyContent: 'space-between', alignItems: 'center',
+        margin: '-16px -16px 16px -16px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+      }}>
+        <div style={{ cursor: 'pointer' }}>
+          <span style={{ fontSize: '24px', lineHeight: '1' }}>☰</span>
+        </div>
+        <div style={{ fontWeight: '600', fontSize: '16px', textAlign: 'center', flex: 1 }}>
+          VSS International School
+        </div>
+        <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => navigate('/parent/notifications')}>
+          <span style={{ fontSize: '22px' }}>🔔</span>
+          {unreadCount > 0 ? (
+            <span style={{
+              position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff',
+              fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '10px'
+            }}>
+              {unreadCount}
+            </span>
+          ) : notifications.length > 0 ? (
+            <span style={{
+              position: 'absolute', top: 0, right: 0, width: 8, height: 8,
+              background: '#EF4444', borderRadius: '50%', border: '2px solid #2563EB'
+            }} />
+          ) : null}
+        </div>
+      </div>
+
       {loading && <div className="m-spinner" />}
 
       {!loading && error && (
@@ -130,7 +154,7 @@ const ParentDashboard = () => {
 
       {!loading && !error && (
         <>
-          {/* Multi-child switcher — only shown when parent has > 1 child */}
+          {/* Multi-child switcher */}
           {linkedStudents.length > 1 && (
             <div style={{ padding: '0 4px 10px', overflowX: 'auto' }}>
               <div style={{ display: 'flex', gap: 8, minWidth: 'max-content' }}>
@@ -142,7 +166,7 @@ const ParentDashboard = () => {
                       padding: '6px 14px', borderRadius: 20, border: 'none',
                       fontSize: 12, fontWeight: 600, cursor: 'pointer',
                       background: selectedChildIdx === idx ? '#2563EB' : '#E2E8F0',
-                      color:      selectedChildIdx === idx ? '#fff'    : '#374151',
+                      color: selectedChildIdx === idx ? '#fff' : '#374151',
                       transition: 'all 0.2s',
                     }}
                   >
@@ -157,7 +181,7 @@ const ParentDashboard = () => {
           )}
 
           {/* Hero */}
-          <div className="m-hero">
+          <div className="m-hero" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <div className="m-avatar">
                 {(user?.name || 'P')[0].toUpperCase()}
@@ -170,9 +194,19 @@ const ParentDashboard = () => {
                 </div>
               </div>
             </div>
+            <button
+              onClick={() => navigate('/parent/profile')}
+              style={{
+                background: '#FFFFFF', color: '#2563EB', padding: '6px 16px',
+                borderRadius: '9999px', fontSize: '12px', fontWeight: '600',
+                border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}
+            >
+              View Profile
+            </button>
           </div>
 
-          {/* Fee Summary — only when configured */}
+          {/* Fee Summary */}
           {feeConfigured && summary && (
             <div className="m-card">
               <div className="m-card-header">
@@ -231,7 +265,7 @@ const ParentDashboard = () => {
             ))}
           </div>
 
-          {/* Study Materials — always show section if classId is known */}
+          {/* Study Materials */}
           {classId && (
             <>
               <div className="m-section-header">
@@ -244,10 +278,9 @@ const ParentDashboard = () => {
                 </div>
               ) : (
                 materials.map((m, i) => {
-                  // Build a unified file list: prefer files[], fall back to legacy fileUrl
                   const fileList =
                     Array.isArray(m.files) && m.files.length > 0
-                      ? m.files.filter((f) => f?.url)          // guard against null entries
+                      ? m.files.filter((f) => f?.url)
                       : m.fileUrl
                         ? [{ url: m.fileUrl, name: m.fileName || 'File', type: m.mimeType || '' }]
                         : [];
@@ -264,10 +297,8 @@ const ParentDashboard = () => {
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
                           {fileList.map((f, fi) => {
                             const mime = (f.type || '').toLowerCase();
-                            const ext  = (f.url || '').split('?')[0];   // strip query params
-                            const isImage =
-                              mime.includes('image') ||
-                              /\.(jpe?g|png|gif|webp|svg)$/i.test(ext);
+                            const ext = (f.url || '').split('?')[0];
+                            const isImage = mime.includes('image') || /\.(jpe?g|png|gif|webp|svg)$/i.test(ext);
                             return isImage ? (
                               <a key={fi} href={f.url} target="_blank" rel="noreferrer">
                                 <img
@@ -281,15 +312,10 @@ const ParentDashboard = () => {
                               </a>
                             ) : (
                               <a
-                                key={fi}
-                                href={f.url}
-                                target="_blank"
-                                rel="noreferrer"
+                                key={fi} href={f.url} target="_blank" rel="noreferrer"
                                 style={{
-                                  fontSize: 12, color: '#2563EB',
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  background: '#EFF6FF', padding: '5px 10px',
-                                  borderRadius: 4, textDecoration: 'none',
+                                  fontSize: 12, color: '#2563EB', display: 'inline-flex', alignItems: 'center', gap: 4,
+                                  background: '#EFF6FF', padding: '5px 10px', borderRadius: 4, textDecoration: 'none',
                                 }}
                               >
                                 &#128196; {f.name || `View File ${fi + 1}`}
