@@ -6,11 +6,16 @@ import {
 import { PlusOutlined, LinkOutlined, UserOutlined } from '@ant-design/icons';
 import { parentAPI, studentAPI } from '@/services/api';
 import FileUpload from '@/components/common/FileUpload';
+import useAuthStore from '@/store/authStore';
 
 const { Title, Text } = Typography;
 
 const Parents = () => {
   const { message } = App.useApp();
+  const userRole = useAuthStore((s) => s.user?.role);
+  // Accountant is read-only — cannot add, edit, or link parents
+  const canWrite = !['accountant'].includes(userRole);
+
   const [parents, setParents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -28,10 +33,18 @@ const Parents = () => {
     setLoading(true);
     try {
       const res = await parentAPI.getAll({ page, limit: 20 });
-      setParents(res.data.parents);
-      setTotal(res.data.total);
+      // Backend: ApiResponse.success → { success, data: { parents, total } }
+      // or ApiResponse.paginated → { success, data: [...], pagination }
+      const envelope = res?.data ?? {};
+      const list  = Array.isArray(envelope?.parents) ? envelope.parents
+                  : Array.isArray(envelope?.data)    ? envelope.data
+                  : Array.isArray(envelope)          ? envelope
+                  : [];
+      const count = envelope?.total ?? envelope?.pagination?.total ?? list.length;
+      setParents(list);
+      setTotal(count);
     } catch (err) {
-      message.error(err.message);
+      message.error(err.message || 'Failed to load parents');
     } finally {
       setLoading(false);
     }
@@ -40,8 +53,13 @@ const Parents = () => {
   const fetchStudents = useCallback(async () => {
     try {
       const res = await studentAPI.getAll({ limit: 200 });
-      setStudents(res.data || []);
-    } catch {}
+      const envelope = res?.data ?? {};
+      const list = Array.isArray(envelope?.data)     ? envelope.data
+                 : Array.isArray(envelope?.students) ? envelope.students
+                 : Array.isArray(envelope)            ? envelope
+                 : [];
+      setStudents(list);
+    } catch { /* non-critical */ }
   }, []);
 
   useEffect(() => { fetchParents(); }, [fetchParents]);
@@ -56,7 +74,7 @@ const Parents = () => {
       createForm.resetFields();
       fetchParents();
     } catch (err) {
-      message.error(err.message);
+      message.error(err.message || 'Failed to create parent');
     }
   };
 
@@ -69,12 +87,13 @@ const Parents = () => {
       setLinkStudentId(null);
       fetchParents();
     } catch (err) {
-      message.error(err.message);
+      message.error(err.message || 'Failed to link student');
     }
   };
 
   const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', width: 180,
+    {
+      title: 'Name', dataIndex: 'name', key: 'name', width: 180,
       render: (name, record) => (
         <Space>
           {record.photo
@@ -91,11 +110,11 @@ const Parents = () => {
       dataIndex: 'linkedStudents',
       key: 'linkedStudents',
       width: 250,
-      render: (students) => students?.length > 0
-        ? students.map((s) => <Tag key={s._id} color="blue" style={{ marginBottom: 2 }}>{s.name} ({s.rollNo})</Tag>)
+      render: (studs) => studs?.length > 0
+        ? studs.map((s) => <Tag key={s._id} color="blue" style={{ marginBottom: 2 }}>{s.name} ({s.rollNo})</Tag>)
         : <Text type="secondary">No students linked</Text>,
     },
-    {
+    ...(canWrite ? [{
       title: 'Actions',
       key: 'actions',
       width: 120,
@@ -112,7 +131,7 @@ const Parents = () => {
           Link
         </Button>
       ),
-    },
+    }] : []),
   ];
 
   return (
@@ -122,9 +141,11 @@ const Parents = () => {
           <Title level={3} className="page-title" style={{ margin: 0 }}>Parents</Title>
           <Text className="page-subtitle">Manage parents and student linkages</Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)} id="create-parent-btn">
-          Add Parent
-        </Button>
+        {canWrite && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)} id="create-parent-btn">
+            Add Parent
+          </Button>
+        )}
       </div>
 
       <Table
@@ -139,73 +160,77 @@ const Parents = () => {
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No parents found" /> }}
       />
 
-      {/* Create Parent Modal */}
-      <Modal
-        title="Add New Parent"
-        open={createOpen}
-        onCancel={() => { setCreateOpen(false); setPhotoUrl(null); createForm.resetFields(); }}
-        onOk={() => createForm.submit()}
-        okText="Create"
-        okButtonProps={{ disabled: photoUploading }}
-        destroyOnHidden
-      >
-        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
-          <Form.Item label="Profile Photo">
-            <FileUpload
-              folder="parents"
-              accept="image/*"
-              value={photoUrl}
-              onChange={setPhotoUrl}
-              onUploading={setPhotoUploading}
-              label="Upload Photo"
-            />
-          </Form.Item>
-          <Form.Item name="name" label="Full Name" rules={[{ required: true, message: 'Name is required' }]}>
-            <Input placeholder="Parent name" />
-          </Form.Item>
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item name="phone" label="Phone" rules={[{ required: true, message: 'Phone is required' }]}>
-                <Input placeholder="Phone number" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="email" label="Email">
-                <Input placeholder="email@domain.com" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="occupation" label="Occupation">
-            <Input placeholder="e.g. Engineer" />
-          </Form.Item>
-          <Form.Item name="address" label="Address">
-            <Input.TextArea rows={2} placeholder="Home address" />
-          </Form.Item>
-        </Form>
-      </Modal>
+      {/* Create Parent Modal — write roles only */}
+      {canWrite && (
+        <Modal
+          title="Add New Parent"
+          open={createOpen}
+          onCancel={() => { setCreateOpen(false); setPhotoUrl(null); createForm.resetFields(); }}
+          onOk={() => createForm.submit()}
+          okText="Create"
+          okButtonProps={{ disabled: photoUploading }}
+          destroyOnHidden
+        >
+          <Form form={createForm} layout="vertical" onFinish={handleCreate}>
+            <Form.Item label="Profile Photo">
+              <FileUpload
+                folder="parents"
+                accept="image/*"
+                value={photoUrl}
+                onChange={setPhotoUrl}
+                onUploading={setPhotoUploading}
+                label="Upload Photo"
+              />
+            </Form.Item>
+            <Form.Item name="name" label="Full Name" rules={[{ required: true, message: 'Name is required' }]}>
+              <Input placeholder="Parent name" />
+            </Form.Item>
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item name="phone" label="Phone" rules={[{ required: true, message: 'Phone is required' }]}>
+                  <Input placeholder="Phone number" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="email" label="Email">
+                  <Input placeholder="email@domain.com" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item name="occupation" label="Occupation">
+              <Input placeholder="e.g. Engineer" />
+            </Form.Item>
+            <Form.Item name="address" label="Address">
+              <Input.TextArea rows={2} placeholder="Home address" />
+            </Form.Item>
+          </Form>
+        </Modal>
+      )}
 
-      {/* Link Student Modal */}
-      <Modal
-        title={`Link Student — ${selectedParent?.name || ''}`}
-        open={linkOpen}
-        onCancel={() => { setLinkOpen(false); setLinkStudentId(null); }}
-        onOk={handleLink}
-        okText="Link Student"
-        destroyOnHidden
-      >
-        <Typography.Paragraph type="secondary">
-          Select a student to link to this parent.
-        </Typography.Paragraph>
-        <Select
-          style={{ width: '100%' }}
-          placeholder="Search and select student"
-          showSearch
-          filterOption={(input, option) => option.label.toLowerCase().includes(input.toLowerCase())}
-          options={students.map((s) => ({ label: `${s.name} (${s.rollNo})`, value: s._id }))}
-          value={linkStudentId}
-          onChange={setLinkStudentId}
-        />
-      </Modal>
+      {/* Link Student Modal — write roles only */}
+      {canWrite && (
+        <Modal
+          title={`Link Student — ${selectedParent?.name || ''}`}
+          open={linkOpen}
+          onCancel={() => { setLinkOpen(false); setLinkStudentId(null); }}
+          onOk={handleLink}
+          okText="Link Student"
+          destroyOnHidden
+        >
+          <Typography.Paragraph type="secondary">
+            Select a student to link to this parent.
+          </Typography.Paragraph>
+          <Select
+            style={{ width: '100%' }}
+            placeholder="Search and select student"
+            showSearch
+            filterOption={(input, option) => option.label.toLowerCase().includes(input.toLowerCase())}
+            options={students.map((s) => ({ label: `${s.name} (${s.rollNo})`, value: s._id }))}
+            value={linkStudentId}
+            onChange={setLinkStudentId}
+          />
+        </Modal>
+      )}
     </div>
   );
 };

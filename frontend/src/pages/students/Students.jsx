@@ -11,12 +11,16 @@ import {
 import { studentAPI, schoolAPI, feesAPI, attendanceAPI, examAPI } from '@/services/api';
 import StatusTag from '@/components/common/StatusTag';
 import FileUpload from '@/components/common/FileUpload';
+import useAuthStore from '@/store/authStore';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 
 const Students = () => {
   const { message } = App.useApp();
+  const userRole  = useAuthStore((s) => s.user?.role);
+  // Accountant is read-only — cannot add/edit/delete students
+  const canWrite  = !['accountant'].includes(userRole);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [classes, setClasses] = useState([]);
@@ -39,24 +43,30 @@ const Students = () => {
     setLoading(true);
     try {
       const params = { page, limit: pageSize };
-      if (filters.search) params.search = filters.search;
+      if (filters.search)  params.search  = filters.search;
       if (filters.classId) params.classId = filters.classId;
 
       const res = await studentAPI.getAll(params);
 
+      // Backend returns: { success, data: [...], pagination: { total, page, limit } }
+      // Axios wraps in res.data, so:
+      //   res.data         = { success, data: [...], pagination: {...} }
+      //   res.data.data    = the students array (primary path)
+      //   res.data.students = legacy shape (fallback)
+      const envelope = res?.data ?? {};
       const list =
-        res?.data?.students ||
-        res?.data ||
-        res?.students ||
-        res ||
+        (Array.isArray(envelope?.data)     ? envelope.data     : null) ??
+        (Array.isArray(envelope?.students) ? envelope.students : null) ??
+        (Array.isArray(envelope)           ? envelope          : null) ??
         [];
 
-      setStudents(Array.isArray(list) ? list : []);
+      setStudents(list);
 
+      const pag = envelope?.pagination ?? {};
       setPagination({
-        current: res?.pagination?.page || 1,
-        pageSize: res?.pagination?.limit || 20,
-        total: res?.pagination?.total || list.length || 0,
+        current:  pag.page  ?? page,
+        pageSize: pag.limit ?? pageSize,
+        total:    pag.total ?? list.length,
       });
     } catch (err) {
       message.error(err.message || 'Failed to load students');
@@ -65,12 +75,17 @@ const Students = () => {
     }
   }, [filters, message]);
 
+
   // ─── Load classes + sections ──────────────────────────────
   useEffect(() => {
     schoolAPI.getClasses({ limit: 50 })
       .then((res) => {
-        const list = res?.data || res || [];
-        setClasses(Array.isArray(list) ? list : []);
+        // ApiResponse.paginated: { success, data: [...], pagination }
+        const envelope = res?.data ?? {};
+        const list = Array.isArray(envelope?.data) ? envelope.data
+          : Array.isArray(envelope) ? envelope
+          : [];
+        setClasses(list);
       });
 
     schoolAPI.getSections()
@@ -116,23 +131,79 @@ const Students = () => {
 
   // ─── Table columns ────────────────────────────────────────
   const columns = [
-    { title: 'Roll No', dataIndex: 'rollNo', key: 'rollNo', width: 150, fixed: 'left' },
-    { title: 'Name', dataIndex: 'name', key: 'name', width: 180, render: (text) => <Text strong>{text}</Text> },
-    { title: 'Class', dataIndex: ['classId', 'name'], key: 'class', width: 120 },
-    { title: 'Section', dataIndex: ['sectionId', 'name'], key: 'section', width: 90, render: (text) => text || '—' },
-    { title: 'Parent Name', dataIndex: 'parentName', key: 'parentName', width: 160 },
-    { title: 'Parent Phone', dataIndex: 'parentPhone', key: 'parentPhone', width: 140 },
     {
-      title: 'Status', dataIndex: 'isActive', key: 'status', width: 100,
-      render: (isActive) => <StatusTag status={isActive ? 'active' : 'inactive'} />,
+      title: '#', key: 'idx', width: 52, fixed: 'left',
+      render: (_, __, idx) => (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {(pagination.current - 1) * pagination.pageSize + idx + 1}
+        </Text>
+      ),
     },
     {
-      title: 'Actions', key: 'actions', width: 100, fixed: 'right',
+      title: 'Student',
+      key: 'name',
+      width: 200,
+      fixed: 'left',
+      ellipsis: true,
+      render: (_, s) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Avatar
+            size={32}
+            src={s.avatar || null}
+            style={{ background: '#3B82F6', flexShrink: 0, fontSize: 13, fontWeight: 600 }}
+          >
+            {(s.name || '?')[0].toUpperCase()}
+          </Avatar>
+          <div style={{ minWidth: 0 }}>
+            <Text strong ellipsis style={{ display: 'block', maxWidth: 140 }}>{s.name || '—'}</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {s.rollNo || s.admissionNumber || '—'}
+            </Text>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Class',
+      key: 'class',
+      width: 110,
+      ellipsis: true,
+      render: (_, s) => s.classId?.name || s.className || '—',
+    },
+    {
+      title: 'Section',
+      key: 'section',
+      width: 90,
+      ellipsis: true,
+      render: (_, s) => s.sectionId?.name || s.sectionName || '—',
+    },
+    {
+      title: 'Parent',
+      key: 'parent',
+      width: 160,
+      ellipsis: true,
+      render: (_, s) => (
+        <div>
+          <Text ellipsis style={{ display: 'block', maxWidth: 150 }}>{s.parentName || '—'}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>{s.parentPhone || ''}</Text>
+        </div>
+      ),
+    },
+    {
+      title: 'Status', dataIndex: 'isActive', key: 'status', width: 90,
+      render: (isActive) => <StatusTag status={isActive !== false ? 'active' : 'inactive'} />,
+    },
+    {
+      title: 'Actions', key: 'actions', width: 90, fixed: 'right',
       render: (_, record) => (
-        <Button size="small" icon={<EyeOutlined />}
+        <Button
+          size="small"
+          icon={<EyeOutlined />}
           onClick={() => setProfileDrawer({ open: true, student: record })}
           id={`view-profile-${record._id}`}
-        >Profile</Button>
+        >
+          Profile
+        </Button>
       ),
     },
   ];
@@ -147,9 +218,11 @@ const Students = () => {
           <Title level={4} className="page-title" style={{ margin: 0 }}>Students</Title>
           <Text type="secondary">Manage enrolled students</Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)} id="new-student-btn">
-          New Student
-        </Button>
+        {canWrite && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)} id="new-student-btn">
+            New Student
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -184,21 +257,24 @@ const Students = () => {
         rowKey="_id"
         loading={loading}
         pagination={{
-          current: pagination.current,
-          pageSize: pagination.pageSize,
-          total: pagination.total,
+          current:       pagination.current,
+          pageSize:      pagination.pageSize,
+          total:         pagination.total,
           showSizeChanger: true,
-          showTotal: (total) => `Total ${total} students`,
+          pageSizeOptions: ['10', '20', '50', '100'],
+          showTotal:     (total) => `Total ${total} students`,
         }}
         onChange={handleTableChange}
-        scroll={{ x: 940 }}
+        scroll={{ x: 1100 }}
+        sticky
         size="middle"
         bordered={false}
         style={{ background: '#FFF', borderRadius: 8 }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No students found" /> }}
       />
 
-      {/* New Student Modal */}
+      {/* New Student Modal — write roles only */}
+      {canWrite && (
       <Modal
         title="Add New Student"
         open={modal}
@@ -297,6 +373,7 @@ const Students = () => {
           </Form.Item>
         </Form>
       </Modal>
+      )} {/* end canWrite */}
 
       {/* Student Profile Drawer */}
       <StudentProfileDrawer

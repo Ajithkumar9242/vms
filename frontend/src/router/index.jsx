@@ -12,7 +12,6 @@ const AdmissionsPage = React.lazy(() => import('@/pages/admissions/Admissions'))
 const FeesPage = React.lazy(() => import('@/pages/fees/Fees'));
 const AttendancePage = React.lazy(() => import('@/pages/attendance/Attendance'));
 const ExamsPage = React.lazy(() => import('@/pages/exams/Exams'));
-const FacultyPage = React.lazy(() => import('@/pages/faculty/Faculty'));
 const AdminFaculty = React.lazy(() => import('@/pages/admin/AdminFaculty'));
 const ParentsPage = React.lazy(() => import('@/pages/parents/Parents'));
 const CommunicationPage = React.lazy(() => import('@/pages/communication/Communication'));
@@ -55,7 +54,7 @@ const ParentProfile = React.lazy(() => import('@/pages/parent/ParentProfile'));
 const ParentVault = React.lazy(() => import('@/pages/parent/ParentVault'));
 const ParentDocumentRequests = React.lazy(() => import('@/pages/parent/ParentDocumentRequests'));
 const ParentDocuments = React.lazy(() => import('@/pages/parent/ParentDocuments'));
-const ParentPrivacyPolicy = React.lazy(() => import('@/pages/parent/ParentPrivacyPolicy')); //
+const ParentPrivacyPolicy = React.lazy(() => import('@/pages/parent/ParentPrivacyPolicy'));
 
 // ─── Vault / POS / Registry ────────────────────────────────
 const DocumentCatalogAdmin = React.lazy(() => import('@/pages/vault/DocumentCatalogAdmin'));
@@ -74,138 +73,177 @@ const AssignmentManager = React.lazy(() => import('@/pages/faculty/AssignmentMan
 const StudyMaterialsPage = React.lazy(() => import('@/pages/faculty/StudyMaterials'));
 
 // ─── Role constants ─────────────────────────────────────────
-const ADMIN_ROLES = ['super_admin', 'admin', 'principal'];
-const STAFF_ROLES = [...ADMIN_ROLES, 'faculty'];
-const PARENT_ROLES = ['parent'];
+/** Setup pages: super_admin + admin only */
+const SETUP_ROLES   = ['super_admin', 'admin'];
+/** Full management: admin + principal (not accountant) */
+const HIGH_PRIV     = ['super_admin', 'admin', 'principal'];
+/** Finance: admin + principal + accountant */
+const FINANCE_ROLES = ['super_admin', 'admin', 'principal', 'accountant'];
+/** Operations (attendance, exams, hostel…): admin + principal + faculty */
+const STAFF_ROLES   = ['super_admin', 'admin', 'principal', 'faculty'];
+/** Faculty mobile app */
 const FACULTY_ROLES = ['faculty'];
+/** Parent mobile app */
+const PARENT_ROLES  = ['parent'];
 
 /**
- * Smart redirect after login: parent → /parent/dashboard, faculty → /faculty-app/attendance, else → /
+ * Smart post-login redirect:
+ *   parent     → /parent/dashboard
+ *   faculty    → /faculty-app/attendance
+ *   everyone else → /  (dashboard)
  */
 const RoleRedirect = () => {
   const user = JSON.parse(localStorage.getItem('vms_user') || 'null');
-  if (user?.role === 'parent') return <Navigate to="/parent/dashboard" replace />;
+  if (user?.role === 'parent')  return <Navigate to="/parent/dashboard" replace />;
   if (user?.role === 'faculty') return <Navigate to="/faculty-app/attendance" replace />;
   return <Navigate to="/" replace />;
 };
 
-const AppRouter = () => {
-  return (
-    <BrowserRouter>
-      <Suspense fallback={<Loader />}>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/parent-login" element={<ParentLoginPage />} />
-          <Route path="/faculty-login" element={<FacultyLoginPage />} />
-          <Route path="/online-admission" element={<OnlineAdmissionPage />} />
-          <Route path="/admission-status" element={<ApplicationStatusPage />} />
+const AppRouter = () => (
+  <BrowserRouter>
+    <Suspense fallback={<Loader />}>
+      <Routes>
 
+        {/* ── Public ─────────────────────────────────────── */}
+        <Route path="/login"             element={<LoginPage />} />
+        <Route path="/parent-login"      element={<ParentLoginPage />} />
+        <Route path="/faculty-login"     element={<FacultyLoginPage />} />
+        <Route path="/online-admission"  element={<OnlineAdmissionPage />} />
+        <Route path="/admission-status"  element={<ApplicationStatusPage />} />
 
-          {/* ─── Parent Mobile App ─────────────────────────── */}
-          <Route path="/parent/*" element={
-            <ProtectedRoute>
-              <RoleRoute roles={[...PARENT_ROLES, ...ADMIN_ROLES]}>
-                <Routes>
-                  <Route index element={<Navigate to="dashboard" replace />} />
-                  <Route path="dashboard" element={<ParentDashboard />} />
-                  <Route path="fees" element={<ParentFees />} />
-                  <Route path="attendance" element={<ParentAttendance />} />
-                  <Route path="exams" element={<ParentExams />} />
-                  <Route path="notifications" element={<ParentNotifications />} />
-                  <Route path="profile" element={<ParentProfile />} />
-                  <Route path="vault" element={<ParentVault />} />
-                  <Route path="requests" element={<ParentDocumentRequests />} />
-                  <Route path="documents" element={<ParentDocuments />} />
-                  <Route path="privacy-policy" element={<ParentPrivacyPolicy />} />
-                </Routes>
-              </RoleRoute>
-            </ProtectedRoute>
-          } />
+        {/* ── Parent Mobile App ──────────────────────────── */}
+        <Route path="/parent/*" element={
+          <ProtectedRoute>
+            <RoleRoute roles={[...PARENT_ROLES, ...HIGH_PRIV]}>
+              <Routes>
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="dashboard"      element={<ParentDashboard />} />
+                <Route path="fees"           element={<ParentFees />} />
+                <Route path="attendance"     element={<ParentAttendance />} />
+                <Route path="exams"          element={<ParentExams />} />
+                <Route path="notifications"  element={<ParentNotifications />} />
+                <Route path="profile"        element={<ParentProfile />} />
+                <Route path="vault"          element={<ParentVault />} />
+                <Route path="requests"       element={<ParentDocumentRequests />} />
+                <Route path="documents"      element={<ParentDocuments />} />
+                <Route path="privacy-policy" element={<ParentPrivacyPolicy />} />
+              </Routes>
+            </RoleRoute>
+          </ProtectedRoute>
+        } />
 
-          {/* ─── Faculty Mobile App ────────────────────────── */}
-          <Route path="/faculty-app/*" element={
-            <ProtectedRoute>
-              <RoleRoute roles={FACULTY_ROLES}>
-                <Routes>
-                  <Route index element={<Navigate to="attendance" replace />} />
-                  <Route path="attendance" element={<FacultyAttendance />} />
-                  <Route path="students" element={<FacultyStudents />} />
-                  <Route path="notifications" element={<FacultyNotifications />} />
-                  <Route path="profile" element={<FacultyProfile />} />
-                  <Route path="assignments" element={<AssignmentManager />} />
-                  <Route path="materials" element={<StudyMaterialsPage />} />
-                </Routes>
-              </RoleRoute>
-            </ProtectedRoute>
-          } />
+        {/* ── Faculty Mobile App ─────────────────────────── */}
+        <Route path="/faculty-app/*" element={
+          <ProtectedRoute>
+            <RoleRoute roles={FACULTY_ROLES}>
+              <Routes>
+                <Route index element={<Navigate to="attendance" replace />} />
+                <Route path="attendance"   element={<FacultyAttendance />} />
+                <Route path="students"     element={<FacultyStudents />} />
+                <Route path="notifications" element={<FacultyNotifications />} />
+                <Route path="profile"      element={<FacultyProfile />} />
+                <Route path="assignments"  element={<AssignmentManager />} />
+                <Route path="materials"    element={<StudyMaterialsPage />} />
+              </Routes>
+            </RoleRoute>
+          </ProtectedRoute>
+        } />
 
-          {/* ─── Admin Desktop App ─────────────────────────── */}
-          <Route element={
-            <ProtectedRoute>
-              <MainLayout />
-            </ProtectedRoute>
-          }>
-            {/* Open to all authenticated roles */}
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/students" element={<StudentsPage />} />
-            <Route path="/exams" element={<ExamsPage />} />
+        {/* ── Admin / Staff Desktop App ──────────────────── */}
+        <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
 
-            {/* Admin + Principal only */}
-            <Route path="/admissions" element={<RoleRoute roles={ADMIN_ROLES}><AdmissionsPage /></RoleRoute>} />
-            <Route path="/parents" element={<RoleRoute roles={ADMIN_ROLES}><ParentsPage /></RoleRoute>} />
-            <Route path="/activity" element={<RoleRoute roles={ADMIN_ROLES}><ActivityLogsPage /></RoleRoute>} />
+          {/* Dashboard — all desktop roles */}
+          <Route path="/" element={<DashboardPage />} />
 
-            {/* Admin + Faculty */}
-            <Route path="/attendance" element={<RoleRoute roles={STAFF_ROLES}><AttendancePage /></RoleRoute>} />
-            <Route path="/communication" element={<RoleRoute roles={STAFF_ROLES}><CommunicationPage /></RoleRoute>} />
+          {/* Students — viewable by all desktop roles incl. accountant */}
+          <Route path="/students"
+            element={<RoleRoute roles={[...FINANCE_ROLES, 'faculty']}><StudentsPage /></RoleRoute>} />
 
-            {/* /admin/faculty → admin-managed faculty list */}
-            <Route path="/admin/faculty" element={<RoleRoute roles={ADMIN_ROLES}><AdminFaculty /></RoleRoute>} />
+          {/* Exams — staff (admin + principal + faculty) */}
+          <Route path="/exams"
+            element={<RoleRoute roles={STAFF_ROLES}><ExamsPage /></RoleRoute>} />
 
-            {/* Assignments + Materials (admin + faculty) */}
-            <Route path="/assignments" element={<RoleRoute roles={STAFF_ROLES}><AssignmentManager /></RoleRoute>} />
-            <Route path="/materials" element={<RoleRoute roles={STAFF_ROLES}><StudyMaterialsPage /></RoleRoute>} />
+          {/* ── HIGH_PRIV only (admin + principal) ──── */}
+          <Route path="/admissions"
+            element={<RoleRoute roles={HIGH_PRIV}><AdmissionsPage /></RoleRoute>} />
+          <Route path="/parents"
+            element={<RoleRoute roles={HIGH_PRIV}><ParentsPage /></RoleRoute>} />
+          <Route path="/activity"
+            element={<RoleRoute roles={HIGH_PRIV}><ActivityLogsPage /></RoleRoute>} />
+          <Route path="/admin/faculty"
+            element={<RoleRoute roles={HIGH_PRIV}><AdminFaculty /></RoleRoute>} />
+          <Route path="/duty"
+            element={<RoleRoute roles={HIGH_PRIV}><DutyAssignmentPage /></RoleRoute>} />
 
-            {/* Admin + Parent */}
-            <Route path="/fees" element={<RoleRoute roles={[...ADMIN_ROLES, 'parent']}><FeesPage /></RoleRoute>} />
+          {/* ── STAFF_ROLES (admin + principal + faculty) ── */}
+          <Route path="/attendance"
+            element={<RoleRoute roles={STAFF_ROLES}><AttendancePage /></RoleRoute>} />
+          <Route path="/communication"
+            element={<RoleRoute roles={STAFF_ROLES}><CommunicationPage /></RoleRoute>} />
+          <Route path="/assignments"
+            element={<RoleRoute roles={STAFF_ROLES}><AssignmentManager /></RoleRoute>} />
+          <Route path="/materials"
+            element={<RoleRoute roles={STAFF_ROLES}><StudyMaterialsPage /></RoleRoute>} />
+          <Route path="/hostel"
+            element={<RoleRoute roles={STAFF_ROLES}><HostelPage /></RoleRoute>} />
+          <Route path="/leave"
+            element={<RoleRoute roles={STAFF_ROLES}><LeaveRequestsPage /></RoleRoute>} />
+          <Route path="/health"
+            element={<RoleRoute roles={STAFF_ROLES}><HealthRecordsPage /></RoleRoute>} />
+          <Route path="/incidents"
+            element={<RoleRoute roles={STAFF_ROLES}><IncidentsPage /></RoleRoute>} />
 
-            {/* Vault + POS + Invoice Registry (Admin only) */}
-            <Route path="/vault/catalog" element={<RoleRoute roles={ADMIN_ROLES}><DocumentCatalogAdmin /></RoleRoute>} />
-            <Route path="/vault/requests" element={<RoleRoute roles={ADMIN_ROLES}><DocumentRequestsQueue /></RoleRoute>} />
-            <Route path="/vault/students" element={<RoleRoute roles={ADMIN_ROLES}><StudentVaultAdmin /></RoleRoute>} />
-            <Route path="/pos/catalog" element={<RoleRoute roles={ADMIN_ROLES}><PosItemCatalogAdmin /></RoleRoute>} />
-            <Route path="/pos/billing" element={<RoleRoute roles={ADMIN_ROLES}><PosBilling /></RoleRoute>} />
-            <Route path="/invoices" element={<RoleRoute roles={ADMIN_ROLES}><InvoiceRegistry /></RoleRoute>} />
+          {/* ── FINANCE_ROLES (admin + principal + accountant) ── */}
+          <Route path="/fees"
+            element={<RoleRoute roles={[...FINANCE_ROLES, 'parent']}><FeesPage /></RoleRoute>} />
+          <Route path="/pos/catalog"
+            element={<RoleRoute roles={FINANCE_ROLES}><PosItemCatalogAdmin /></RoleRoute>} />
+          <Route path="/pos/billing"
+            element={<RoleRoute roles={FINANCE_ROLES}><PosBilling /></RoleRoute>} />
+          <Route path="/invoices"
+            element={<RoleRoute roles={FINANCE_ROLES}><InvoiceRegistry /></RoleRoute>} />
+          {/* Vault requests — accountant can view (backend also allows); catalog/students = HIGH_PRIV */}
+          <Route path="/vault/requests"
+            element={<RoleRoute roles={FINANCE_ROLES}><DocumentRequestsQueue /></RoleRoute>} />
+          <Route path="/vault/catalog"
+            element={<RoleRoute roles={HIGH_PRIV}><DocumentCatalogAdmin /></RoleRoute>} />
+          <Route path="/vault/students"
+            element={<RoleRoute roles={HIGH_PRIV}><StudentVaultAdmin /></RoleRoute>} />
 
-            {/* School Operations */}
-            <Route path="/hostel" element={<RoleRoute roles={STAFF_ROLES}><HostelPage /></RoleRoute>} />
-            <Route path="/leave" element={<RoleRoute roles={STAFF_ROLES}><LeaveRequestsPage /></RoleRoute>} />
-            <Route path="/health" element={<RoleRoute roles={STAFF_ROLES}><HealthRecordsPage /></RoleRoute>} />
-            <Route path="/incidents" element={<RoleRoute roles={STAFF_ROLES}><IncidentsPage /></RoleRoute>} />
-            <Route path="/duty" element={<RoleRoute roles={ADMIN_ROLES}><DutyAssignmentPage /></RoleRoute>} />
+          {/* ── Setup — SETUP_ROLES only (super_admin + admin) ── */}
+          <Route path="/setup"
+            element={<RoleRoute roles={SETUP_ROLES}><SetupDashboard /></RoleRoute>} />
+          <Route path="/setup/school-settings"
+            element={<RoleRoute roles={SETUP_ROLES}><SchoolSettingsPage /></RoleRoute>} />
+          <Route path="/setup/academic-year"
+            element={<RoleRoute roles={SETUP_ROLES}><AcademicYearPage /></RoleRoute>} />
+          <Route path="/setup/academic-term"
+            element={<RoleRoute roles={SETUP_ROLES}><AcademicTermPage /></RoleRoute>} />
+          <Route path="/setup/classes"
+            element={<RoleRoute roles={SETUP_ROLES}><ClassesPage /></RoleRoute>} />
+          <Route path="/setup/sections"
+            element={<RoleRoute roles={SETUP_ROLES}><SectionsPage /></RoleRoute>} />
+          <Route path="/setup/grade-setup"
+            element={<RoleRoute roles={SETUP_ROLES}><GradeSetupPage /></RoleRoute>} />
+          <Route path="/setup/attendance-config"
+            element={<RoleRoute roles={SETUP_ROLES}><AttendanceConfigPage /></RoleRoute>} />
+          <Route path="/setup/payment-settings"
+            element={<RoleRoute roles={SETUP_ROLES}><PaymentSettingsPage /></RoleRoute>} />
+          <Route path="/setup/class-groups"
+            element={<RoleRoute roles={SETUP_ROLES}><ClassGroupsPage /></RoleRoute>} />
+          <Route path="/setup/subjects"
+            element={<RoleRoute roles={SETUP_ROLES}><SubjectsPage /></RoleRoute>} />
+          <Route path="/setup/class-config"
+            element={<RoleRoute roles={SETUP_ROLES}><ClassConfigPage /></RoleRoute>} />
 
-            {/* Setup Module */}
-            <Route path="/setup" element={<RoleRoute roles={['super_admin', 'admin']}><SetupDashboard /></RoleRoute>} />
-            <Route path="/setup/school-settings" element={<RoleRoute roles={['super_admin', 'admin']}><SchoolSettingsPage /></RoleRoute>} />
-            <Route path="/setup/academic-year" element={<RoleRoute roles={['super_admin', 'admin']}><AcademicYearPage /></RoleRoute>} />
-            <Route path="/setup/academic-term" element={<RoleRoute roles={['super_admin', 'admin']}><AcademicTermPage /></RoleRoute>} />
-            <Route path="/setup/classes" element={<RoleRoute roles={['super_admin', 'admin']}><ClassesPage /></RoleRoute>} />
-            <Route path="/setup/sections" element={<RoleRoute roles={['super_admin', 'admin']}><SectionsPage /></RoleRoute>} />
-            <Route path="/setup/grade-setup" element={<RoleRoute roles={['super_admin', 'admin']}><GradeSetupPage /></RoleRoute>} />
-            <Route path="/setup/attendance-config" element={<RoleRoute roles={['super_admin', 'admin']}><AttendanceConfigPage /></RoleRoute>} />
-            <Route path="/setup/payment-settings" element={<RoleRoute roles={['super_admin', 'admin']}><PaymentSettingsPage /></RoleRoute>} />
-            <Route path="/setup/class-groups" element={<RoleRoute roles={['super_admin', 'admin']}><ClassGroupsPage /></RoleRoute>} />
-            <Route path="/setup/subjects" element={<RoleRoute roles={['super_admin', 'admin']}><SubjectsPage /></RoleRoute>} />
-            <Route path="/setup/class-config" element={<RoleRoute roles={['super_admin', 'admin']}><ClassConfigPage /></RoleRoute>} />
-          </Route>
+        </Route>{/* end Admin Desktop App */}
 
-          {/* Catch-all — role-aware redirect */}
-          <Route path="*" element={<RoleRedirect />} />
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
-  );
-};
+        {/* Catch-all */}
+        <Route path="*" element={<RoleRedirect />} />
+
+      </Routes>
+    </Suspense>
+  </BrowserRouter>
+);
 
 export default AppRouter;

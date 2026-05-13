@@ -28,220 +28,198 @@ import useAuthStore from '@/store/authStore';
 
 const { Sider } = Layout;
 
-// All menu items with role access control
+// ─── Role groups (mirror router/index.jsx) ────────────────────
+const SETUP_ROLES   = ['super_admin', 'admin'];
+const HIGH_PRIV     = ['super_admin', 'admin', 'principal'];
+const FINANCE_ROLES = ['super_admin', 'admin', 'principal', 'accountant'];
+const STAFF_ROLES   = ['super_admin', 'admin', 'principal', 'faculty'];
+
 const allMenuItems = [
+  // ── Core ───────────────────────────────────────────────────
   {
     key: '/',
     icon: <DashboardOutlined />,
     label: 'Dashboard',
-    roles: ['super_admin', 'admin', 'principal', 'faculty', 'parent'],
+    roles: [...FINANCE_ROLES, 'faculty'],   // accountant sees dashboard
   },
-  // {
-  //   key: '/setup',
-  //   icon: <SettingOutlined />,
-  //   label: 'Setup Module',
-  //   roles: ['super_admin', 'admin', 'principal', 'faculty', 'parent'],
-  // },
   {
     key: '/students',
     icon: <TeamOutlined />,
     label: 'Students',
-    roles: ['super_admin', 'admin', 'principal', 'faculty', 'parent'],
+    roles: [...FINANCE_ROLES, 'faculty'],
   },
   {
     key: '/admissions',
     icon: <FormOutlined />,
     label: 'Admissions',
-    roles: ['super_admin', 'admin', 'principal'],
+    roles: HIGH_PRIV,
   },
-  {
-    key: '/fees',
-    icon: <DollarOutlined />,
-    label: 'Fees',
-    roles: ['super_admin', 'admin', 'principal', 'parent'],
-  },
+
+  // ── Academics ──────────────────────────────────────────────
+  { type: 'divider', roles: STAFF_ROLES },
   {
     key: '/attendance',
     icon: <CalendarOutlined />,
     label: 'Attendance',
-    roles: ['super_admin', 'admin', 'principal', 'faculty'],
+    roles: STAFF_ROLES,
   },
   {
     key: '/exams',
     icon: <TrophyOutlined />,
     label: 'Exams',
-    roles: ['super_admin', 'admin', 'principal', 'faculty', 'parent'],
+    roles: STAFF_ROLES,
   },
   {
     key: '/assignments',
     icon: <FileTextOutlined />,
     label: 'Assignments',
-    roles: ['super_admin', 'admin', 'principal', 'faculty'],
+    roles: STAFF_ROLES,
   },
   {
     key: '/materials',
     icon: <BookOutlined />,
     label: 'Study Materials',
-    roles: ['super_admin', 'admin', 'principal', 'faculty'],
+    roles: STAFF_ROLES,
   },
+
+  // ── People ─────────────────────────────────────────────────
+  { type: 'divider', roles: HIGH_PRIV },
   {
     key: '/admin/faculty',
     icon: <UserSwitchOutlined />,
     label: 'Manage Faculty',
-    roles: ['super_admin', 'admin', 'principal'],
+    roles: HIGH_PRIV,
   },
   {
     key: '/parents',
     icon: <UsergroupAddOutlined />,
     label: 'Parents',
-    roles: ['super_admin', 'admin', 'principal'],
-  },
-  // ─── School Operations ─────────────────────────────────
-  {
-    type: 'divider',
-    roles: ['super_admin', 'admin', 'principal', 'faculty'],
-  },
-  {
-    key: '/hostel',
-    icon: <HomeOutlined />,
-    label: 'Hostel',
-    roles: ['super_admin', 'admin', 'principal', 'faculty'],
-  },
-  {
-    key: '/leave',
-    icon: <FileProtectOutlined />,
-    label: 'Leave / Gate Pass',
-    roles: ['super_admin', 'admin', 'principal', 'faculty'],
-  },
-  {
-    key: '/health',
-    icon: <MedicineBoxOutlined />,
-    label: 'Health Records',
-    roles: ['super_admin', 'admin', 'principal', 'faculty'],
-  },
-  {
-    key: '/incidents',
-    icon: <WarningOutlined />,
-    label: 'Incidents',
-    roles: ['super_admin', 'admin', 'principal', 'faculty'],
-  },
-  {
-    key: '/duty',
-    icon: <ScheduleOutlined />,
-    label: 'Staff Duty',
-    roles: ['super_admin', 'admin', 'principal'],
-  },
-  // ─── System ────────────────────────────────────────────
-  {
-    type: 'divider',
-    roles: ['super_admin', 'admin', 'principal', 'faculty'],
-  },
-  {
-    key: '/communication',
-    icon: <MessageOutlined />,
-    label: 'Communication',
-    roles: ['super_admin', 'admin', 'principal', 'faculty'],
-  },
-  {
-    key: '/activity',
-    icon: <HistoryOutlined />,
-    label: 'Activity Logs',
-    roles: ['super_admin', 'admin', 'principal'],
-  },
-  // ─── Admin Setup ───────────────────────────────────────
-  {
-    type: 'divider',
-    roles: ['super_admin', 'admin'],
-  },
-  {
-    key: '/setup',
-    icon: <SettingOutlined />,
-    label: 'Setup',
-    roles: ['super_admin', 'admin'],
-  },
-  // ─── Vault / Documents ────────────────────────────────
-  {
-    type: 'divider',
-    roles: ['super_admin', 'admin', 'principal'],
-  },
-  {
-    key: '/vault/catalog',
-    icon: <FolderOpenOutlined />,
-    label: 'Document Catalog',
-    roles: ['super_admin', 'admin', 'principal'],
-  },
-  {
-    key: '/vault/requests',
-    icon: <FolderOpenOutlined />,
-    label: 'Document Requests',
-    roles: ['super_admin', 'admin', 'principal'],
-  },
-  {
-    key: '/vault/students',
-    icon: <FolderOpenOutlined />,
-    label: 'Student Vault',
-    roles: ['super_admin', 'admin', 'principal'],
+    roles: HIGH_PRIV,
   },
 
-  // ─── POS ──────────────────────────────────────────────
+  // ── Finance ────────────────────────────────────────────────
+  { type: 'divider', roles: FINANCE_ROLES },
   {
-    type: 'divider',
-    roles: ['super_admin', 'admin', 'principal'],
-  },
-  {
-    key: '/pos/catalog',
-    icon: <ShoppingCartOutlined />,
-    label: 'POS Catalog',
-    roles: ['super_admin', 'admin', 'principal'],
+    key: '/fees',
+    icon: <DollarOutlined />,
+    label: 'Fees',
+    roles: FINANCE_ROLES,
   },
   {
     key: '/pos/billing',
     icon: <ShoppingCartOutlined />,
     label: 'POS Billing',
-    roles: ['super_admin', 'admin', 'principal'],
+    roles: FINANCE_ROLES,
   },
-
-  // ─── Invoice Registry ─────────────────────────────────
   {
-    type: 'divider',
-    roles: ['super_admin', 'admin', 'principal'],
+    key: '/pos/catalog',
+    icon: <ShoppingCartOutlined />,
+    label: 'POS Catalog',
+    roles: FINANCE_ROLES,
   },
   {
     key: '/invoices',
     icon: <FileSearchOutlined />,
     label: 'Invoice Registry',
-    roles: ['super_admin', 'admin', 'principal'],
+    roles: FINANCE_ROLES,
   },
   {
-    key: '/invoices',
-    icon: <FileTextOutlined />,
-    label: 'Invoice Registry',
-    roles: ['super_admin', 'admin', 'principal'],
+    key: '/vault/requests',
+    icon: <FolderOpenOutlined />,
+    label: 'Document Requests',
+    roles: FINANCE_ROLES,
+  },
+
+  // ── Vault (admin/principal only) ───────────────────────────
+  {
+    key: '/vault/catalog',
+    icon: <FolderOpenOutlined />,
+    label: 'Document Catalog',
+    roles: HIGH_PRIV,
+  },
+  {
+    key: '/vault/students',
+    icon: <FolderOpenOutlined />,
+    label: 'Student Vault',
+    roles: HIGH_PRIV,
+  },
+
+  // ── School Operations ──────────────────────────────────────
+  { type: 'divider', roles: STAFF_ROLES },
+  {
+    key: '/hostel',
+    icon: <HomeOutlined />,
+    label: 'Hostel',
+    roles: STAFF_ROLES,
+  },
+  {
+    key: '/leave',
+    icon: <FileProtectOutlined />,
+    label: 'Leave / Gate Pass',
+    roles: STAFF_ROLES,
+  },
+  {
+    key: '/health',
+    icon: <MedicineBoxOutlined />,
+    label: 'Health Records',
+    roles: STAFF_ROLES,
+  },
+  {
+    key: '/incidents',
+    icon: <WarningOutlined />,
+    label: 'Incidents',
+    roles: STAFF_ROLES,
+  },
+  {
+    key: '/duty',
+    icon: <ScheduleOutlined />,
+    label: 'Staff Duty',
+    roles: HIGH_PRIV,
+  },
+
+  // ── System ─────────────────────────────────────────────────
+  { type: 'divider', roles: HIGH_PRIV },
+  {
+    key: '/communication',
+    icon: <MessageOutlined />,
+    label: 'Communication',
+    roles: STAFF_ROLES,
+  },
+  {
+    key: '/activity',
+    icon: <HistoryOutlined />,
+    label: 'Activity Logs',
+    roles: HIGH_PRIV,
+  },
+
+  // ── Admin Setup (super_admin + admin only) ─────────────────
+  { type: 'divider', roles: SETUP_ROLES },
+  {
+    key: '/setup',
+    icon: <SettingOutlined />,
+    label: 'Setup',
+    roles: SETUP_ROLES,
   },
 ];
 
 const Sidebar = ({ collapsed, onCollapse }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const user = useAuthStore((s) => s.user);
-  const userRole = user?.role || 'admin';
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const user      = useAuthStore((s) => s.user);
+  const userRole  = user?.role || 'admin';
 
-  // Filter menu items based on user role
+  // Filter items by role; strip the roles key before passing to Ant Menu
   const menuItems = allMenuItems
-    .filter((item) => item.roles.includes(userRole))
-    .map(({ roles, ...rest }) => rest); // Strip roles from rendered items
+    .filter((item) => item.roles?.includes(userRole))
+    .map(({ roles, ...rest }) => rest);
 
-  // Determine selected key from current path
+  // Highlight the current page
   const selectedKey = menuItems.find((item) =>
     item.key && (
       location.pathname === item.key ||
       (item.key !== '/' && location.pathname.startsWith(item.key))
     )
   )?.key || '/';
-
-  const onMenuClick = ({ key }) => {
-    navigate(key);
-  };
 
   return (
     <Sider
@@ -312,7 +290,7 @@ const Sidebar = ({ collapsed, onCollapse }) => {
         mode="inline"
         selectedKeys={[selectedKey]}
         items={menuItems}
-        onClick={onMenuClick}
+        onClick={({ key }) => navigate(key)}
         style={{ borderRight: 'none', marginTop: 8 }}
       />
     </Sider>

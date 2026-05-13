@@ -8,11 +8,15 @@ import {
 } from '@ant-design/icons';
 import { facultyAPI } from '@/services/api';
 import FileUpload from '@/components/common/FileUpload';
+import useAuthStore from '@/store/authStore';
 
 const { Title, Text } = Typography;
 
 const AdminFaculty = () => {
   const { message } = App.useApp();
+  const userRole  = useAuthStore((s) => s.user?.role);
+  // Accountant is read-only — cannot add or edit faculty
+  const canWrite  = !['accountant'].includes(userRole);
   const [faculty, setFaculty]     = useState([]);
   const [loading, setLoading]     = useState(false);
   const [search, setSearch]       = useState('');
@@ -32,15 +36,14 @@ const AdminFaculty = () => {
     setLoading(true);
     try {
       const res = await facultyAPI.getAll({ page, limit: 20, search: search || undefined });
-      const list =
-        res?.data?.faculty ||
-        res?.data?.data    ||
-        res?.data          ||
-        res?.faculty       ||
-        res                ||
-        [];
-      const t = res?.data?.total ?? (Array.isArray(list) ? list.length : 0);
-      setFaculty(Array.isArray(list) ? list : []);
+      // ApiResponse.paginated: { success, data: [...], pagination }
+      const envelope = res?.data ?? {};
+      const list = Array.isArray(envelope?.data)    ? envelope.data
+                 : Array.isArray(envelope?.faculty) ? envelope.faculty
+                 : Array.isArray(envelope)          ? envelope
+                 : [];
+      const t = envelope?.pagination?.total ?? envelope?.total ?? list.length;
+      setFaculty(list);
       setTotal(t);
     } catch (err) {
       message.error(err?.message || 'Failed to load faculty');
@@ -150,7 +153,7 @@ const AdminFaculty = () => {
           ? <Tag color="success">Active</Tag>
           : <Tag color="error">Inactive</Tag>,
     },
-    {
+    ...(canWrite ? [{
       title: 'Actions',
       key: 'actions',
       width: 90,
@@ -159,7 +162,7 @@ const AdminFaculty = () => {
           Edit
         </Button>
       ),
-    },
+    }] : []),
   ];
 
   // ─── Render ───────────────────────────────────────────────
@@ -179,9 +182,11 @@ const AdminFaculty = () => {
             View and manage all faculty members
           </Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} id="add-faculty-btn">
-          Add Faculty
-        </Button>
+        {canWrite && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} id="add-faculty-btn">
+            Add Faculty
+          </Button>
+        )}
       </div>
 
       {/* Search */}
@@ -221,6 +226,7 @@ const AdminFaculty = () => {
       />
 
       {/* Create / Edit Modal */}
+      {canWrite && (
       <Modal
         title={editRecord ? 'Edit Faculty' : 'Add Faculty'}
         open={modalOpen}
@@ -295,6 +301,7 @@ const AdminFaculty = () => {
           </Row>
         </Form>
       </Modal>
+      )} {/* end canWrite */}
     </div>
   );
 };
