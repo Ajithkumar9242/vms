@@ -441,8 +441,8 @@ const Attendance = () => {
                   <Statistic
                     title={<span style={{ fontSize: 12, color: '#64748B' }}>Total</span>}
                     value={students.length}
-                    prefix={<CalendarOutlined style={{ color: '#3B82F6' }} />}
-                    styles={{ content: { fontSize: 20, fontWeight: 700, color: '#1B3A5C' } }}
+                    prefix={<CalendarOutlined style={{ color: 'var(--color-secondary)' }} />}
+                    styles={{ content: { fontSize: 20, fontWeight: 700, color: 'var(--color-primary-dark)' } }}
                   />
                 </Card>
               </Col>
@@ -634,7 +634,7 @@ const Attendance = () => {
                     title={<span style={{ fontSize: 12, color: '#64748B' }}>Avg Attendance</span>}
                     value={reportStats.avgPercentage}
                     suffix="%"
-                    prefix={<PercentageOutlined style={{ color: '#3B82F6' }} />}
+                    prefix={<PercentageOutlined style={{ color: 'var(--color-secondary)' }} />}
                     styles={{ content: { fontSize: 20, fontWeight: 700, color: reportStats.avgPercentage >= 75 ? '#22C55E' : '#EF4444' } }}
                   />
                 </Card>

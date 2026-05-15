@@ -90,7 +90,7 @@ const Fees = () => {
     {
       title: 'Invoice', key: 'invoice', width: 140,
       render: (_, r) => r.invoiceNumber
-        ? <Tag color="blue" style={{ cursor: 'pointer', fontSize: 11 }}
+        ? <Tag color="orange" style={{ cursor: 'pointer', fontSize: 11 }}
           onClick={() => openInvoiceDetail(r)}>
           <FileTextOutlined /> {r.invoiceNumber}
         </Tag>
@@ -204,10 +204,10 @@ const Fees = () => {
           {/* Stats */}
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             {[
-              { label: 'Total Students', value: filtered.length, color: '#3B82F6', icon: <WalletOutlined />, fmt: v => v },
+              { label: 'Total Students', value: filtered.length, color: 'var(--color-secondary)', icon: <WalletOutlined />, fmt: v => v },
               { label: 'Total Collected', value: totalCollected, color: '#22C55E', icon: <CheckCircleOutlined />, fmt: v => `₹${v.toLocaleString('en-IN')}` },
               { label: 'Total Due', value: totalDue, color: '#EF4444', icon: <ExclamationCircleOutlined />, fmt: v => `₹${v.toLocaleString('en-IN')}` },
-              { label: 'Fully Paid', value: paidCount, color: '#1B3A5C', icon: <CheckCircleOutlined />, fmt: v => `${v} / ${filtered.length}` },
+              { label: 'Fully Paid', value: paidCount, color: 'var(--color-primary-dark)', icon: <CheckCircleOutlined />, fmt: v => `${v} / ${filtered.length}` },
             ].map(card => (
               <Col xs={12} sm={6} key={card.label}>
                 <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', borderTop: `3px solid ${card.color}` }}>

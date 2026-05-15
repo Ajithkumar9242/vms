@@ -151,7 +151,7 @@ const Navbar = ({ collapsed, onToggle }) => {
                 renderItem={(f) => (
                   <List.Item style={{ padding: '6px 0', cursor: 'pointer' }} onClick={() => { setSearchOpen(false); navigate('/faculty'); }}>
                     <Text>{f.name}</Text>
-                    <Tag color="blue">{f.employeeId}</Tag>
+                    <Tag color="orange">{f.employeeId}</Tag>
                   </List.Item>
                 )}
               />
@@ -289,7 +289,7 @@ const Navbar = ({ collapsed, onToggle }) => {
             <Avatar
               size={36}
               icon={<UserOutlined />}
-              style={{ background: '#1B3A5C' }}
+              style={{ background: 'var(--color-primary-dark)' }}
             />
           </Space>
         </Dropdown>

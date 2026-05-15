@@ -1,5 +1,5 @@
 const AppError = require('./AppError');
-const streamifier = require('streamifier');
+const axios = require('axios');
 /**
  * File Upload Utility.
  * Uses Cloudinary when CLOUDINARY_URL is configured.
@@ -19,6 +19,39 @@ const ALLOWED_TYPES = [
 ];
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+
+const safeFileBase = (name = 'file') => (
+  name
+    .replace(/\.[^/.]+$/, '')
+    .replace(/[^a-zA-Z0-9-_]/g, '_')
+    .substring(0, 120) || 'file'
+);
+
+const verifyPdfUrl = async (url) => {
+  let response;
+  try {
+    response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      headers: { Range: 'bytes=0-4' },
+      validateStatus: (status) => status >= 200 && status < 300,
+      maxRedirects: 5,
+    });
+  } catch (error) {
+    const status = error.response?.status;
+    const body = Buffer.isBuffer(error.response?.data)
+      ? error.response.data.toString('utf8')
+      : String(error.response?.data || '');
+    if (status === 401 || /blocked for delivery/i.test(body)) {
+      console.warn('[Cloudinary] Enable "Allow delivery of PDF and ZIP files" in Cloudinary Settings → Security');
+    }
+    throw error;
+  }
+
+  const signature = Buffer.from(response.data).slice(0, 5).toString('utf8');
+  if (signature !== '%PDF-') {
+    throw new AppError('Uploaded file is not a valid PDF', 400);
+  }
+};
 
 /**
  * Upload a single file to Cloudinary.
@@ -56,23 +89,21 @@ const uploadToCloudinary = async (file, folder = 'vms-erp') => {
 
       const result = await new Promise((resolve, reject) => {
         const isImage = file.mimetype.startsWith('image/');
-        const isPdfOrDoc = !isImage; // pdf/doc/docx will be raw
+        const isPdf = file.mimetype === 'application/pdf';
 
         const ext = (file.originalname || '').split('.').pop()?.toLowerCase();
-        const base = (file.originalname || 'file')
-          .replace(/\.[^/.]+$/, '')
-          .replace(/[^a-zA-Z0-9-_]/g, '_')
-          .substring(0, 120);
+        const safeName = safeFileBase(file.originalname);
+        const publicId = isImage ? safeName : `${safeName}.${isPdf ? 'pdf' : (ext || 'bin')}`;
 
         const stream = cloudinary.uploader.upload_stream(
           {
             folder,
             resource_type: isImage ? 'image' : 'raw',
-            public_id: `${base}_${Date.now()}`,
+            public_id: publicId,
+            ...(isPdf ? { format: 'pdf', content_type: 'application/pdf' } : {}),
             use_filename: false,
             unique_filename: false,
             overwrite: false,
-            format: isImage ? undefined : ext,
           },
           (error, result) => {
             if (error) reject(error);
@@ -82,13 +113,25 @@ const uploadToCloudinary = async (file, folder = 'vms-erp') => {
 
         stream.end(file.buffer);
       });
+
+      if (file.mimetype === 'application/pdf') {
+        try {
+          await verifyPdfUrl(result.secure_url);
+        } catch (verifyError) {
+          await cloudinary.uploader.destroy(result.public_id, { resource_type: 'raw' }).catch(() => {});
+          throw verifyError;
+        }
+      }
+
       return {
         url: result.secure_url,
         publicId: result.public_id,
         originalName: file.originalname,   // preserve real filename
+        resourceType: result.resource_type,
       };
     } catch (error) {
       console.error('⚠️ Cloudinary upload failed:', error.message);
+      if (error instanceof AppError) throw error;
       throw new AppError('File upload failed. Please try again.', 500);
     }
   }
@@ -112,10 +155,11 @@ const uploadToCloudinary = async (file, folder = 'vms-erp') => {
 const uploadMultipleToCloudinary = async (files, folder = 'vms-erp') => {
   const results = await Promise.all(
     files.map(async (file) => {
-      const { url, publicId } = await uploadToCloudinary(file, folder);
+      const { url, publicId, resourceType } = await uploadToCloudinary(file, folder);
       return {
         url,
         publicId,
+        resourceType,
         name: file.originalname,
         type: file.mimetype,
         size: file.size,

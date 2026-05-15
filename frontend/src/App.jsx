@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ConfigProvider, App as AntApp } from 'antd';
 import AppRouter from '@/router';
+import useAuthStore from '@/store/authStore';
+import { ERP_COLORS } from '@/theme/colors';
 
 // Enterprise-grade Ant Design theme
 const theme = {
-  token: {
-    colorPrimary: '#1B3A5C',
+ token: {
+    colorPrimary: ERP_COLORS.primary,
     colorSuccess: '#22C55E',
     colorWarning: '#F59E0B',
     colorError: '#EF4444',
@@ -13,16 +15,16 @@ const theme = {
     borderRadius: 6,
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     fontSize: 14,
-    colorBgLayout: '#F0F2F5',
+    colorBgLayout: ERP_COLORS.layout,
   },
   components: {
     Layout: {
-      siderBg: '#0F172A',
+      siderBg: ERP_COLORS.sidebar,
       headerBg: '#FFFFFF',
     },
     Menu: {
-      darkItemBg: '#0F172A',
-      darkItemSelectedBg: '#1E3A5F',
+      darkItemBg: ERP_COLORS.sidebar,
+      darkItemSelectedBg: ERP_COLORS.primary,
       darkItemHoverBg: '#1E293B',
     },
     Table: {
@@ -33,6 +35,13 @@ const theme = {
 };
 
 const App = () => {
+  const token = useAuthStore((s) => s.token);
+  const fetchMe = useAuthStore((s) => s.fetchMe);
+
+  useEffect(() => {
+    if (token) fetchMe();
+  }, [token, fetchMe]);
+
   return (
     <ConfigProvider theme={theme}>
       <AntApp>

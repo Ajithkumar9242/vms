@@ -59,6 +59,7 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET and Chrome extensions
   if (event.request.method !== 'GET') return;
   if (!url.protocol.startsWith('http')) return;
+  if (url.hostname === 'res.cloudinary.com') return;
 
   // API calls — network only
   if (url.pathname.startsWith('/api')) {
@@ -77,13 +78,13 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response.ok) {
+        if (response && response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() => caches.match(event.request).then((cached) => cached || new Response('', { status: 504, statusText: 'Offline' })))
   );
 });
 

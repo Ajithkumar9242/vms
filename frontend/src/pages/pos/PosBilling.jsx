@@ -165,7 +165,7 @@ const PosBilling = () => {
             <Divider style={{ margin: '8px 0' }} />
             <Row justify="space-between">
               <Col><Text strong>Grand Total</Text></Col>
-              <Col><Text strong style={{ fontSize: 16, color: '#1B3A5C' }}>₹{grandTotal.toFixed(2)}</Text></Col>
+              <Col><Text strong style={{ fontSize: 16, color: 'var(--color-primary-dark)' }}>₹{grandTotal.toFixed(2)}</Text></Col>
             </Row>
           </Card>
 

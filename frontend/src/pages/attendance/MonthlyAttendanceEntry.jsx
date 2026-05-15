@@ -183,7 +183,7 @@ const MonthlyAttendanceEntry = () => {
       {/* Info strip */}
       {classId && (
         <div style={{
-          background: '#EFF6FF', border: '1px solid #BFDBFE',
+          background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-light)',
           borderRadius: 8, padding: '6px 14px', marginBottom: 12,
           fontSize: 12, color: '#1E40AF',
         }}>

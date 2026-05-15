@@ -55,7 +55,7 @@ const MonthlyAttendanceReport = () => {
             render: mk => dayjs(mk, 'YYYY-MM').format('MMMM YYYY') },
           { title: 'Conducted', dataIndex: 'conducted', key: 'c', align: 'center' },
           { title: 'Attended', dataIndex: 'attended', key: 'a', align: 'center',
-            render: v => <Tag color="blue">{v}</Tag> },
+            render: v => <Tag color="orange">{v}</Tag> },
           { title: 'Absent', key: 'abs', align: 'center',
             render: (_, r) => <Tag color="red">{r.conducted - r.attended}</Tag> },
           { title: '%', key: 'pct', align: 'center',
@@ -83,7 +83,7 @@ const MonthlyAttendanceReport = () => {
     {
       title: 'Attended', dataIndex: 'totalAttended', key: 'totalAttended',
       width: 100, align: 'center',
-      render: v => <Tag color="blue">{v}</Tag>,
+      render: v => <Tag color="orange">{v}</Tag>,
     },
     {
       title: 'Absent', key: 'absent', width: 90, align: 'center',
@@ -136,7 +136,7 @@ const MonthlyAttendanceReport = () => {
               <Statistic
                 title={<span style={{ fontSize: 12, color: '#64748B' }}>Total Conducted</span>}
                 value={stats.totalConducted || 0}
-                styles={{ content: { fontSize: 20, fontWeight: 700, color: '#1B3A5C' } }}
+                styles={{ content: { fontSize: 20, fontWeight: 700, color: 'var(--color-primary-dark)' } }}
               />
             </Card>
           </Col>
@@ -161,8 +161,8 @@ const MonthlyAttendanceReport = () => {
                     : 0
                 }
                 suffix="%"
-                prefix={<PercentageOutlined style={{ color: '#3B82F6' }} />}
-                styles={{ content: { fontSize: 20, fontWeight: 700, color: '#3B82F6' } }}
+                prefix={<PercentageOutlined style={{ color: 'var(--color-secondary)' }} />}
+                styles={{ content: { fontSize: 20, fontWeight: 700, color: 'var(--color-secondary)' } }}
               />
             </Card>
           </Col>

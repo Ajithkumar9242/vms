@@ -44,21 +44,7 @@ const ExamResults = ({ initialExamId, onClearExamId }) => {
   // Download PDF
   const handleDownloadPdf = () => {
     if (!selectedExamId) return;
-    const token = localStorage.getItem('vms_token');
-    // Open PDF in new tab — browser will download it
-    const base = import.meta.env.VITE_API_URL || '/api';
-    const url = `${base}/exams/${selectedExamId}/results/pdf`;
-    // Use fetch with auth header then create blob URL
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.blob())
-      .then((blob) => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `exam_results.pdf`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      })
-      .catch(() => message.error('Failed to download PDF'));
+    window.open(examAPI.getResultsPdfUrl(selectedExamId), '_blank', 'noopener');
   };
 
   const fetchResults = useCallback(async () => {

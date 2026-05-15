@@ -8,7 +8,7 @@ import dayjs from 'dayjs';
 const GRADE_COLOR = (pct) => {
   if (pct >= 90) return { bg: '#DCFCE7', color: '#16A34A', grade: 'A+' };
   if (pct >= 80) return { bg: '#D1FAE5', color: '#059669', grade: 'A'  };
-  if (pct >= 70) return { bg: '#DBEAFE', color: '#2563EB', grade: 'B'  };
+  if (pct >= 70) return { bg: 'var(--color-primary-light)', color: 'var(--color-primary)', grade: 'B'  };
   if (pct >= 60) return { bg: '#EDE9FE', color: '#7C3AED', grade: 'C'  };
   if (pct >= 40) return { bg: '#FEF3C7', color: '#D97706', grade: 'D'  };
   return { bg: '#FEE2E2', color: '#DC2626', grade: 'F' };

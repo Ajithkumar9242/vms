@@ -220,7 +220,7 @@ const StudentVaultAdmin = () => {
             <Input.TextArea rows={2} />
           </Form.Item>
           <Form.Item label="File" required>
-            <Upload beforeUpload={(f) => { setFileObj(f); return false; }} maxCount={1} accept=".pdf,.jpg,.jpeg,.png,.webp">
+            <Upload beforeUpload={(f) => { setFileObj(f); return false; }} maxCount={1} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp">
               <Button icon={<UploadOutlined />}>Select File (PDF/Image, max 10MB)</Button>
             </Upload>
           </Form.Item>

@@ -62,7 +62,7 @@ const SchoolSettings = () => {
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <BankOutlined style={{ fontSize: 22, color: '#3B82F6' }} />
+        <BankOutlined style={{ fontSize: 22, color: 'var(--color-secondary)' }} />
         <Title level={4} style={{ margin: 0 }}>School Settings</Title>
       </div>
 
@@ -75,7 +75,7 @@ const SchoolSettings = () => {
               size={80}
               src={logoUrl}
               icon={<BankOutlined />}
-              style={{ background: '#EFF6FF', color: '#3B82F6', border: '2px solid #DBEAFE' }}
+              style={{ background: 'var(--color-primary-light)', color: 'var(--color-secondary)', border: '2px solid var(--color-primary-light)' }}
             />
             <div>
               <Upload

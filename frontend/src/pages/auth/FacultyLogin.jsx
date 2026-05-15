@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Card, Form, Input, Button, Typography, Alert,
-  Steps, Divider,
+  Steps, Divider, Modal,
 } from 'antd';
 import {
   UserOutlined, SafetyCertificateOutlined,
@@ -32,6 +32,21 @@ const FacultyLogin = () => {
 
   const otpValue = otp.join('');
 
+  // ─── Demo popup (once per session) ─────────────────────────
+  useEffect(() => {
+    const key = 'vms_otp_demo_shown_faculty';
+    if (!sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, '1');
+      Modal.info({
+        title: 'Demo mode enabled',
+        content: 'Demo mode enabled. Use test OTP: 123456',
+        okText: 'Got it',
+        centered: true,
+      });
+    }
+  }, []);
+
+
   const handleOtpChange = (index, value) => {
     if (!/^\d?$/.test(value)) return;
     const next = [...otp];
@@ -54,7 +69,12 @@ const FacultyLogin = () => {
     setError('');
     setLoading(true);
     try {
-      // Faculty-specific OTP endpoint
+      Modal.info({
+        title: 'Demo mode enabled',
+        content: 'Demo mode enabled. Use test OTP: 123456',
+        okText: 'Got it',
+        centered: true,
+      });
       await authAPI.sendFacultyOtp(digits);
       setStep(1);
       startCountdown();
@@ -78,8 +98,8 @@ const FacultyLogin = () => {
       setAuth(data.user, token);
       if (data.refreshToken) localStorage.setItem('vms_refresh_token', data.refreshToken);
 
-      // Redirect to faculty dashboard
-      navigate('/dashboard', { replace: true });
+      // Redirect to faculty app
+      navigate('/faculty-app/dashboard', { replace: true });
     } catch (e) {
       setError(e.response?.data?.message || e.message || 'Invalid OTP');
       setOtp(['', '', '', '', '', '']);
@@ -95,6 +115,12 @@ const FacultyLogin = () => {
     setOtp(['', '', '', '', '', '']);
     setLoading(true);
     try {
+      Modal.info({
+        title: 'Demo mode enabled',
+        content: 'Demo mode enabled. Use test OTP: 123456',
+        okText: 'Got it',
+        centered: true,
+      });
       await authAPI.sendFacultyOtp(phone.replace(/\D/g, ''));
       startCountdown();
     } catch (e) {
@@ -110,7 +136,7 @@ const FacultyLogin = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, #0F172A 0%, #1B3A5C 50%, #2563EB 100%)',
+      background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary-dark) 50%, var(--color-primary) 100%)',
       padding: '20px',
     }}>
       <Card style={{
@@ -119,21 +145,21 @@ const FacultyLogin = () => {
         borderRadius: 20,
         boxShadow: '0 24px 72px rgba(0,0,0,0.4)',
         overflow: 'hidden',
-        border: '1px solid rgba(37,99,235,0.2)',
+        border: '1px solid rgba(var(--color-primary-rgb),0.2)',
       }} bodyStyle={{ padding: '36px' }}>
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <div style={{
             width: 68, height: 68, borderRadius: 18,
-            background: 'linear-gradient(135deg, #1B3A5C, #2563EB)',
+            background: 'linear-gradient(135deg, var(--color-primary-dark), var(--color-primary))',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 16px',
-            boxShadow: '0 8px 24px rgba(37,99,235,0.35)',
+            boxShadow: '0 8px 24px rgba(var(--color-primary-rgb),0.35)',
           }}>
             <UserOutlined style={{ color: '#fff', fontSize: 30 }} />
           </div>
-          <Title level={3} style={{ margin: 0, color: '#1B3A5C' }}>Faculty Login</Title>
+          <Title level={3} style={{ margin: 0, color: 'var(--color-primary-dark)' }}>Faculty Login</Title>
           <Text type="secondary" style={{ fontSize: 13 }}>
             {step === 0 ? 'Enter your registered mobile number' : 'Enter the OTP sent to your phone'}
           </Text>
@@ -173,7 +199,7 @@ const FacultyLogin = () => {
                 loading={loading}
                 style={{
                   borderRadius: 10, height: 48, fontSize: 15, fontWeight: 600,
-                  background: 'linear-gradient(135deg, #1B3A5C, #2563EB)',
+                  background: 'linear-gradient(135deg, var(--color-primary-dark), var(--color-primary))',
                   border: 'none',
                 }}
                 id="btn-faculty-send-otp"
@@ -186,12 +212,12 @@ const FacultyLogin = () => {
             <div style={{ textAlign: 'center' }}>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 Admin login?{' '}
-                <a href="/login" style={{ color: '#2563EB' }}>Login with email</a>
+                <a href="/login" style={{ color: 'var(--color-primary)' }}>Login with email</a>
               </Text>
               <br />
               <Text type="secondary" style={{ fontSize: 12 }}>
                 Parent login?{' '}
-                <a href="/parent-login" style={{ color: '#2563EB' }}>Parent OTP Login</a>
+                <a href="/parent-login" style={{ color: 'var(--color-primary)' }}>Parent OTP Login</a>
               </Text>
             </div>
           </div>
@@ -222,11 +248,11 @@ const FacultyLogin = () => {
                     border: '2px solid #E2E8F0',
                     borderRadius: 10,
                     outline: 'none',
-                    background: digit ? '#EFF6FF' : '#fff',
-                    color: '#1B3A5C',
+                    background: digit ? 'var(--color-primary-light)' : '#fff',
+                    color: 'var(--color-primary-dark)',
                     transition: 'all 0.2s',
                   }}
-                  onFocus={e => (e.target.style.borderColor = '#2563EB')}
+                  onFocus={e => (e.target.style.borderColor = 'var(--color-primary)')}
                   onBlur={e  => (e.target.style.borderColor = '#E2E8F0')}
                   inputMode="numeric"
                   id={`faculty-otp-${i}`}
@@ -243,7 +269,7 @@ const FacultyLogin = () => {
               disabled={otpValue.length < 6}
               style={{
                 borderRadius: 10, height: 48, fontSize: 15, fontWeight: 600,
-                background: 'linear-gradient(135deg, #1B3A5C, #2563EB)',
+                background: 'linear-gradient(135deg, var(--color-primary-dark), var(--color-primary))',
                 border: 'none',
               }}
               id="btn-faculty-verify-otp"

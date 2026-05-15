@@ -128,8 +128,8 @@ const WebcamCapture = ({ onCapture, value, accept = 'image/*', disabled = false 
               height: '160px',
               objectFit: 'cover',
               borderRadius: 10,
-              border: '2px solid #2563EB',
-              boxShadow: '0 4px 12px rgba(37,99,235,0.2)',
+              border: '2px solid var(--color-primary)',
+              boxShadow: '0 4px 12px rgba(var(--color-primary-rgb),0.2)',
             }}
           />
           {mode === 'preview' && (
@@ -153,7 +153,7 @@ const WebcamCapture = ({ onCapture, value, accept = 'image/*', disabled = false 
               width: '100%',
               maxWidth: 320,
               borderRadius: 10,
-              border: '2px solid #2563EB',
+              border: '2px solid var(--color-primary)',
               background: '#000',
             }}
           />

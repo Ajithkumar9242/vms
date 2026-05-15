@@ -5,14 +5,16 @@ import { notificationAPI } from '@/services/api';
 import useFCM from '@/hooks/useFCM';
 import {
   CalendarOutlined, TeamOutlined, FileTextOutlined,
-  BookOutlined, BellOutlined, UserOutlined,
+  BellOutlined, UserOutlined, EditOutlined,
 } from '@ant-design/icons';
 
 const FACULTY_NAV = (badge = 0) => [
   { to: '/faculty-app/attendance',    label: 'Attendance',  icon: <CalendarOutlined />,  exact: true },
   { to: '/faculty-app/students',      label: 'Students',    icon: <TeamOutlined /> },
   { to: '/faculty-app/assignments',   label: 'Assignments', icon: <FileTextOutlined /> },
-  { to: '/faculty-app/materials',     label: 'Materials',   icon: <BookOutlined /> },
+  { to: '/faculty-app/marks',         label: 'Marks',       icon: <EditOutlined /> },
+  // Study Materials: temporarily hidden
+  // { to: '/faculty-app/materials', label: 'Materials', icon: <BookOutlined /> },
   { to: '/faculty-app/notifications', label: 'Alerts',      icon: <BellOutlined />,      badge },
   { to: '/faculty-app/profile',       label: 'Profile',     icon: <UserOutlined /> },
 ];

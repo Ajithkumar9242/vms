@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ParentLayout from '@/components/mobile/ParentLayout';
-import { feesAPI, notificationAPI, studentAPI, materialAPI } from '@/services/api';
+import { feesAPI, notificationAPI, studentAPI, materialAPI, hostelAPI } from '@/services/api';
 import useAuthStore from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -17,6 +17,7 @@ const ParentDashboard = () => {
   const [feeData, setFeeData] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [materials, setMaterials] = useState([]);
+  const [hostelInfo, setHostelInfo] = useState(undefined); // undefined=loading, null=not allocated
   const [retryCount, setRetryCount] = useState(0);
   // Multi-child support
   const [linkedStudents, setLinkedStudents] = useState([]);
@@ -61,10 +62,11 @@ const ParentDashboard = () => {
         if (cid) setClassId(cid);
 
         // ── Step 2: parallel fetch ─────────────────────────
-        const [fees, notifs, mats] = await Promise.allSettled([
+        const [fees, notifs, mats, hostel] = await Promise.allSettled([
           sid ? feesAPI.getStudentFees(sid) : Promise.resolve(null),
           notificationAPI.getAll({ limit: 3 }),
           cid ? materialAPI.getByClass(cid) : Promise.resolve(null),
+          sid ? hostelAPI.getMyHostelInfo(sid) : Promise.resolve(null),
         ]);
 
         if (cancelled) return;
@@ -83,6 +85,14 @@ const ParentDashboard = () => {
           const list = payload?.materials ?? (Array.isArray(payload) ? payload : []);
           setMaterials(list.filter(Boolean).slice(0, 8));
         }
+
+        if (hostel.status === 'fulfilled') {
+          // hostel.value may be null (not allocated) or an object with allocation info
+          const h = hostel.value?.data ?? hostel.value;
+          setHostelInfo(h ?? null);
+        } else {
+          setHostelInfo(null); // error - treat as not allocated
+        }
       } catch (e) {
         if (!cancelled) setError(e.message || 'Failed to load dashboard.');
       } finally {
@@ -98,50 +108,19 @@ const ParentDashboard = () => {
 
   const summary = feeData?.summary;
   const feeConfigured = summary && summary.totalFee > 0;
-  const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const quickLinks = [
-    { label: 'Pay Fees', icon: '₹', to: '/parent/fees', color: '#EFF6FF' },
+    { label: 'Pay Fees', icon: '₹', to: '/parent/fees', color: 'var(--color-primary-light)' },
     { label: 'Attendance', icon: '📅', to: '/parent/attendance', color: '#F0FDF4' },
     { label: 'Exam Results', icon: '📊', to: '/parent/exams', color: '#FFF7ED' },
     { label: 'Notifications', icon: '🔔', to: '/parent/notifications', color: '#FDF4FF' },
-    { label: 'Vault', icon: '📂', to: '/parent/vault', color: '#E0F2FE' },
+    { label: 'Vault', icon: '📂', to: '/parent/vault', color: 'var(--color-primary-light)' },
     { label: 'My Requests', icon: '🧾', to: '/parent/requests', color: '#FEF3C7' },
     { label: 'My Docs', icon: '⬇️', to: '/parent/documents', color: '#FCE7F3' },
   ];
 
   return (
     <ParentLayout title="Parent Portal" subtitle={`Welcome back, ${user?.name?.split(' ')[0] || 'Parent'}`}>
-
-      {/* Top Blue Header Row inside Page Content */}
-      <div style={{
-        background: '#2563EB', color: '#fff', padding: '16px', display: 'flex',
-        justifyContent: 'space-between', alignItems: 'center',
-        margin: '-16px -16px 16px -16px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-      }}>
-        <div style={{ cursor: 'pointer' }}>
-          <span style={{ fontSize: '24px', lineHeight: '1' }}>☰</span>
-        </div>
-        <div style={{ fontWeight: '600', fontSize: '16px', textAlign: 'center', flex: 1 }}>
-          VSS International School
-        </div>
-        <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => navigate('/parent/notifications')}>
-          <span style={{ fontSize: '22px' }}>🔔</span>
-          {unreadCount > 0 ? (
-            <span style={{
-              position: 'absolute', top: -4, right: -4, background: '#EF4444', color: '#fff',
-              fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '10px'
-            }}>
-              {unreadCount}
-            </span>
-          ) : notifications.length > 0 ? (
-            <span style={{
-              position: 'absolute', top: 0, right: 0, width: 8, height: 8,
-              background: '#EF4444', borderRadius: '50%', border: '2px solid #2563EB'
-            }} />
-          ) : null}
-        </div>
-      </div>
 
       {loading && <div className="m-spinner" />}
 
@@ -165,7 +144,7 @@ const ParentDashboard = () => {
                     style={{
                       padding: '6px 14px', borderRadius: 20, border: 'none',
                       fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                      background: selectedChildIdx === idx ? '#2563EB' : '#E2E8F0',
+                      background: selectedChildIdx === idx ? 'var(--color-primary)' : '#E2E8F0',
                       color: selectedChildIdx === idx ? '#fff' : '#374151',
                       transition: 'all 0.2s',
                     }}
@@ -197,7 +176,7 @@ const ParentDashboard = () => {
             <button
               onClick={() => navigate('/parent/profile')}
               style={{
-                background: '#FFFFFF', color: '#2563EB', padding: '6px 16px',
+                background: '#FFFFFF', color: 'var(--color-primary)', padding: '6px 16px',
                 borderRadius: '9999px', fontSize: '12px', fontWeight: '600',
                 border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
               }}
@@ -265,6 +244,47 @@ const ParentDashboard = () => {
             ))}
           </div>
 
+          {/* Hostel Info */}
+          {hostelInfo !== undefined && studentId && (
+            <>
+              <div className="m-section-header">
+                <span className="m-section-title">🏠 Hostel Info</span>
+              </div>
+              {hostelInfo && hostelInfo.allocated ? (
+                <div className="m-card" style={{ borderLeft: '3px solid var(--color-primary)', marginBottom: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 2 }}>Hostel / Block</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#0F172A' }}>{hostelInfo.hostelName}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 2 }}>Room Number</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#0F172A' }}>{hostelInfo.roomNumber}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 2 }}>Bed Number</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#0F172A' }}>Bed {hostelInfo.bedNumber}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 2 }}>Status</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#16A34A' }}>{hostelInfo.status || 'Active'}</div>
+                    </div>
+                    {hostelInfo.floor && (
+                      <div>
+                        <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 2 }}>Floor</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: '#0F172A' }}>{hostelInfo.floor}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="m-card" style={{ textAlign: 'center', color: '#94A3B8', fontSize: 13, padding: '14px 0' }}>
+                  Student is not assigned to hostel
+                </div>
+              )}
+            </>
+          )}
+
           {/* Study Materials */}
           {classId && (
             <>
@@ -314,8 +334,8 @@ const ParentDashboard = () => {
                               <a
                                 key={fi} href={f.url} target="_blank" rel="noreferrer"
                                 style={{
-                                  fontSize: 12, color: '#2563EB', display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  background: '#EFF6FF', padding: '5px 10px', borderRadius: 4, textDecoration: 'none',
+                                  fontSize: 12, color: 'var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: 4,
+                                  background: 'var(--color-primary-light)', padding: '5px 10px', borderRadius: 4, textDecoration: 'none',
                                 }}
                               >
                                 &#128196; {f.name || `View File ${fi + 1}`}
@@ -341,7 +361,7 @@ const ParentDashboard = () => {
               {notifications.map((n, i) => (
                 <div key={n._id || i} className={`m-notif-item${!n.isRead ? ' unread' : ''}`}
                   onClick={() => navigate('/parent/notifications')}>
-                  <div className="m-notif-dot" style={{ background: !n.isRead ? '#2563EB' : '#CBD5E1' }} />
+                  <div className="m-notif-dot" style={{ background: !n.isRead ? 'var(--color-primary)' : '#CBD5E1' }} />
                   <div>
                     <div className="m-notif-title">{n.title}</div>
                     <div className="m-notif-body">{n.message}</div>

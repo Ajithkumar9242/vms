@@ -79,7 +79,7 @@ const ApplicationStatus = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
           <div>
             <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Application Number</Text>
-            <Title level={4} style={{ margin: '4px 0', color: '#1B3A5C' }}>{admission.applicationNo}</Title>
+            <Title level={4} style={{ margin: '4px 0', color: 'var(--color-primary-dark)' }}>{admission.applicationNo}</Title>
           </div>
           <Tag
             color={statusCfg.color}
@@ -223,8 +223,8 @@ const ApplicationStatus = () => {
         {/* Search Card */}
         <Card className="admission-card" style={{ marginBottom: 24 }}>
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
-            <SearchOutlined style={{ fontSize: 36, color: '#1B3A5C', marginBottom: 8 }} />
-            <Title level={4} style={{ margin: '8px 0 4px', color: '#1B3A5C' }}>Track Your Application</Title>
+            <SearchOutlined style={{ fontSize: 36, color: 'var(--color-primary-dark)', marginBottom: 8 }} />
+            <Title level={4} style={{ margin: '8px 0 4px', color: 'var(--color-primary-dark)' }}>Track Your Application</Title>
             <Paragraph type="secondary">
               Search by your application number or registered phone number
             </Paragraph>

@@ -230,7 +230,7 @@ const ParentProfile = () => {
           { icon: '📶', label: 'PWA Mode', value: 'Progressive Web App' },
         ].map((f) => (
           <div key={f.label} className="m-list-item">
-            <div className="m-list-icon" style={{ background: '#F0F9FF', fontSize: 18 }}>{f.icon}</div>
+            <div className="m-list-icon" style={{ background: 'var(--color-primary-light)', fontSize: 18 }}>{f.icon}</div>
             <div className="m-list-body">
               <div className="m-list-desc">{f.label}</div>
               <div className="m-list-title">{f.value}</div>

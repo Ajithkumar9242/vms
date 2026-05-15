@@ -18,13 +18,15 @@ import {
   ScheduleOutlined,
   SettingOutlined,
   FileTextOutlined,
-  BookOutlined,
+  // BookOutlined, // Study Materials (temporarily hidden)
   FolderOpenOutlined,
   ShoppingCartOutlined,
   FileSearchOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
+import { ERP_COLORS } from '@/theme/colors';
 
 const { Sider } = Layout;
 
@@ -76,11 +78,18 @@ const allMenuItems = [
     roles: STAFF_ROLES,
   },
   {
-    key: '/materials',
-    icon: <BookOutlined />,
-    label: 'Study Materials',
+    key: '/marks-entry',
+    icon: <EditOutlined />,
+    label: 'Marks Entry',
     roles: STAFF_ROLES,
   },
+  // ── Study Materials: temporarily disabled ────────────────
+  // {
+  //   key: '/materials',
+  //   icon: <BookOutlined />,
+  //   label: 'Study Materials',
+  //   roles: STAFF_ROLES,
+  // },
 
   // ── People ─────────────────────────────────────────────────
   { type: 'divider', roles: HIGH_PRIV },
@@ -257,7 +266,7 @@ const Sidebar = ({ collapsed, onCollapse }) => {
             width: 32,
             height: 32,
             borderRadius: 8,
-            background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
+            background: `linear-gradient(135deg, ${ERP_COLORS.primary}, ${ERP_COLORS.secondary})`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

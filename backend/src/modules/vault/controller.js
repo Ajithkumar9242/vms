@@ -8,7 +8,6 @@ const SchoolSetting = require('../../models/SchoolSetting');
 const { generateRequestReceiptPdf } = require('../../utils/pdf/requestReceiptPdf');
 const StudentDocumentRequest = require('../../models/StudentDocumentRequest');
 
-
 class VaultController {
 
   // ── Catalog ──────────────────────────────────────────────
@@ -123,7 +122,7 @@ class VaultController {
   }
 
   // ── Download ─────────────────────────────────────────────
-  // Streams file bytes via backend proxy — client never gets raw fileUrl
+  // Validates access, then lets the browser navigate directly to Cloudinary.
 
 
   static async downloadFile(req, res, next) {
@@ -137,9 +136,6 @@ class VaultController {
         return ApiResponse.error(res, 'File URL missing', 404);
       }
 
-      // Security validated — redirect browser directly to Cloudinary.
-      // Cloudinary serves the file with correct Content-Type for PDFs,
-      // images, etc. No proxy streaming needed (avoids 401 on signed URLs).
       return res.redirect(file.fileUrl);
 
     } catch (error) {

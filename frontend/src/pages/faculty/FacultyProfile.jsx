@@ -100,7 +100,7 @@ const FacultyProfile = () => {
             htmlFor="faculty-photo-upload"
             style={{
               position: 'absolute', bottom: 0, right: 0,
-              background: uploading ? '#94A3B8' : '#2563EB',
+              background: uploading ? '#94A3B8' : 'var(--color-primary)',
               borderRadius: '50%', width: 24, height: 24,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: uploading ? 'wait' : 'pointer',

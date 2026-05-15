@@ -25,7 +25,7 @@ const MiniBarChart = ({ data, height = 160 }) => {
           const x      = i * (100 / data.length) + 0.5;
           const barH   = Math.max(pct, 1);
           const y      = height - 20 - barH;
-          const color  = d.collected > 0 ? '#2563EB' : '#E2E8F0';
+          const color  = d.collected > 0 ? 'var(--color-primary)' : '#E2E8F0';
           return (
             <g key={d.month}>
               <rect x={`${x}%`} y={y} width={`${barW}%`} height={barH}
@@ -110,21 +110,21 @@ const FeeDashboard = () => {
     {
       title: 'Penalties Collected',
       value: stats?.totalPenalty || 0,
-      color: '#8B5CF6',
+      color: 'var(--color-primary)',
       icon: <WarningOutlined />,
       format: v => `₹${(v || 0).toLocaleString('en-IN')}`,
     },
     {
       title: 'Discounts Granted',
       value: stats?.totalDiscount || 0,
-      color: '#0EA5E9',
+      color: 'var(--color-secondary)',
       icon: <DollarCircleOutlined />,
       format: v => `₹${(v || 0).toLocaleString('en-IN')}`,
     },
     {
       title: 'Total Invoices',
       value: stats?.totalInvoices || 0,
-      color: '#1B3A5C',
+      color: 'var(--color-primary-dark)',
       icon: <TeamOutlined />,
     },
   ];
@@ -240,7 +240,7 @@ const FeeDashboard = () => {
                 {monthly.slice(0, 6).map(m => (
                   <div key={m.month} style={{ textAlign: 'center', flex: 1 }}>
                     <div style={{ fontSize: 10, color: '#64748B' }}>{m.month}</div>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: m.collected > 0 ? '#2563EB' : '#CBD5E1' }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: m.collected > 0 ? 'var(--color-primary)' : '#CBD5E1' }}>
                       {m.collected > 0 ? `₹${(m.collected / 1000).toFixed(0)}K` : '—'}
                     </div>
                   </div>

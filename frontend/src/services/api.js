@@ -211,7 +211,7 @@ export const feesAPI = {
   getInvoicePdfUrl: (invoiceId) => `${API_BASE_URL}/fees/invoices/${invoiceId}/pdf`,
   getInvoicePdfUrlWithToken: (invoiceId) => {
     const token = localStorage.getItem('vms_token');
-    return `${API_BASE_URL}/fees/invoices/${invoiceId}/pdf${token ? '?token=' + token : ''}`;
+    return `${API_BASE_URL}/fees/invoices/${invoiceId}/pdf${token ? '?token=' + encodeURIComponent(token) : ''}`;
   },
 
   // ── Analytics ────────────────────────────────────────────
@@ -262,6 +262,10 @@ export const examAPI = {
   // Results
   getExamResults: (examId) => api.get(`/exams/${examId}/results`),
   getStudentResults: (studentId) => api.get(`/exams/results/${studentId}`),
+  getResultsPdfUrl: (examId) => {
+    const token = localStorage.getItem('vms_token');
+    return `${API_BASE_URL}/exams/${examId}/results/pdf${token ? '?token=' + encodeURIComponent(token) : ''}`;
+  },
 
   // Subjects helper
   getSubjectsForClass: (classId) => api.get('/exams/subjects-for-class', { params: { classId } }),
@@ -294,6 +298,7 @@ export const notificationAPI = {
   getUnreadCount: () => api.get('/notifications/unread-count'),
   markRead: (id) => api.patch(`/notifications/${id}/read`),
   markAllRead: () => api.patch('/notifications/read-all'),
+  registerDeviceToken: (token, platform = 'web') => api.post('/notifications/device-token', { token, platform }),
   broadcast: (data) => api.post('/notifications/broadcast', data),
 };
 
@@ -345,6 +350,8 @@ export const hostelAPI = {
   assignStudent: (data) => api.post('/hostel/assign', data),
   removeStudent: (studentId) => api.delete(`/hostel/remove/${studentId}`),
   getOccupancy: () => api.get('/hostel/occupancy'),
+  /** Parent: get hostel info for a student */
+  getMyHostelInfo: (studentId) => api.get('/hostel/my', { params: { studentId } }),
 };
 
 // ─── Leave / Gate Pass ──────────────────────────────────────
@@ -459,6 +466,10 @@ export const setupAPI = {
   // Payment Settings
   getPaymentSettings: () => api.get('/setup/payment-settings'),
   savePaymentSettings: (data) => api.put('/setup/payment-settings', data),
+
+  // Message Templates
+  getMessageTemplates: () => api.get('/setup/message-templates'),
+  saveMessageTemplates: (data) => api.put('/setup/message-templates', data),
 };
 
 // ─── Subjects ────────────────────────────────────────────────
@@ -536,12 +547,12 @@ export const vaultAPI = {
   // Download URL (with token for auth)
   getDownloadUrl:    (fileId)  => {
     const token = localStorage.getItem('vms_token');
-    return `${API_BASE_URL}/vault/files/${fileId}/download${token ? '?token=' + token : ''}`;
+    return `${API_BASE_URL}/vault/files/${fileId}/download${token ? '?token=' + encodeURIComponent(token) : ''}`;
   },
   // Receipt PDF
   getReceiptUrl:     (id)      => {
     const token = localStorage.getItem('vms_token');
-    return `${API_BASE_URL}/vault/requests/${id}/receipt${token ? '?token=' + token : ''}`;
+    return `${API_BASE_URL}/vault/requests/${id}/receipt${token ? '?token=' + encodeURIComponent(token) : ''}`;
   },
 };
 
@@ -557,7 +568,7 @@ export const posAPI = {
   cancelInvoice: (id, data) => api.post(`/pos/invoices/${id}/cancel`, data),
   getPdfUrl:     (id)     => {
     const token = localStorage.getItem('vms_token');
-    return `${API_BASE_URL}/pos/invoices/${id}/pdf${token ? '?token=' + token : ''}`;
+    return `${API_BASE_URL}/pos/invoices/${id}/pdf${token ? '?token=' + encodeURIComponent(token) : ''}`;
   },
 };
 
@@ -569,9 +580,9 @@ export const invoiceRegistryAPI = {
   getAudit:   (id, type) => api.get(`/invoice-registry/${id}/audit`, { params: { type } }),
   getPdfUrl:  (id, type) => {
     const token = localStorage.getItem('vms_token');
-    if (type === 'pos') return `${API_BASE_URL}/pos/invoices/${id}/pdf${token ? '?token=' + token : ''}`;
-    if (type === 'fees') return `${API_BASE_URL}/fees/invoices/${id}/pdf${token ? '?token=' + token : ''}`;
-    return `${API_BASE_URL}/vault/requests/${id}/receipt${token ? '?token=' + token : ''}`;
+    if (type === 'pos') return `${API_BASE_URL}/pos/invoices/${id}/pdf${token ? '?token=' + encodeURIComponent(token) : ''}`;
+    if (type === 'fees') return `${API_BASE_URL}/fees/invoices/${id}/pdf${token ? '?token=' + encodeURIComponent(token) : ''}`;
+    return `${API_BASE_URL}/vault/requests/${id}/receipt${token ? '?token=' + encodeURIComponent(token) : ''}`;
   },
 };
 

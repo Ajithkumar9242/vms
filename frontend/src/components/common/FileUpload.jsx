@@ -203,7 +203,7 @@ const FileUpload = ({
                 ) : /\.pdf/i.test(f.name || f.url) ? (
                   <FilePdfOutlined style={{ color: '#DC2626', fontSize: 16 }} />
                 ) : (
-                  <FileTextOutlined style={{ color: '#2563EB', fontSize: 16 }} />
+                  <FileTextOutlined style={{ color: 'var(--color-primary)', fontSize: 16 }} />
                 )}
                 <a
                   href={f.url}

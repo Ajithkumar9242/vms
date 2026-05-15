@@ -122,7 +122,7 @@ const AdminFaculty = () => {
         r.avatar ? (
           <Avatar src={r.avatar} size={38} />
         ) : (
-          <Avatar size={38} style={{ background: '#1B3A5C', fontWeight: 700, fontSize: 16 }}>
+          <Avatar size={38} style={{ background: 'var(--color-primary-dark)', fontWeight: 700, fontSize: 16 }}>
             {r.name?.charAt(0)?.toUpperCase() || '?'}
           </Avatar>
         ),
@@ -175,7 +175,7 @@ const AdminFaculty = () => {
       >
         <div>
           <Title level={3} className="page-title" style={{ margin: 0 }}>
-            <UserSwitchOutlined style={{ marginRight: 8, color: '#1B3A5C' }} />
+            <UserSwitchOutlined style={{ marginRight: 8, color: 'var(--color-primary-dark)' }} />
             Faculty Management
           </Title>
           <Text className="page-subtitle" type="secondary">

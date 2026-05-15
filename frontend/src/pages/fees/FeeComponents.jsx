@@ -129,14 +129,14 @@ const FeeComponents = () => {
       dataIndex: 'amount',
       key: 'amount',
       align: 'right',
-      render: v => <Text strong style={{ color: '#1B3A5C' }}>₹{(v || 0).toLocaleString('en-IN')}</Text>,
+      render: v => <Text strong style={{ color: 'var(--color-primary-dark)' }}>₹{(v || 0).toLocaleString('en-IN')}</Text>,
     },
     {
       title: 'Type',
       key: 'recurringType',
       render: (_, r) => (
         <Space direction="vertical" size={2}>
-          <Tag color="blue">{(r.recurringType || 'yearly').replace('_', ' ')}</Tag>
+          <Tag color="orange">{(r.recurringType || 'yearly').replace('_', ' ')}</Tag>
           {r.mandatory && <Tag color="red" icon={<CheckCircleOutlined />}>Mandatory</Tag>}
         </Space>
       ),
@@ -174,10 +174,10 @@ const FeeComponents = () => {
       {/* Summary Cards */}
       <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
         {[
-          { label: 'Total Components', value: components.length,          color: '#3B82F6' },
+          { label: 'Total Components', value: components.length,          color: 'var(--color-secondary)' },
           { label: 'Mandatory',        value: mandatoryCount,             color: '#EF4444' },
           { label: 'Active',           value: activeCount,                color: '#22C55E' },
-          { label: 'Mandatory Base Fee', value: `₹${baseAmount.toLocaleString('en-IN')}`, color: '#1B3A5C' },
+          { label: 'Mandatory Base Fee', value: `₹${baseAmount.toLocaleString('en-IN')}`, color: 'var(--color-primary-dark)' },
         ].map(card => (
           <Col xs={12} sm={6} key={card.label}>
             <Card size="small" style={{ borderRadius: 10, borderTop: `3px solid ${card.color}` }}>

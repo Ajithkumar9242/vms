@@ -310,7 +310,7 @@ const Admissions = () => {
       {/* ─── Stats Row ───────────────────────────────────── */}
       <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
         {[
-          { label: 'Total', value: stats.total,    color: '#3B82F6' },
+          { label: 'Total', value: stats.total,    color: 'var(--color-secondary)' },
           { label: 'Pending', value: stats.pending,  color: '#F59E0B' },
           { label: 'Approved', value: stats.approved, color: '#10B981' },
           { label: 'On Hold', value: stats.hold,     color: '#F97316' },

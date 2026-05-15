@@ -3,7 +3,6 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
-const axios = require('axios');
 
 const AppError = require('../../utils/AppError');
 const CounterService = require('../../utils/counterService');
@@ -15,6 +14,27 @@ const StudentDocumentRequest = require('../../models/StudentDocumentRequest');
 const StudentVaultFile = require('../../models/StudentVaultFile');
 const VaultPaymentLedger = require('../../models/VaultPaymentLedger');
 const Student = require('../../models/Student');
+
+const normalizeVaultPdfFile = (file) => {
+  if (!file) return file;
+
+  const url = file.fileUrl || '';
+  const isPdfUrl = /\.pdf(?:\?|$)/i.test(url);
+
+  if (isPdfUrl && url.includes('/image/upload/')) {
+    file.fileUrl = url.replace('/image/upload/', '/raw/upload/');
+  }
+
+  if (!file.mimeType && isPdfUrl) {
+    file.mimeType = 'application/pdf';
+  }
+
+  if (!file.originalName && isPdfUrl) {
+    file.originalName = 'vault-file.pdf';
+  }
+
+  return file;
+};
 
 class VaultService {
 
@@ -283,11 +303,12 @@ class VaultService {
   }
 
   static async listStudentFiles(studentId) {
-    return StudentVaultFile.find({ studentId, deleted: { $ne: true } })
+    const files = await StudentVaultFile.find({ studentId, deleted: { $ne: true } })
       .populate('catalogItemId', 'name code')
       .populate('requestId', 'requestNumber requestStatus')
       .sort({ createdAt: -1 })
       .lean();
+    return files.map(normalizeVaultPdfFile);
   }
 
   static async softDeleteFile(fileId, adminUserId) {
@@ -320,6 +341,7 @@ class VaultService {
     await authorizeFileDownload(req, file);
 
     // Proxy stream from Cloudinary (never return raw URL to client)
+    normalizeVaultPdfFile(file);
     return { fileUrl: file.fileUrl, originalName: file.originalName, mimeType: file.mimeType };
   }
 
@@ -342,7 +364,7 @@ class VaultService {
       );
     }
 
-    return file;
+    return normalizeVaultPdfFile(file);
   }
 }
 

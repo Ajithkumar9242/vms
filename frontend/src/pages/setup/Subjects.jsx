@@ -157,7 +157,7 @@ const Subjects = () => {
     {
       title: 'Class',
       dataIndex: 'classId',
-      render: (cls) => cls?.name ? <Tag color="geekblue">{cls.name}</Tag> : <Text type="secondary">Global</Text>,
+      render: (cls) => cls?.name ? <Tag color="orange">{cls.name}</Tag> : <Text type="secondary">Global</Text>,
     },
     {
       title: 'Optional',
@@ -221,7 +221,7 @@ const Subjects = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
           <Title level={4} style={{ margin: 0 }}>
-            <BookOutlined style={{ marginRight: 8, color: '#3B82F6' }} />
+            <BookOutlined style={{ marginRight: 8, color: 'var(--color-secondary)' }} />
             Subjects
           </Title>
           <Text type="secondary">Manage all school subjects — assign to classes, toggle status</Text>

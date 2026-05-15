@@ -5,23 +5,25 @@ import {
   TeamOutlined, TrophyOutlined,
   CheckSquareOutlined, CreditCardOutlined, SettingOutlined,
   ReadOutlined, ApartmentOutlined,
+  MessageOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
 const tiles = [
-  { key: 'school-settings', icon: <BankOutlined />, title: 'School Settings', desc: 'Name, board, contact info', color: '#3B82F6' },
-  { key: 'academic-year', icon: <CalendarOutlined />, title: 'Academic Year', desc: 'Set active year & date range', color: '#8B5CF6' },
-  { key: 'academic-term', icon: <CalendarOutlined />, title: 'Academic Terms', desc: 'Term 1, Mid Term, Final', color: '#6366F1' },
+  { key: 'school-settings', icon: <BankOutlined />, title: 'School Settings', desc: 'Name, board, contact info', color: 'var(--color-secondary)' },
+  { key: 'academic-year', icon: <CalendarOutlined />, title: 'Academic Year', desc: 'Set active year & date range', color: 'var(--color-primary)' },
+  { key: 'academic-term', icon: <CalendarOutlined />, title: 'Academic Terms', desc: 'Term 1, Mid Term, Final', color: 'var(--color-primary)' },
   { key: 'classes', icon: <BookOutlined />, title: 'Classes', desc: 'LKG, UKG, 1–12', color: '#14B8A6' },
   { key: 'sections', icon: <TeamOutlined />, title: 'Sections', desc: 'A, B, C sections per class', color: '#22C55E' },
   { key: 'class-groups', icon: <SettingOutlined />, title: 'Class Groups', desc: '5A, V-B with class teacher', color: '#F59E0B' },
-  { key: 'subjects',     icon: <ReadOutlined />,      title: 'Subjects',         desc: 'Manage all school subjects', color: '#0EA5E9' },
-  { key: 'class-config', icon: <ApartmentOutlined />, title: 'Class Config',      desc: 'Assign subjects & sections per class/year', color: '#6366F1' },
+  { key: 'subjects',     icon: <ReadOutlined />,      title: 'Subjects',         desc: 'Manage all school subjects', color: 'var(--color-secondary)' },
+  { key: 'class-config', icon: <ApartmentOutlined />, title: 'Class Config',      desc: 'Assign subjects & sections per class/year', color: 'var(--color-primary)' },
   { key: 'grade-setup', icon: <TrophyOutlined />, title: 'Grade System', desc: 'A+, A, B grade ranges', color: '#F97316' },
-  { key: 'attendance-config', icon: <CheckSquareOutlined />, title: 'Attendance Config', desc: 'Sessions (Morning / P1, P2…)', color: '#06B6D4' },
+  { key: 'attendance-config', icon: <CheckSquareOutlined />, title: 'Attendance Config', desc: 'Sessions (Morning / P1, P2…)', color: 'var(--color-secondary)' },
   { key: 'payment-settings', icon: <CreditCardOutlined />, title: 'Payment Settings', desc: 'Razorpay, QR, manual pay', color: '#EC4899' },
+  { key: 'message-templates', icon: <MessageOutlined />, title: 'Message Templates', desc: 'SMS and WhatsApp content', color: 'var(--color-secondary)' },
 ];
 
 const SetupDashboard = () => {

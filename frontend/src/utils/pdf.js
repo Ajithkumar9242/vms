@@ -9,8 +9,8 @@ import autoTable from 'jspdf-autotable';
 import dayjs from 'dayjs';
 
 // ─── Colour palette (matches mobile CSS) ────────────────────
-const NAVY   = [27, 58, 92];   // #1B3A5C
-const ACCENT = [37, 99, 235];  // #2563EB
+const NAVY   = [27, 58, 92];   // var(--color-primary-dark)
+const ACCENT = [37, 99, 235];  // var(--color-primary)
 const GREEN  = [22, 163, 74];  // #16A34A
 const RED    = [220, 38, 38];  // #DC2626
 const GREY   = [100, 116, 139]; // #64748B

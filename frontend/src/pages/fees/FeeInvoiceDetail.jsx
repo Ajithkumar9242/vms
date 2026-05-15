@@ -140,20 +140,7 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
   };
 
   const handleDownloadPDF = () => {
-    const url = feesAPI.getInvoicePdfUrl(invoiceId);
-    const token = localStorage.getItem('vms_token');
-    // Create a temporary anchor with auth header isn't possible — open in new tab
-    // For authenticated PDF downloads, we use fetch + blob
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.blob())
-      .then(blob => {
-        const a = document.createElement('a');
-        a.href  = URL.createObjectURL(blob);
-        a.download = `Invoice_${invoice?.invoiceNumber || invoiceId}.pdf`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      })
-      .catch(() => message.error('PDF download failed'));
+    window.open(feesAPI.getInvoicePdfUrlWithToken(invoiceId), '_blank', 'noopener');
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: 40 }}><Spin size="large" /></div>;
@@ -161,6 +148,7 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
 
   const student     = invoice.studentId || {};
   const cls         = invoice.classId   || {};
+  const section     = invoice.sectionId || {};
   const ay          = invoice.academicYearId || {};
   const status      = invoice.status || 'unpaid';
   // Use netFee (new schema) with fallback to totalAmount (legacy)
@@ -169,6 +157,9 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
   const netTotal    = netFee + (invoice.penaltyAmount || 0) - (invoice.waivedAmount || 0);
   const balanceDue  = invoice.dueAmount  || Math.max(0, netTotal - (invoice.paidAmount || 0));
   const installments = invoice.installments || [];
+  const nextInstallmentDueDate = installments
+    .filter((i) => i.dueDate && i.status !== 'paid' && ((i.balanceAmount ?? Math.max(0, (i.amount || 0) - (i.paidAmount || 0))) > 0))
+    .sort((a, b) => dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf())[0]?.dueDate;
   // selectedComponents from populated feeProfileId or directly from feeProfileId
   const selectedComponents = invoice.feeProfileId?.selectedComponents || [];
 
@@ -182,14 +173,30 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
       )}
 
       {/* Header Card */}
-      <Card size="small" style={{ marginBottom: 16, background: 'linear-gradient(135deg, #F8FAFC, #EFF6FF)', borderRadius: 12 }}>
+      <Card size="small" style={{ marginBottom: 16, background: 'linear-gradient(135deg, #F8FAFC, var(--color-primary-light))', borderRadius: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1B3A5C' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-primary-dark)' }}>
               <FileTextOutlined style={{ marginRight: 8 }} />
               {invoice.invoiceNumber}
             </div>
-            <div style={{ fontSize: 13, color: '#64748B' }}>{student.name} · {cls.name} · {ay.name}</div>
+            <Row gutter={[12, 6]} style={{ marginTop: 10, maxWidth: 720 }}>
+              {[
+                ['Student Name', student.name],
+                ['Admission No', student.admissionNo || student.admissionNumber],
+                ['Register No', student.registerNo],
+                ['Class', cls.name],
+                ['Section', section.name],
+                ['Parent/Guardian', student.parentName],
+                ['Phone', student.parentPhone],
+                ['Academic Year', ay.name || ay.label],
+              ].map(([label, value]) => (
+                <Col xs={12} sm={6} key={label}>
+                  <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase' }}>{label}</div>
+                  <div style={{ fontSize: 12, color: '#0F172A', fontWeight: 600 }}>{value || '—'}</div>
+                </Col>
+              ))}
+            </Row>
           </div>
           <Space>
             <Tag color={statusColor[status] || 'default'} style={{ fontSize: 13, padding: '4px 12px' }}>
@@ -203,11 +210,11 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
       {/* Amount Summary */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
       {[
-          { label: 'Gross Fee',    value: grossFee,                       color: '#1B3A5C' },
+          { label: 'Gross Fee',    value: grossFee,                       color: 'var(--color-primary-dark)' },
           { label: 'Discount',     value: invoice.discountAmount || 0,    color: '#16A34A', isNegative: true },
-          { label: 'Net Fee',      value: netFee,                         color: '#1B3A5C' },
+          { label: 'Net Fee',      value: netFee,                         color: 'var(--color-primary-dark)' },
           { label: 'Penalty',      value: invoice.penaltyAmount || 0,     color: '#EF4444' },
-          { label: 'Amount Paid',  value: invoice.paidAmount || 0,        color: '#2563EB' },
+          { label: 'Amount Paid',  value: invoice.paidAmount || 0,        color: 'var(--color-primary)' },
           { label: 'Balance Due',  value: balanceDue,                     color: balanceDue > 0 ? '#EF4444' : '#16A34A' },
         ].map(item => (
           <Col xs={12} sm={8} md={4} key={item.label} style={{ flex: 1 }}>
@@ -261,8 +268,8 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
           message={
             <span>
               ⚡ <strong>Auto-calculated Late Fee:</strong> ₹{(invoice.penaltyAmount || 0).toLocaleString('en-IN')}
-              {(invoice.nextDueDate || invoice.dueDate) && (() => {
-                const due = invoice.nextDueDate || invoice.dueDate;
+              {nextInstallmentDueDate && (() => {
+                const due = nextInstallmentDueDate;
                 return (
                   <span style={{ marginLeft: 8, color: '#64748B', fontSize: 12 }}>
                     · Due {dayjs(due).format('DD MMM YYYY')}
@@ -346,7 +353,7 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
               },
               {
                 title: 'Receipt', dataIndex: 'receiptNumber',
-                render: v => v ? <Tag color="blue">{v}</Tag> : '—',
+                render: v => v ? <Tag color="orange">{v}</Tag> : '—',
               },
               isAdmin && !invoice.locked && status !== 'paid' ? {
                 title: 'Pay',
@@ -399,7 +406,11 @@ const FeeInvoiceDetail = ({ invoiceId, onClose, onPaymentRecorded }) => {
       <Divider orientation="left" style={{ fontSize: 13 }}>Student Information</Divider>
       <Descriptions size="small" column={2} bordered>
         <Descriptions.Item label="Name">{student.name || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Admission No">{student.admissionNo || student.admissionNumber || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Register No">{student.registerNo || '—'}</Descriptions.Item>
         <Descriptions.Item label="Roll No">{student.rollNo || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Class">{cls.name || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Section">{section.name || '—'}</Descriptions.Item>
         <Descriptions.Item label="Parent">{student.parentName || '—'}</Descriptions.Item>
         <Descriptions.Item label="Phone">{student.parentPhone || '—'}</Descriptions.Item>
         <Descriptions.Item label="Next Due Date">

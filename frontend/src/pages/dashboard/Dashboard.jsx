@@ -62,15 +62,15 @@ const Dashboard = () => {
       title: 'Total Students',
       value: stats.totalStudents,
       icon: <TeamOutlined />,
-      color: '#3B82F6',
-      bg: '#EFF6FF',
+      color: 'var(--color-secondary)',
+      bg: 'var(--color-primary-light)',
     },
     {
       title: 'Total Admissions',
       value: stats.totalAdmissions,
       icon: <FormOutlined />,
-      color: '#8B5CF6',
-      bg: '#F5F3FF',
+      color: 'var(--color-primary)',
+      bg: 'var(--color-primary-light)',
     },
     {
       title: 'Pending Admissions',
@@ -97,7 +97,7 @@ const Dashboard = () => {
       title: 'Total Classes',
       value: stats.totalClasses,
       icon: <BookOutlined />,
-      color: '#06B6D4',
+      color: 'var(--color-secondary)',
       bg: '#ECFEFF',
     },
   ];

@@ -367,7 +367,7 @@ const StudentFeeAssignment = () => {
     const compCols = (matrixData.components || []).map(comp => ({
       title: (
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#1B3A5C' }}>{comp.name}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary-dark)' }}>{comp.name}</div>
           <div style={{ fontSize: 10, color: '#64748B' }}>₹{comp.amount?.toLocaleString('en-IN')}</div>
           {comp.mandatory && <Tag color="red" style={{ fontSize: 9, padding: '0 4px' }}>Mandatory</Tag>}
           {isAdmin && !comp.mandatory && (
@@ -480,7 +480,7 @@ const StudentFeeAssignment = () => {
         title: 'Net Fee', key: 'netFee', width: 100, align: 'right',
         render: (_, s) => {
           const t = computedTotals[s.studentId];
-          return <Text strong style={{ color: '#1B3A5C' }}>₹{(t?.net || 0).toLocaleString('en-IN')}</Text>;
+          return <Text strong style={{ color: 'var(--color-primary-dark)' }}>₹{(t?.net || 0).toLocaleString('en-IN')}</Text>;
         },
       },
       {
@@ -566,10 +566,10 @@ const StudentFeeAssignment = () => {
       {matrixData && (
         <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
           {[
-            { label: 'Total Students', value: totalStudents, color: '#3B82F6' },
+            { label: 'Total Students', value: totalStudents, color: 'var(--color-secondary)' },
             { label: 'Locked Profiles', value: lockedCount, color: '#EF4444' },
-            { label: 'Components', value: matrixData.components?.length || 0, color: '#8B5CF6' },
-            { label: 'Total Fee (Class)', value: `₹${totalFeeSum.toLocaleString('en-IN')}`, color: '#1B3A5C' },
+            { label: 'Components', value: matrixData.components?.length || 0, color: 'var(--color-primary)' },
+            { label: 'Total Fee (Class)', value: `₹${totalFeeSum.toLocaleString('en-IN')}`, color: 'var(--color-primary-dark)' },
           ].map(card => (
             <Col xs={12} sm={6} key={card.label}>
               <Card size="small" style={{ borderRadius: 10, borderTop: `3px solid ${card.color}` }}>

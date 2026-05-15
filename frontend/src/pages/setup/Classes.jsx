@@ -113,8 +113,8 @@ const Classes = () => {
 
   const tabStyle = (key) => ({
     padding: '6px 16px', cursor: 'pointer', fontWeight: tab === key ? 600 : 400,
-    borderBottom: tab === key ? '2px solid #3B82F6' : '2px solid transparent',
-    color: tab === key ? '#3B82F6' : '#666',
+    borderBottom: tab === key ? '2px solid var(--color-secondary)' : '2px solid transparent',
+    color: tab === key ? 'var(--color-secondary)' : '#666',
   });
 
   return (

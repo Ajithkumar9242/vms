@@ -98,7 +98,7 @@ const Parents = () => {
         <Space>
           {record.photo
             ? <img src={record.photo} alt={name} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
-            : <Avatar size={32} icon={<UserOutlined />} style={{ background: '#1B3A5C' }} />}
+            : <Avatar size={32} icon={<UserOutlined />} style={{ background: 'var(--color-primary-dark)' }} />}
           {name}
         </Space>
       ),
@@ -111,7 +111,7 @@ const Parents = () => {
       key: 'linkedStudents',
       width: 250,
       render: (studs) => studs?.length > 0
-        ? studs.map((s) => <Tag key={s._id} color="blue" style={{ marginBottom: 2 }}>{s.name} ({s.rollNo})</Tag>)
+        ? studs.map((s) => <Tag key={s._id} color="orange" style={{ marginBottom: 2 }}>{s.name} ({s.rollNo})</Tag>)
         : <Text type="secondary">No students linked</Text>,
     },
     ...(canWrite ? [{

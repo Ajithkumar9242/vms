@@ -204,7 +204,7 @@ const ParentFees = () => {
           email: user?.email || '',
           contact: user?.phone || '',
         },
-        theme: { color: '#1B3A5C' },
+        theme: { color: 'var(--color-primary-dark)' },
         modal: {
           ondismiss: () => {
             setMsg({ type: 'error', text: 'Payment cancelled.' });
@@ -412,7 +412,7 @@ const ParentFees = () => {
                 const mandatory = comp.mandatory ?? comp.componentId?.mandatory ?? false;
                 return (
                   <div key={i} className="m-list-item">
-                    <div className="m-list-icon" style={{ background: mandatory ? '#FEF2F2' : '#EFF6FF', fontSize: 16 }}>
+                    <div className="m-list-icon" style={{ background: mandatory ? '#FEF2F2' : 'var(--color-primary-light)', fontSize: 16 }}>
                       {mandatory ? '📌' : '✅'}
                     </div>
                     <div className="m-list-body">
@@ -442,7 +442,7 @@ const ParentFees = () => {
               {/* Net total */}
               <div style={{ borderTop: '1px solid #E2E8F0', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontWeight: 700, fontSize: 14, color: '#0F172A' }}>Net Total</span>
-                <span style={{ fontWeight: 700, fontSize: 14, color: '#1B3A5C' }}>
+                <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-primary-dark)' }}>
                   ₹{(feeData.feeProfile.netFee || 0).toLocaleString('en-IN')}
                 </span>
               </div>
@@ -480,7 +480,7 @@ const ParentFees = () => {
                 const overdue = item.dueDate && dayjs(item.dueDate).isBefore(dayjs());
                 return (
                   <div key={i} className="m-list-item">
-                    <div className="m-list-icon" style={{ background: overdue ? '#FEE2E2' : '#EFF6FF', fontSize: 16 }}>
+                    <div className="m-list-icon" style={{ background: overdue ? '#FEE2E2' : 'var(--color-primary-light)', fontSize: 16 }}>
                       {overdue ? '⚠️' : '📅'}
                     </div>
                     <div className="m-list-body">
@@ -538,9 +538,9 @@ const ParentFees = () => {
 
           {/* Manual Payment Form */}
           {showManual && configured && (
-            <div className="m-card" style={{ borderLeft: '3px solid #2563EB' }}>
+            <div className="m-card" style={{ borderLeft: '3px solid var(--color-primary)' }}>
               <div className="m-card-title" style={{ marginBottom: 12 }}>Submit UPI / Manual Payment</div>
-              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12, padding: '8px 10px', background: '#F0F9FF', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12, padding: '8px 10px', background: 'var(--color-primary-light)', borderRadius: 8 }}>
                 📌 Transfer ₹{summary?.totalDue?.toLocaleString('en-IN')} to school UPI, then enter transaction details below.
               </div>
               <div className="m-form-group">
@@ -618,12 +618,12 @@ const ParentFees = () => {
           {/* ─── Fee Receipt Card ─── */}
           {configured && invoice?._id && (
             <div className="m-card" style={{
-              background: 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)',
-              border: '1.5px solid #DBEAFE',
+              background: 'linear-gradient(135deg, #F8FAFC 0%, var(--color-primary-light) 100%)',
+              border: '1.5px solid var(--color-primary-light)',
             }}>
               <div className="m-card-header" style={{ marginBottom: 16 }}>
                 <div>
-                  <div className="m-card-title" style={{ color: '#1B3A5C' }}>📄 Fee Invoice</div>
+                  <div className="m-card-title" style={{ color: 'var(--color-primary-dark)' }}>📄 Fee Invoice</div>
                   <div className="m-card-sub">
                     {invoice?.invoiceNumber ? `Invoice #${invoice.invoiceNumber}` : 'Current year'}
                   </div>

@@ -128,7 +128,7 @@ const OnlineAdmission = () => {
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
         <Card style={{ maxWidth: 500, textAlign: 'center', borderRadius: 16 }}>
           <div style={{ fontSize: 60, marginBottom: 16 }}>🔒</div>
-          <Title level={3} style={{ color: '#1B3A5C' }}>Admissions Currently Closed</Title>
+          <Title level={3} style={{ color: 'var(--color-primary-dark)' }}>Admissions Currently Closed</Title>
           <Paragraph type="secondary">
             We are not accepting new applications at this time. Please check back later or
             contact the school office for more information.
@@ -149,7 +149,7 @@ const OnlineAdmission = () => {
             subTitle={
               <>
                 <p>Your application number is:</p>
-                <code style={{ fontSize: 20, fontWeight: 700, color: '#1B3A5C', background: '#EFF6FF', padding: '4px 12px', borderRadius: 6 }}>
+                <code style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-primary-dark)', background: 'var(--color-primary-light)', padding: '4px 12px', borderRadius: 6 }}>
                   {applicationNo}
                 </code>
                 <p style={{ marginTop: 12, color: '#64748B' }}>
@@ -171,10 +171,10 @@ const OnlineAdmission = () => {
   const pct = Math.round((current / (STEPS.length - 1)) * 100);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%)', padding: '20px 16px' }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, var(--color-primary-light) 0%, #F0FDF4 100%)', padding: '20px 16px' }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         {/* Header */}
-        <Card style={{ borderRadius: 16, marginBottom: 20, background: '#1B3A5C', border: 'none' }}>
+        <Card style={{ borderRadius: 16, marginBottom: 20, background: 'var(--color-primary-dark)', border: 'none' }}>
           <div style={{ textAlign: 'center', color: '#fff' }}>
             <Title level={3} style={{ color: '#fff', margin: 0 }}>
               APPLICATION FOR ADMISSION
@@ -186,7 +186,7 @@ const OnlineAdmission = () => {
         </Card>
 
         {/* Progress */}
-        <Progress percent={pct} size="small" style={{ marginBottom: 16 }} strokeColor="#2563EB" />
+        <Progress percent={pct} size="small" style={{ marginBottom: 16 }} strokeColor="var(--color-primary)" />
 
         {/* Steps */}
         <Steps current={current} size="small" style={{ marginBottom: 20 }} responsive={false}>

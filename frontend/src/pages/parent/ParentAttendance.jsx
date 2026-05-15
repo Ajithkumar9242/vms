@@ -127,7 +127,7 @@ const ParentAttendance = () => {
           {report && report.totalConducted > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
               {[
-                { label: 'Conducted', value: report.totalConducted, color: '#1B3A5C', bg: '#F8FAFC' },
+                { label: 'Conducted', value: report.totalConducted, color: 'var(--color-primary-dark)', bg: '#F8FAFC' },
                 { label: 'Attended', value: report.totalAttended, color: '#16A34A', bg: '#F0FDF4' },
                 { label: 'Absent', value: report.totalConducted - report.totalAttended, color: '#DC2626', bg: '#FEF2F2' },
               ].map(s => (

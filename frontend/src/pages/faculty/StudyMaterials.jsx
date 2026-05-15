@@ -22,7 +22,7 @@ const TYPE_ICON = {
   video: <VideoCameraOutlined style={{ color: '#7C3AED', fontSize: 18 }} />,
   audio: <AudioOutlined style={{ color: '#0891B2', fontSize: 18 }} />,
   image: <FileImageOutlined style={{ color: '#059669', fontSize: 18 }} />,
-  link: <LinkOutlined style={{ color: '#2563EB', fontSize: 18 }} />,
+  link: <LinkOutlined style={{ color: 'var(--color-primary)', fontSize: 18 }} />,
   other: <FileOutlined style={{ color: '#64748B', fontSize: 18 }} />,
 };
 

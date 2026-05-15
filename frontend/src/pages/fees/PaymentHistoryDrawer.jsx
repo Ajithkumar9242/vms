@@ -76,7 +76,7 @@ const PaymentHistoryDrawer = ({ open, studentId, studentName, onClose }) => {
             <SummaryCard
               label="Total Fee"
               value={summary?.totalFee}
-              color="#3B82F6"
+              color="var(--color-secondary)"
               icon={<WalletOutlined />}
             />
             <SummaryCard
@@ -107,7 +107,7 @@ const PaymentHistoryDrawer = ({ open, studentId, studentName, onClose }) => {
               items={payments.map((p) => {
                 const mode = MODE_LABELS[p.paymentMode] || { label: p.paymentMode, color: 'default' };
                 return {
-                  dot: <ClockCircleOutlined style={{ color: '#3B82F6' }} />,
+                  dot: <ClockCircleOutlined style={{ color: 'var(--color-secondary)' }} />,
                   children: (
                     <div
                       style={{

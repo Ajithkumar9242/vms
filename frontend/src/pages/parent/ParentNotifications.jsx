@@ -6,7 +6,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 dayjs.extend(relativeTime);
 
 const TYPE_CONFIG = {
-  info:    { icon: 'ℹ️',  bg: '#DBEAFE', color: '#2563EB', label: 'Info'    },
+  info:    { icon: 'ℹ️',  bg: 'var(--color-primary-light)', color: 'var(--color-primary)', label: 'Info'    },
   success: { icon: '✅',  bg: '#DCFCE7', color: '#16A34A', label: 'Success' },
   warning: { icon: '⚠️', bg: '#FEF3C7', color: '#D97706', label: 'Warning' },
   error:   { icon: '🚨', bg: '#FEE2E2', color: '#DC2626', label: 'Alert'   },
@@ -125,7 +125,7 @@ const ParentNotifications = () => {
               style={{
                 padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
                 border: 'none', cursor: 'pointer',
-                background: filterType === ft.value ? '#1B3A5C' : '#F1F5F9',
+                background: filterType === ft.value ? 'var(--color-primary-dark)' : '#F1F5F9',
                 color:      filterType === ft.value ? '#fff'    : '#64748B',
                 transition: 'all 0.15s',
               }}
@@ -141,9 +141,9 @@ const ParentNotifications = () => {
             onClick={() => setShowUnread(!showUnread)}
             style={{
               padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-              border: `1.5px solid ${showUnread ? '#2563EB' : '#E2E8F0'}`,
-              background: showUnread ? '#EFF6FF' : 'transparent',
-              color: showUnread ? '#2563EB' : '#64748B',
+              border: `1.5px solid ${showUnread ? 'var(--color-primary)' : '#E2E8F0'}`,
+              background: showUnread ? 'var(--color-primary-light)' : 'transparent',
+              color: showUnread ? 'var(--color-primary)' : '#64748B',
               cursor: 'pointer', flex: 1,
             }}
           >
@@ -168,9 +168,9 @@ const ParentNotifications = () => {
           <div style={{ fontSize: 18, fontWeight: 700, color: '#0F172A' }}>{notifications.length}</div>
           <div style={{ fontSize: 10, color: '#64748B' }}>Total</div>
         </div>
-        <div style={{ flex: 1, background: '#EFF6FF', borderRadius: 10, padding: '10px', textAlign: 'center' }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#2563EB' }}>{unreadCount}</div>
-          <div style={{ fontSize: 10, color: '#2563EB' }}>Unread</div>
+        <div style={{ flex: 1, background: 'var(--color-primary-light)', borderRadius: 10, padding: '10px', textAlign: 'center' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-primary)' }}>{unreadCount}</div>
+          <div style={{ fontSize: 10, color: 'var(--color-primary)' }}>Unread</div>
         </div>
         <div style={{ flex: 1, background: '#F0FDF4', borderRadius: 10, padding: '10px', textAlign: 'center' }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#16A34A' }}>{filtered.length}</div>
@@ -241,7 +241,7 @@ const ParentNotifications = () => {
                           </span>
                         )}
                         {!n.isRead && (
-                          <div style={{ width: 8, height: 8, borderRadius: 4, background: '#2563EB', marginTop: 3 }} />
+                          <div style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--color-primary)', marginTop: 3 }} />
                         )}
                       </div>
                     </div>

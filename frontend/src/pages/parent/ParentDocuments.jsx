@@ -75,10 +75,10 @@ const ParentDocuments = () => {
             {/* Icon */}
             <div style={{
               width: 46, height: 46, borderRadius: 12,
-              background: isPdf ? '#FEE2E2' : '#EFF6FF',
+              background: isPdf ? '#FEE2E2' : 'var(--color-primary-light)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22
             }}>
-              {isPdf ? <span style={{ color: '#EF4444' }}>📄</span> : <span style={{ color: '#3B82F6' }}>🖼️</span>}
+              {isPdf ? <span style={{ color: '#EF4444' }}>📄</span> : <span style={{ color: 'var(--color-secondary)' }}>🖼️</span>}
             </div>
 
             {/* Info */}

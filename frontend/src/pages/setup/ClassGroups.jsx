@@ -132,7 +132,7 @@ const ClassGroups = () => {
     {
       title: 'Section',
       render: (_, r) => r.sectionId?.name
-        ? <Tag color="blue">{r.sectionId.name}</Tag>
+        ? <Tag color="orange">{r.sectionId.name}</Tag>
         : <Text type="secondary">—</Text>,
     },
     {
@@ -142,7 +142,7 @@ const ClassGroups = () => {
         if (!teacher) return <Text type="secondary">Not assigned</Text>;
         return (
           <Space>
-            <UserOutlined style={{ color: '#6366F1' }} />
+            <UserOutlined style={{ color: 'var(--color-primary)' }} />
             <span>{teacher.name || teacher}</span>
             {teacher.employeeId && (
               <Text type="secondary">({teacher.employeeId})</Text>

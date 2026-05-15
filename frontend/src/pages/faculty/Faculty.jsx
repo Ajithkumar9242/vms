@@ -95,11 +95,11 @@ const FacultyDashboard = () => {
     <div style={{ padding: '0 0 40px' }}>
       {/* Header */}
       <div style={{
-        background: 'linear-gradient(135deg, #1B3A5C 0%, #2563EB 100%)',
+        background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)',
         padding: '24px 28px', borderRadius: 16, marginBottom: 24, color: '#fff',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Avatar size={56} style={{ background: '#fff', color: '#1B3A5C', fontSize: 24, fontWeight: 800 }}>
+          <Avatar size={56} style={{ background: '#fff', color: 'var(--color-primary-dark)', fontSize: 24, fontWeight: 800 }}>
             {(faculty?.name || 'F').charAt(0)}
           </Avatar>
           <div>
@@ -112,7 +112,7 @@ const FacultyDashboard = () => {
       {/* Stats */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         {[
-          { title: 'Classes', value: stats.classCount   || 0, icon: <TeamOutlined />,       color: '#2563EB' },
+          { title: 'Classes', value: stats.classCount   || 0, icon: <TeamOutlined />,       color: 'var(--color-primary)' },
           { title: 'Subjects',value: stats.subjectCount || 0, icon: <BookOutlined />,       color: '#7C3AED' },
           { title: 'Students',value: stats.studentCount || 0, icon: <CalendarOutlined />,   color: '#059669' },
           { title: 'To Grade', value: stats.pendingGrade|| 0, icon: <FileTextOutlined />,   color: '#D97706' },
@@ -134,7 +134,7 @@ const FacultyDashboard = () => {
         {/* Class Students Panel */}
         <Col xs={24} lg={14}>
           <Card
-            title={<><TeamOutlined style={{ marginRight: 8, color: '#2563EB' }} />Class Students</>}
+            title={<><TeamOutlined style={{ marginRight: 8, color: 'var(--color-primary)' }} />Class Students</>}
             bordered={false}
             style={{ borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
             extra={
@@ -210,7 +210,7 @@ const FacultyDashboard = () => {
                     ].map((s) => (
                       <Col key={s.label} span={8}>
                         <div style={{ textAlign: 'center', background: '#F8FAFC', borderRadius: 8, padding: '10px 4px' }}>
-                          <div style={{ fontSize: 18, fontWeight: 800, color: '#1B3A5C' }}>{s.value}</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-primary-dark)' }}>{s.value}</div>
                           <div style={{ fontSize: 11, color: '#64748B' }}>{s.label}</div>
                         </div>
                       </Col>

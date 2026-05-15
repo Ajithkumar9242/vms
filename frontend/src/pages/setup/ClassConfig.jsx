@@ -119,17 +119,12 @@ const ClassConfig = () => {
       message.error('Select at least one subject');
       return;
     }
-    if (!values.sections?.length) {
-      message.error('Select at least one section');
-      return;
-    }
-
     setSaving(true);
     try {
       await setupAPI.saveClassConfig({
         academicYearId: values.academicYearId || activeYear?._id,
         classId:        values.classId,
-        sections:       values.sections,
+        sections:       values.sections || [],
         subjects:       values.subjects,
       });
       message.success(editRecord ? 'Class Config updated' : 'Class Config saved');
@@ -155,7 +150,7 @@ const ClassConfig = () => {
       render: (_, r) => (
         <Space size={4} wrap>
           {(r.sections || []).length
-            ? r.sections.map((s) => <Tag key={s._id || s} color="geekblue">{s.name || s}</Tag>)
+            ? r.sections.map((s) => <Tag key={s._id || s} color="orange">{s.name || s}</Tag>)
             : <Text type="secondary">—</Text>}
         </Space>
       ),
@@ -166,9 +161,9 @@ const ClassConfig = () => {
         <Space size={4} wrap>
           {(r.subjects || []).length
             ? r.subjects.map((s) => (
-                <Tag key={s._id || s} color="blue">
+                <Tag key={s._id || s} color="orange">
                   {s.code || s}
-                  {s.isOptional ? <sup style={{ fontSize: 9, marginLeft: 2, color: '#8B5CF6' }}>opt</sup> : null}
+                  {s.isOptional ? <sup style={{ fontSize: 9, marginLeft: 2, color: 'var(--color-primary)' }}>opt</sup> : null}
                 </Tag>
               ))
             : <Text type="secondary">—</Text>}
@@ -203,7 +198,7 @@ const ClassConfig = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
           <Title level={4} style={{ margin: 0 }}>
-            <SettingOutlined style={{ marginRight: 8, color: '#6366F1' }} />
+            <SettingOutlined style={{ marginRight: 8, color: 'var(--color-primary)' }} />
             Class Configuration
           </Title>
           <Text type="secondary">Assign subjects and sections to each class per academic year</Text>
@@ -257,7 +252,7 @@ const ClassConfig = () => {
           <Card size="small" styles={{ body: { padding: '12px 16px' } }}>
             <Text type="secondary" style={{ fontSize: 12 }}>Incomplete Configs</Text>
             <div style={{ fontSize: 24, fontWeight: 700, color: '#F59E0B' }}>
-              {configs.filter((c) => !(c.subjects?.length && c.sections?.length)).length}
+              {configs.filter((c) => !c.subjects?.length).length}
             </div>
           </Card>
         </Col>
@@ -330,8 +325,7 @@ const ClassConfig = () => {
           <Form.Item
             label="Sections"
             name="sections"
-            rules={[{ required: true, message: 'At least one section is required', type: 'array', min: 1 }]}
-            extra={filteredSections.length === 0 ? 'Select a class first' : `${filteredSections.length} section(s) available`}
+            extra={filteredSections.length === 0 ? 'No sections configured for this class' : `${filteredSections.length} section(s) available`}
           >
             <Select
               mode="multiple"

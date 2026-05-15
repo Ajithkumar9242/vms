@@ -6,7 +6,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 dayjs.extend(relativeTime);
 
 const TYPE_CONFIG = {
-  info:    { icon: 'ℹ️', bg: '#DBEAFE', color: '#2563EB' },
+  info:    { icon: 'ℹ️', bg: 'var(--color-primary-light)', color: 'var(--color-primary)' },
   success: { icon: '✅', bg: '#DCFCE7', color: '#16A34A' },
   warning: { icon: '⚠️', bg: '#FEF3C7', color: '#D97706' },
   error:   { icon: '🚨', bg: '#FEE2E2', color: '#DC2626' },
@@ -82,7 +82,7 @@ const FacultyNotifications = () => {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <div className="m-notif-title">{n.title}</div>
-                      {!n.isRead && <div style={{ width: 8, height: 8, borderRadius: 4, background: '#2563EB', flexShrink: 0, marginTop: 4 }} />}
+                      {!n.isRead && <div style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--color-primary)', flexShrink: 0, marginTop: 4 }} />}
                     </div>
                     <div className="m-notif-body" style={{
                       display: '-webkit-box', WebkitBoxOrient: 'vertical',

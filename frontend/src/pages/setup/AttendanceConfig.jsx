@@ -188,7 +188,7 @@ const AttendanceConfig = () => {
     {
       title: 'Session Name',
       dataIndex: 'name',
-      render: (v) => <Tag color="blue" style={{ fontSize: 13, padding: '2px 10px' }}>{v}</Tag>,
+      render: (v) => <Tag color="orange" style={{ fontSize: 13, padding: '2px 10px' }}>{v}</Tag>,
     },
     {
       title: 'Start',

@@ -12,10 +12,10 @@ dayjs.extend(relativeTime);
 const { Title, Text } = Typography;
 
 const moduleIcons = {
-  admission: <FileTextOutlined style={{ color: '#3B82F6' }} />,
+  admission: <FileTextOutlined style={{ color: 'var(--color-secondary)' }} />,
   fee: <DollarOutlined style={{ color: '#22C55E' }} />,
   attendance: <CalendarOutlined style={{ color: '#F59E0B' }} />,
-  exam: <CheckCircleOutlined style={{ color: '#8B5CF6' }} />,
+  exam: <CheckCircleOutlined style={{ color: 'var(--color-primary)' }} />,
   student: <ClockCircleOutlined style={{ color: '#64748B' }} />,
   general: <ClockCircleOutlined style={{ color: '#64748B' }} />,
 };

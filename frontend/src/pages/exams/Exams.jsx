@@ -123,7 +123,7 @@ const Exams = () => {
     {
       title: 'Subjects', key: 'subjects', width: 80, align: 'center',
       render: (_, r) => (
-        <Tag color="blue">{(r.subjects || []).length} subj.</Tag>
+        <Tag color="orange">{(r.subjects || []).length} subj.</Tag>
       ),
     },
     {

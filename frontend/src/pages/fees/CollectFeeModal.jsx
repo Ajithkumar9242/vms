@@ -90,7 +90,7 @@ const CollectFeeModal = ({ open, student, onClose, onSuccess }) => {
           >
             <div>
               <div style={{ fontSize: 12, color: '#64748B' }}>Outstanding Due</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#1B3A5C' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-primary-dark)' }}>
                 ₹{(student.totalDue ?? 0).toLocaleString('en-IN')}
               </div>
             </div>

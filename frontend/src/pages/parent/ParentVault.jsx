@@ -105,7 +105,7 @@ const ParentVault = () => {
           email: user?.email,
           contact: user?.phone || user?.linkedEntity?.phone
         },
-        theme: { color: '#2563EB' },
+        theme: { color: 'var(--color-primary)' },
       });
       rzp.open();
     } catch (e) {
@@ -114,8 +114,8 @@ const ParentVault = () => {
   };
 
   const CATEGORY_COLORS = {
-    Certificate: { bg: '#EFF6FF', text: '#1D4ED8' },
-    Marks: { bg: '#F5F3FF', text: '#6D28D9' },
+    Certificate: { bg: 'var(--color-primary-light)', text: 'var(--color-primary-dark)' },
+    Marks: { bg: 'var(--color-primary-light)', text: 'var(--color-primary-dark)' },
     Other: { bg: '#F0FDF4', text: '#15803D' }
   };
 
@@ -167,7 +167,7 @@ const ParentVault = () => {
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 18, fontWeight: 700, color: '#2563EB' }}>₹{item.price}</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-primary)' }}>₹{item.price}</span>
                 {item.requiresApproval && (
                   <span className="m-badge m-badge-warning" style={{ fontSize: 10 }}>Approval Required</span>
                 )}
@@ -228,10 +228,10 @@ const ParentVault = () => {
               />
             </div>
 
-            <div style={{ background: '#EFF6FF', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
+            <div style={{ background: 'var(--color-primary-light)', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <span style={{ fontSize: 14, color: '#334155' }}>Total Amount</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: '#2563EB' }}>
+                <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-primary)' }}>
                   ₹{(selected.price * copies).toFixed(2)}
                 </span>
               </div>
@@ -269,7 +269,7 @@ const ParentVault = () => {
 
             <div style={{ fontSize: 14, color: '#475569', marginBottom: 16, lineHeight: 1.5 }}>
               Request <strong>{pendingRequest.requestNumber}</strong> has been submitted. <br />
-              Total Amount: <strong style={{ color: '#2563EB', fontSize: 16 }}>₹{pendingRequest.netAmount}</strong>
+              Total Amount: <strong style={{ color: 'var(--color-primary)', fontSize: 16 }}>₹{pendingRequest.netAmount}</strong>
             </div>
 
             <div style={{ fontSize: 12, color: '#64748B', marginBottom: 20 }}>

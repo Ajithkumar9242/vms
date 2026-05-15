@@ -292,7 +292,7 @@ const FacultyAttendance = () => {
             </div>
           </div>
           {isAdmin && (
-            <span className="m-badge" style={{ background: '#2563EB', color: '#fff', fontSize: 10 }}>ADMIN</span>
+            <span className="m-badge" style={{ background: 'var(--color-primary)', color: '#fff', fontSize: 10 }}>ADMIN</span>
           )}
         </div>
       )}

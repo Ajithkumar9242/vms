@@ -76,7 +76,7 @@ const ParentDocumentRequests = () => {
             setMsg({ type: 'error', text: e.message || 'Payment confirmation failed' });
           }
         },
-        theme: { color: '#2563EB' },
+        theme: { color: 'var(--color-primary)' },
       });
       rzp.open();
     } catch (e) {

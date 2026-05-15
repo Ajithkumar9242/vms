@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { requestNotificationPermission, onForegroundMessage, showLocalNotification } from '@/utils/pwa';
 import useAuthStore from '@/store/authStore';
+import { notificationAPI } from '@/services/api';
 
 /**
  * useFCM — hook that:
@@ -22,7 +23,12 @@ const useFCM = (onMessage = null) => {
 
     const setup = async () => {
       // 1. Request permission + get token
-      await requestNotificationPermission();
+      const token = await requestNotificationPermission();
+      if (token) {
+        await notificationAPI.registerDeviceToken(token, 'web').catch((e) => {
+          console.warn('[useFCM] token registration failed:', e.message);
+        });
+      }
 
       // 2. Listen for foreground messages
       unsubRef.current = await onForegroundMessage((payload) => {
