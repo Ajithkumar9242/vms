@@ -1,14 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Form, Input, Button, Typography, App, Divider } from 'antd';
+import { Form, Input, Button, Typography, App, Divider, ConfigProvider } from 'antd';
 import {
   LockOutlined, MailOutlined,
   MobileOutlined, UserOutlined, RightOutlined,
 } from '@ant-design/icons';
 import useAuthStore from '@/store/authStore';
 import { getRoleHome } from '@/components/common/ProtectedRoute';
+import { ERP_COLORS } from '@/theme/colors';
 
 const { Title, Text } = Typography;
+
+const loginTheme = {
+  token: {
+    colorPrimary: ERP_COLORS.primary,
+    colorInfo: ERP_COLORS.primary,
+    colorLink: ERP_COLORS.primary,
+    colorLinkHover: ERP_COLORS.primaryHover,
+    controlOutline: 'rgba(194,65,12,0.20)',
+    controlOutlineWidth: 2,
+    borderRadius: 10,
+  },
+  components: {
+    Input: {
+      activeBorderColor: ERP_COLORS.primary,
+      hoverBorderColor: ERP_COLORS.primaryHover,
+    },
+    Select: {
+      optionSelectedBg: ERP_COLORS.primarySoft,
+    },
+    Button: {
+      colorPrimary: ERP_COLORS.primary,
+      colorPrimaryHover: ERP_COLORS.primaryHover,
+      colorPrimaryActive: ERP_COLORS.primaryActive,
+    },
+  },
+};
 
 const Login = () => {
   const [form] = Form.useForm();
@@ -35,18 +62,22 @@ const Login = () => {
   };
 
   return (
+    <ConfigProvider theme={loginTheme}>
     <div style={styles.container}>
       <div style={styles.card}>
         {/* Logo / Brand */}
         <div style={styles.header}>
-          <div style={styles.logoMark}>VMS</div>
-          <Title level={3} style={styles.title}>School ERP</Title>
+          <div style={styles.brandRow}>
+            <div style={styles.logoMark}>V</div>
+            <div style={styles.brandText}>VSS ERP</div>
+          </div>
+          <Title level={3} style={styles.title}>Admin Portal</Title>
           <Text type="secondary">Choose a portal to continue</Text>
         </div>
 
         <div style={styles.portalGridTop}>
           <button type="button" style={{ ...styles.portalCard, ...styles.portalCardActive }}>
-            <div style={{ ...styles.portalIcon, background: 'linear-gradient(135deg, var(--color-primary-dark), var(--color-primary))' }}>
+            <div style={{ ...styles.portalIcon, background: `linear-gradient(135deg, ${ERP_COLORS.primaryActive}, ${ERP_COLORS.primary})` }}>
               <LockOutlined style={{ color: '#fff', fontSize: 20 }} />
             </div>
             <div style={styles.portalInfo}>
@@ -126,7 +157,7 @@ const Login = () => {
             onMouseEnter={e => Object.assign(e.currentTarget.style, styles.portalCardHover)}
             onMouseLeave={e => Object.assign(e.currentTarget.style, styles.portalCard)}
           >
-            <div style={{ ...styles.portalIcon, background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))' }}>
+            <div style={{ ...styles.portalIcon, background: `linear-gradient(135deg, ${ERP_COLORS.primary}, ${ERP_COLORS.primaryHover})` }}>
               <MobileOutlined style={{ color: '#fff', fontSize: 20 }} />
             </div>
             <div style={styles.portalInfo}>
@@ -144,7 +175,7 @@ const Login = () => {
             onMouseEnter={e => Object.assign(e.currentTarget.style, styles.portalCardHover)}
             onMouseLeave={e => Object.assign(e.currentTarget.style, styles.portalCard)}
           >
-            <div style={{ ...styles.portalIcon, background: 'linear-gradient(135deg, var(--color-primary-dark), var(--color-primary-dark))' }}>
+            <div style={{ ...styles.portalIcon, background: `linear-gradient(135deg, ${ERP_COLORS.primaryActive}, ${ERP_COLORS.primary})` }}>
               <UserOutlined style={{ color: '#fff', fontSize: 20 }} />
             </div>
             <div style={styles.portalInfo}>
@@ -163,6 +194,7 @@ const Login = () => {
         </div>
       </div>
     </div>
+    </ConfigProvider>
   );
 };
 
@@ -173,7 +205,7 @@ const styles = {
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: '100vh',
-    background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary-dark) 50%, var(--color-primary-dark) 100%)',
+    background: `linear-gradient(135deg, ${ERP_COLORS.sidebar} 0%, ${ERP_COLORS.sidebarActive} 58%, ${ERP_COLORS.primaryActive} 100%)`,
     padding: 16,
   },
   card: {
@@ -187,23 +219,35 @@ const styles = {
   header: {
     textAlign: 'center',
   },
-  logoMark: {
+  brandRow: {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    background: 'linear-gradient(135deg, var(--color-primary-dark), var(--color-primary))',
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: 700,
-    letterSpacing: 1,
+    gap: 10,
     marginBottom: 16,
+  },
+  logoMark: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    background: `linear-gradient(135deg, ${ERP_COLORS.sidebarActive}, ${ERP_COLORS.sidebarHover})`,
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: 700,
+    letterSpacing: 0,
+  },
+  brandText: {
+    color: ERP_COLORS.text,
+    fontSize: 18,
+    fontWeight: 700,
+    letterSpacing: 0,
   },
   title: {
     margin: '0 0 4px',
-    color: '#0F172A',
+    color: ERP_COLORS.text,
   },
   portalGrid: {
     display: 'flex',
@@ -221,8 +265,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: 14,
-    background: '#F8FAFC',
-    border: '1px solid #E2E8F0',
+    background: ERP_COLORS.layout,
+    border: `1px solid ${ERP_COLORS.border}`,
     borderRadius: 10,
     padding: '14px 16px',
     cursor: 'pointer',
@@ -234,8 +278,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: 14,
-    background: 'var(--color-primary-light)',
-    border: '1px solid var(--color-primary-light)',
+    background: ERP_COLORS.primarySoft,
+    border: `1px solid ${ERP_COLORS.primaryHover}`,
     borderRadius: 10,
     padding: '14px 16px',
     cursor: 'pointer',
@@ -243,12 +287,12 @@ const styles = {
     textAlign: 'left',
     transition: 'all 0.2s',
     transform: 'translateY(-1px)',
-    boxShadow: '0 4px 12px rgba(var(--color-primary-rgb),0.12)',
+    boxShadow: '0 4px 12px rgba(194, 65, 12, 0.14)',
   },
   portalCardActive: {
-    background: 'var(--color-primary-light)',
-    border: '1px solid #93C5FD',
-    boxShadow: '0 4px 12px rgba(var(--color-primary-rgb),0.10)',
+    background: ERP_COLORS.primarySoft,
+    border: `1px solid ${ERP_COLORS.primary}`,
+    boxShadow: '0 4px 14px rgba(194, 65, 12, 0.16)',
   },
   portalIcon: {
     width: 40,
@@ -265,12 +309,12 @@ const styles = {
   portalTitle: {
     fontSize: 14,
     fontWeight: 600,
-    color: '#0F172A',
+    color: ERP_COLORS.text,
     lineHeight: '1.2',
   },
   portalSub: {
     fontSize: 12,
-    color: '#64748B',
+    color: ERP_COLORS.textMuted,
     marginTop: 2,
   },
   footer: {

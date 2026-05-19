@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout, Menu } from 'antd';
 import {
   DashboardOutlined,
@@ -27,14 +27,15 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
 import { ERP_COLORS } from '@/theme/colors';
+import { setupAPI } from '@/services/api';
 
 const { Sider } = Layout;
 
 // ─── Role groups (mirror router/index.jsx) ────────────────────
-const SETUP_ROLES   = ['super_admin', 'admin'];
-const HIGH_PRIV     = ['super_admin', 'admin', 'principal'];
+const SETUP_ROLES = ['super_admin', 'admin'];
+const HIGH_PRIV = ['super_admin', 'admin', 'principal'];
 const FINANCE_ROLES = ['super_admin', 'admin', 'principal', 'accountant'];
-const STAFF_ROLES   = ['super_admin', 'admin', 'principal', 'faculty'];
+const STAFF_ROLES = ['super_admin', 'admin', 'principal', 'faculty'];
 
 const allMenuItems = [
   // ── Core ───────────────────────────────────────────────────
@@ -212,23 +213,49 @@ const allMenuItems = [
 ];
 
 const Sidebar = ({ collapsed, onCollapse }) => {
-  const navigate  = useNavigate();
-  const location  = useLocation();
-  const user      = useAuthStore((s) => s.user);
-  const userRole  = user?.role || 'admin';
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [logoUrl, setLogoUrl] = useState(null);
+
+  useEffect(() => {
+    setupAPI.getSchoolSetting()
+      .then((res) => {
+        if (res.data?.logoUrl) {
+          setLogoUrl(res.data.logoUrl);
+        }
+      })
+      .catch(() => { });
+  }, []);
+  const user = useAuthStore((s) => s.user);
+  // const userRole  = user?.role || 'admin';
+
+  const normalizeRole = (r) =>
+    String(r || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/-+/g, '_');
+
+  const userRole = normalizeRole(user?.role) || 'admin';
 
   // Filter items by role; strip the roles key before passing to Ant Menu
   const menuItems = allMenuItems
     .filter((item) => item.roles?.includes(userRole))
-    .map(({ roles, ...rest }) => rest);
-
+    .map(({ roles, ...rest }, index) => {
+      if (rest.type === 'divider') return { type: 'divider', key: `divider-${index}` };
+      return rest;
+    });
+  console.log('ROLE FROM STORE:', user?.role, 'NORMALIZED:', userRole);
+  console.log("MENU KEYS:", menuItems.map(i => i?.key || i?.type));
   // Highlight the current page
-  const selectedKey = menuItems.find((item) =>
-    item.key && (
-      location.pathname === item.key ||
-      (item.key !== '/' && location.pathname.startsWith(item.key))
-    )
-  )?.key || '/';
+  const selectedKey =
+    menuItems
+      .filter((i) => i && i.type !== 'divider' && i.key)
+      .find(
+        (item) =>
+          location.pathname === item.key ||
+          (item.key !== '/' && location.pathname.startsWith(item.key))
+      )?.key || '/';
 
   return (
     <Sider
@@ -246,6 +273,7 @@ const Sidebar = ({ collapsed, onCollapse }) => {
         top: 0,
         bottom: 0,
         zIndex: 100,
+        background: ERP_COLORS.sidebar,
       }}
       theme="dark"
     >
@@ -261,23 +289,38 @@ const Sidebar = ({ collapsed, onCollapse }) => {
           transition: 'all 0.2s',
         }}
       >
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            background: `linear-gradient(135deg, ${ERP_COLORS.primary}, ${ERP_COLORS.secondary})`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#FFF',
-            fontWeight: 700,
-            fontSize: 13,
-            flexShrink: 0,
-          }}
-        >
-          V
-        </div>
+        {logoUrl ? (
+          <img
+            src={logoUrl}
+            alt="School Logo"
+            style={{
+              maxHeight: 34,
+              maxWidth: collapsed ? 40 : 100,
+              objectFit: 'contain',
+              backgroundColor: 'transparent',
+              flexShrink: 0,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: `linear-gradient(135deg, ${ERP_COLORS.sidebarActive}, ${ERP_COLORS.primary})`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#FFF',
+              fontWeight: 700,
+              fontSize: 13,
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+          >
+            V
+          </div>
+        )}
         {!collapsed && (
           <span
             style={{
@@ -286,6 +329,7 @@ const Sidebar = ({ collapsed, onCollapse }) => {
               fontSize: 16,
               marginLeft: 12,
               whiteSpace: 'nowrap',
+              lineHeight: 1,
             }}
           >
             VSS ERP
@@ -294,14 +338,28 @@ const Sidebar = ({ collapsed, onCollapse }) => {
       </div>
 
       {/* Navigation */}
-      <Menu
-        theme="dark"
-        mode="inline"
-        selectedKeys={[selectedKey]}
-        items={menuItems}
-        onClick={({ key }) => navigate(key)}
-        style={{ borderRight: 'none', marginTop: 8 }}
-      />
+      {/* Navigation */}
+      <div
+        style={{
+          height: 'calc(100vh - 64px)', // 64 = header brand height
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          paddingBottom: 50,
+        }}
+      >
+        <Menu
+          theme="dark"
+          mode="inline"
+          selectedKeys={[selectedKey]}
+          items={menuItems}
+          onClick={({ key }) => navigate(key)}
+          style={{
+            borderRight: 'none',
+            marginTop: 8,
+            background: 'transparent',
+          }}
+        />
+      </div>
     </Sider>
   );
 };

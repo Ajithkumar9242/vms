@@ -72,6 +72,7 @@ const FacultyNotifications = React.lazy(() => import('@/pages/faculty/FacultyNot
 const FacultyProfile = React.lazy(() => import('@/pages/faculty/FacultyProfile'));
 const AssignmentManager = React.lazy(() => import('@/pages/faculty/AssignmentManager'));
 const MarksEntryPage = React.lazy(() => import('@/pages/exams/MarksEntry'));
+const FacultyMarksEntry = React.lazy(() => import('@/pages/faculty/FacultyMarksEntry'));
 // ─── Placeholder pages (temporarily disabled features) ────
 const ComingSoonPage = (title) => React.lazy(() =>
   Promise.resolve({
@@ -163,7 +164,7 @@ const AppRouter = () => (
                 <Route path="notifications" element={<FacultyNotifications />} />
                 <Route path="profile"      element={<FacultyProfile />} />
                 <Route path="assignments"  element={<AssignmentManager />} />
-                <Route path="marks"        element={<MarksEntryPage />} />
+                <Route path="marks"        element={<FacultyMarksEntry />} />
                 <Route path="materials"    element={<StudyMaterialsPage />} />
               </Routes>
             </RoleRoute>

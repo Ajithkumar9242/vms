@@ -10,6 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
 import { notificationAPI, searchAPI } from '@/services/api';
+import { ERP_COLORS } from '@/theme/colors';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 dayjs.extend(relativeTime);
@@ -289,7 +290,7 @@ const Navbar = ({ collapsed, onToggle }) => {
             <Avatar
               size={36}
               icon={<UserOutlined />}
-              style={{ background: 'var(--color-primary-dark)' }}
+              style={{ background: `linear-gradient(135deg, ${ERP_COLORS.sidebarActive}, ${ERP_COLORS.primary})` }}
             />
           </Space>
         </Dropdown>

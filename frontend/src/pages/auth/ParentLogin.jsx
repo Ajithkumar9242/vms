@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Card, Form, Input, Button, Typography, Space, Alert,
-  Steps, Divider, Modal,
+  Card, Form, Input, Button, Typography, Alert,
+  Steps, Divider, Modal, ConfigProvider,
 } from 'antd';
 import {
   MobileOutlined, SafetyCertificateOutlined,
@@ -10,9 +10,36 @@ import {
 import { authAPI } from '@/services/api';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
+import { ERP_COLORS } from '@/theme/colors';
 
 const { Title, Text, Paragraph } = Typography;
 const { Step } = Steps;
+
+const loginTheme = {
+  token: {
+    colorPrimary: ERP_COLORS.primary,
+    colorInfo: ERP_COLORS.primary,
+    colorLink: ERP_COLORS.primary,
+    colorLinkHover: ERP_COLORS.primaryHover,
+    controlOutline: 'rgba(194,65,12,0.20)',
+    controlOutlineWidth: 2,
+    borderRadius: 10,
+  },
+  components: {
+    Input: {
+      activeBorderColor: ERP_COLORS.primary,
+      hoverBorderColor: ERP_COLORS.primaryHover,
+    },
+    Button: {
+      colorPrimary: ERP_COLORS.primary,
+      colorPrimaryHover: ERP_COLORS.primaryHover,
+      colorPrimaryActive: ERP_COLORS.primaryActive,
+    },
+    Steps: {
+      colorPrimary: ERP_COLORS.primary,
+    },
+  },
+};
 
 const ParentLogin = () => {
   const navigate = useNavigate();
@@ -100,6 +127,10 @@ const ParentLogin = () => {
 
       if (data.refreshToken) localStorage.setItem('vms_refresh_token', data.refreshToken);
 
+      // Trigger splash on the parent shell after redirect
+      localStorage.setItem('erp_show_splash_parent', '1');
+      sessionStorage.removeItem('erp_parent_splash_session_seen');
+
       navigate('/parent/dashboard', { replace: true });
       // // Update auth store
       // if (data.user) setUser(data.user);
@@ -136,12 +167,13 @@ const ParentLogin = () => {
   };
 
   return (
+    <ConfigProvider theme={loginTheme}>
     <div style={{
       minHeight: '100vh',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)',
+      background: `linear-gradient(135deg, ${ERP_COLORS.sidebar} 0%, ${ERP_COLORS.sidebarActive} 58%, ${ERP_COLORS.primaryActive} 100%)`,
       padding: '20px',
     }}>
       <Card style={{
@@ -154,15 +186,18 @@ const ParentLogin = () => {
 
         {/* Logo / Title */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: 16,
-            background: 'linear-gradient(135deg, var(--color-primary-dark), var(--color-primary))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 16px',
-          }}>
-            <MobileOutlined style={{ color: '#fff', fontSize: 28 }} />
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: '50%',
+              background: `linear-gradient(135deg, ${ERP_COLORS.sidebarActive}, ${ERP_COLORS.primary})`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 17, fontWeight: 700,
+            }}>
+              V
+            </div>
+            <div style={{ color: ERP_COLORS.text, fontSize: 18, fontWeight: 700 }}>VSS ERP</div>
           </div>
-          <Title level={3} style={{ margin: 0, color: 'var(--color-primary-dark)' }}>Parent Login</Title>
+          <Title level={3} style={{ margin: 0, color: ERP_COLORS.text }}>Parent Login</Title>
           <Text type="secondary" style={{ fontSize: 13 }}>
             {step === 0 ? 'Enter your registered mobile number' : 'Enter the OTP sent to your phone'}
           </Text>
@@ -211,7 +246,7 @@ const ParentLogin = () => {
             <div style={{ textAlign: 'center' }}>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 Are you an admin or faculty?{' '}
-                <a href="/login" style={{ color: 'var(--color-primary)' }}>Login with email</a>
+                <a href="/login" style={{ color: ERP_COLORS.primary }}>Login with email</a>
               </Text>
             </div>
           </div>
@@ -245,12 +280,18 @@ const ParentLogin = () => {
                     border: '2px solid #E2E8F0',
                     borderRadius: 10,
                     outline: 'none',
-                    background: digit ? 'var(--color-primary-light)' : '#fff',
-                    color: 'var(--color-primary-dark)',
+                    background: digit ? ERP_COLORS.primarySoft : '#fff',
+                    color: ERP_COLORS.primaryActive,
                     transition: 'all 0.2s',
                   }}
-                  onFocus={e => (e.target.style.borderColor = 'var(--color-primary)')}
-                  onBlur={e => (e.target.style.borderColor = '#E2E8F0')}
+                  onFocus={e => {
+                    e.target.style.borderColor = ERP_COLORS.primary;
+                    e.target.style.boxShadow = '0 0 0 2px rgba(194,65,12,0.14)';
+                  }}
+                  onBlur={e => {
+                    e.target.style.borderColor = '#E2E8F0';
+                    e.target.style.boxShadow = 'none';
+                  }}
                   inputMode="numeric"
                   id={`otp-box-${i}`}
                 />
@@ -291,6 +332,7 @@ const ParentLogin = () => {
         )}
       </Card>
     </div>
+    </ConfigProvider>
   );
 };
 

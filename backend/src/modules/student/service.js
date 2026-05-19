@@ -71,6 +71,141 @@ class StudentService {
 
     return student;
   }
+
+  /**
+   * Get an aggregate student profile including admission, attendance, fees, and exams.
+   * Returns the stable shape consumed by the Student Profile drawer.
+   * @param {string} studentId
+   */
+  static async getStudentProfile(studentId) {
+    const student = await Student.findById(studentId)
+      .populate('classId', 'name code')
+      .populate('sectionId', 'name capacity')
+      .populate('academicYearId', 'name startDate endDate')
+      .lean();
+
+    if (!student) {
+      throw new AppError('Student not found', 404);
+    }
+
+    // ─── Admission ──────────────────────────────────────────────
+    let admission = null;
+    if (student.admissionId) {
+      const Admission = mongoose.model('Admission');
+      admission = await Admission.findById(student.admissionId).lean();
+    }
+
+    // ─── Attendance ─────────────────────────────────────────────
+    let attendance = { summary: { totalConducted: 0, totalAttended: 0, percentage: 0 }, monthly: [] };
+    try {
+      const AttendanceService = require('../attendance/service');
+      const monthlyReport = await AttendanceService.getMonthlyStudentReport(student._id);
+      if (monthlyReport) {
+        const pct = monthlyReport.totalConducted > 0
+          ? Math.round((monthlyReport.totalAttended / monthlyReport.totalConducted) * 1000) / 10
+          : 0;
+        attendance = {
+          summary: {
+            totalConducted: monthlyReport.totalConducted || 0,
+            totalAttended: monthlyReport.totalAttended || 0,
+            totalAbsent: Math.max(0, (monthlyReport.totalConducted || 0) - (monthlyReport.totalAttended || 0)),
+            percentage: pct,
+          },
+          monthly: monthlyReport.monthWise || [],
+        };
+      }
+    } catch (e) {
+      console.warn('[Profile] attendance fetch failed:', e.message);
+    }
+
+    // ─── Fees (full invoice shape, same as parent portal) ────────
+    let fees = { summary: null, invoice: null, installments: [], payments: [] };
+    try {
+      const FeesService = require('../fees/service');
+      const SetupService = require('../setup/service');
+      const FeePayment = require('../../models/FeePayment');
+
+      let academicYearId = student.academicYearId?._id || student.academicYearId;
+      if (!academicYearId) {
+        academicYearId = await SetupService.resolveAcademicYearId(null);
+      }
+
+      const feeData = await FeesService.getInvoice(student._id, academicYearId);
+
+      if (feeData) {
+        const isShapeA = feeData.invoice !== undefined;
+        const inv = isShapeA ? feeData.invoice : feeData;
+
+        let payments = [];
+        if (isShapeA && feeData.payments) {
+          payments = feeData.payments;
+        } else if (inv && inv._id) {
+          payments = await FeePayment.find({ invoiceId: inv._id }).sort({ paidAt: -1 }).lean();
+        }
+
+        const summary = isShapeA && feeData.summary ? feeData.summary : (inv ? {
+          totalFee: inv.netFee || 0,
+          totalPaid: inv.paidAmount || 0,
+          totalDue: inv.dueAmount || 0,
+          grossFee: inv.grossFee || 0,
+          discountAmount: inv.discountAmount || 0,
+          penaltyAmount: inv.penaltyAmount || 0,
+          status: ({ paid: 'Paid', partial: 'Partial', overdue: 'Overdue' })[inv.status] || 'Unpaid',
+          nextDueDate: inv.nextDueDate || null,
+        } : null);
+
+        fees = {
+          summary,
+          invoice: inv ? {
+            _id: inv._id,
+            invoiceNumber: inv.invoiceNumber,
+            status: inv.status,
+            grossFee: inv.grossFee,
+            netFee: inv.netFee,
+            discountAmount: inv.discountAmount,
+            penaltyAmount: inv.penaltyAmount,
+            paidAmount: inv.paidAmount,
+            dueAmount: inv.dueAmount,
+            nextDueDate: inv.nextDueDate,
+            locked: inv.locked,
+          } : null,
+          installments: inv?.installments || [],
+          payments: payments || [],
+        };
+      }
+      console.log('[Profile Fees]', { studentId: student._id, year: academicYearId, hasInvoice: !!fees.invoice, payments: fees.payments.length });
+    } catch (e) {
+      console.warn('[Profile] fees fetch failed:', e.message);
+    }
+
+    // ─── Exams ────────────────────────────────────────────────────
+    let exams = { results: [], marksCard: null };
+    try {
+      const ExamService = require('../exam/service');
+      const examData = await ExamService.getStudentResults(student._id.toString());
+      const results = examData?.results || [];
+      exams = {
+        results,
+        marksCard: results.length > 0 ? {
+          examCount: results.length,
+          overall: (() => {
+            const total = results.reduce((s, r) => s + (r.totalMax || 0), 0);
+            const obtained = results.reduce((s, r) => s + (r.totalObtained || 0), 0);
+            return {
+              totalObtained: obtained,
+              totalMax: total,
+              percentage: total > 0 ? Math.round((obtained / total) * 1000) / 10 : 0,
+            };
+          })(),
+        } : null,
+      };
+    } catch (e) {
+      console.warn('[Profile] exams fetch failed:', e.message);
+    }
+
+    return { student, admission, attendance, fees, exams };
+  }
+
   /**
    * Directly create a student (admin flow — no admission required).
    * @param {Object} data - student data

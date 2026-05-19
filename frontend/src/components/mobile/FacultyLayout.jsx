@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
 import { notificationAPI } from '@/services/api';
 import useFCM from '@/hooks/useFCM';
+import MobileSplash from './MobileSplash';
 import {
   CalendarOutlined, TeamOutlined, FileTextOutlined,
   BellOutlined, UserOutlined, EditOutlined,
@@ -13,15 +14,36 @@ const FACULTY_NAV = (badge = 0) => [
   { to: '/faculty-app/students',      label: 'Students',    icon: <TeamOutlined /> },
   { to: '/faculty-app/assignments',   label: 'Assignments', icon: <FileTextOutlined /> },
   { to: '/faculty-app/marks',         label: 'Marks',       icon: <EditOutlined /> },
-  // Study Materials: temporarily hidden
-  // { to: '/faculty-app/materials', label: 'Materials', icon: <BookOutlined /> },
   { to: '/faculty-app/notifications', label: 'Alerts',      icon: <BellOutlined />,      badge },
   { to: '/faculty-app/profile',       label: 'Profile',     icon: <UserOutlined /> },
 ];
 
+// Splash key shared with FacultyLogin
+const SPLASH_KEY = 'erp_show_splash_faculty';
+
 const FacultyLayout = ({ title, subtitle, children }) => {
   const user = useAuthStore((s) => s.user);
   const [unread, setUnread] = useState(0);
+
+  // Show splash if login page set the flag OR on very first mount (if logged in)
+  const [showSplash, setShowSplash] = useState(() => {
+    if (localStorage.getItem(SPLASH_KEY) === '1') {
+      localStorage.removeItem(SPLASH_KEY);
+      return true;
+    }
+    // Also show on very first session view
+    const seenKey = 'erp_faculty_splash_session_seen';
+    if (!sessionStorage.getItem(seenKey)) return true;
+    return false;
+  });
+
+  useEffect(() => {
+    if (!showSplash) return undefined;
+    // Mark seen so subsequent page navigations don't re-show
+    sessionStorage.setItem('erp_faculty_splash_session_seen', '1');
+    const t = setTimeout(() => setShowSplash(false), 1100);
+    return () => clearTimeout(t);
+  }, [showSplash]);
 
   const refreshUnread = useCallback(() => {
     notificationAPI.getUnreadCount()
@@ -38,6 +60,8 @@ const FacultyLayout = ({ title, subtitle, children }) => {
 
   return (
     <div className="mobile-shell">
+      <MobileSplash open={showSplash} label="VMS School ERP — Faculty" />
+
       <header className="mobile-header">
         <div>
           <div className="mobile-header-title">{title || 'Faculty Portal'}</div>
@@ -47,7 +71,7 @@ const FacultyLayout = ({ title, subtitle, children }) => {
         </div>
       </header>
 
-      <main className="mobile-content m-fade-in">{children}</main>
+      <main className="mobile-content mobile-content--full m-fade-in">{children}</main>
 
       <nav className="mobile-nav">
         {navItems.map((item) => (

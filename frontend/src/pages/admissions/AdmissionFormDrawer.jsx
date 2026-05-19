@@ -11,10 +11,19 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { admissionAPI, schoolAPI, setupAPI, uploadAPI } from '@/services/api';
+import useAuthStore from '@/store/authStore';
 import WebcamCapture from '@/components/WebcamCapture';
 
 const { Title, Text } = Typography;
 const { Panel } = Collapse;
+
+// ─── normalizeUrl helper ─────────────────────────────────────
+const normalizeUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http') || url.startsWith('data:')) return url;
+  const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+  return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+};
 
 // ─── CAPS input wrapper ────────────────────────────────────────
 // Auto-uppercases value on blur for name fields
@@ -42,6 +51,10 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
   const [academicYears, setAcademicYears] = useState([]);
   const [secondLang, setSecondLang] = useState('');
   const isEdit = !!admission;
+  const { user } = useAuthStore();
+  const isSuperAdmin = user?.role === 'super_admin';
+  const isApproved = admission?.status === 'approved';
+  const canEdit = !isApproved || isSuperAdmin;
 
   // ─── Load dropdowns on open ───────────────────────────────
   useEffect(() => {
@@ -70,11 +83,17 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
         classId: cid,
         sectionId: admission.sectionId?._id || admission.sectionId,
         academicYearId: admission.academicYearId?._id || admission.academicYearId,
+        admissionDate: admission.admissionDate ? dayjs(admission.admissionDate) : null,
         dateOfBirth: admission.dateOfBirth ? dayjs(admission.dateOfBirth) : null,
         tcDate: admission.tcDate ? dayjs(admission.tcDate) : null,
         father: admission.father || {},
         mother: admission.mother || {},
         guardian: admission.guardian || {},
+        officeUse: {
+          ...admission.officeUse,
+          receiptDate: admission.officeUse?.receiptDate ? dayjs(admission.officeUse.receiptDate) : null,
+          documentsVerifiedDate: admission.officeUse?.documentsVerifiedDate ? dayjs(admission.officeUse.documentsVerifiedDate) : null,
+        },
       });
       setSecondLang(admission.secondLanguage || '');
       // Pre-load sections for the existing class
@@ -102,8 +121,11 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+      if (values.admissionDate) values.admissionDate = values.admissionDate ? new Date(values.admissionDate).toISOString() : null;
       if (values.dateOfBirth) values.dateOfBirth = values.dateOfBirth ? new Date(values.dateOfBirth).toISOString() : null;
       if (values.tcDate) values.tcDate = values.tcDate ? new Date(values.tcDate).toISOString() : null;
+      if (values.officeUse?.receiptDate) values.officeUse.receiptDate = new Date(values.officeUse.receiptDate).toISOString();
+      if (values.officeUse?.documentsVerifiedDate) values.officeUse.documentsVerifiedDate = new Date(values.officeUse.documentsVerifiedDate).toISOString();
       setLoading(true);
       if (isEdit) {
         await admissionAPI.update(admission._id, values);
@@ -140,18 +162,36 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
       extra={
         <Space>
           <Button onClick={onClose}>Cancel</Button>
-          <Button type="primary" loading={loading} onClick={handleSubmit}>
+          <Button type="primary" loading={loading} onClick={handleSubmit} disabled={isEdit && !canEdit}>
             {isEdit ? 'Update Application' : 'Create Application'}
           </Button>
         </Space>
       }
     >
-      <Form form={form} layout="vertical" size="small">
+      <Form form={form} layout="vertical" size="small" disabled={isEdit && !canEdit}>
+        {isEdit && !canEdit && (
+          <Alert message="Approved admissions cannot be edited directly." type="warning" showIcon style={{ marginBottom: 16 }} />
+        )}
         <Collapse defaultActiveKey={['academic', 'student']} ghost>
 
           {/* ─── SECTION 1: Academic / Admission Details ─── */}
           <Panel header={<><BookOutlined /> &nbsp;Academic / Admission Details</>} key="academic">
             <Row gutter={12}>
+              <Col span={8}>
+                <Form.Item label="Application Form No" name="applicationFormNo">
+                  <Input placeholder="Office use" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item label="Admission No" name="admissionNo">
+                  <Input placeholder="Auto or Enter" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item label="Roll Number" name="rollNo">
+                  <Input placeholder="Auto or Enter" />
+                </Form.Item>
+              </Col>
               <Col span={12}>
                 <Form.Item label="Academic Year" name="academicYearId">
                   <Select options={academicYears} placeholder="Select year" />
@@ -268,22 +308,51 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
               </Col>
             </Row>
 
+            <Divider style={{ margin: '8px 0' }}>Medical & Special Education Needs</Divider>
+            <Row gutter={12}>
+              <Col span={8}>
+                <Form.Item label="Blood Group" name="bloodGroup">
+                  <Input placeholder="e.g. O+" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item label="Allergies" name="allergies">
+                  <Input />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item label="Health Conditions" name="medicalConditions">
+                  <Input />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Special Need / Disability" name="senType">
+                  <Input placeholder="Type of need (if any)" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Support Required" name="senSupportLevel">
+                  <Select options={['Mild', 'Moderate', 'Intensive'].map(v => ({ label: v, value: v }))} allowClear />
+                </Form.Item>
+              </Col>
+            </Row>
+
             {/* Webcam / Photo Capture */}
             <Divider style={{ margin: '8px 0' }}>Student Photo</Divider>
             <Row gutter={12}>
               <Col span={24}>
-                <Form.Item name="studentPhotoUrl" label="">
+                <Form.Item name="studentPhoto" label="">
                   <WebcamCapture
-                    value={form.getFieldValue('studentPhotoUrl') || admission?.studentPhotoUrl}
+                    value={normalizeUrl(form.getFieldValue('studentPhoto') || admission?.studentPhoto)}
                     onCapture={async (dataUrl, file) => {
                       try {
                         // Upload to server
                         const res = await uploadAPI.upload(file, 'admissions');
                         const url = res?.data?.url || res?.url || dataUrl;
-                        form.setFieldValue('studentPhotoUrl', url);
+                        form.setFieldValue('studentPhoto', url);
                       } catch {
                         // Fallback: store base64 in form (will be uploaded on submit)
-                        form.setFieldValue('studentPhotoUrl', dataUrl);
+                        form.setFieldValue('studentPhoto', dataUrl);
                       }
                     }}
                   />
@@ -497,22 +566,75 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
             </Row>
           </Panel>
 
-          {/* ─── SECTION 8: Documents ─── */}
-          <Panel header={<><UploadOutlined /> &nbsp;Documents</>} key="documents">
-            <Row gutter={[16, 8]}>
-              {[
-                { label: 'Aadhaar Card', id: 'doc-aadhaar' },
-                { label: 'Transfer Certificate (TC)', id: 'doc-tc' },
-                { label: 'Marks Card / Report', id: 'doc-marks' },
-                { label: 'Other Documents', id: 'doc-other' },
-              ].map(doc => (
-                <Col span={12} key={doc.id}>
-                  <div style={{ marginBottom: 4, fontSize: 12, color: '#374151' }}>{doc.label}</div>
-                  <Upload accept="image/*,.pdf" maxCount={3} beforeUpload={() => false} listType="text" id={doc.id}>
-                    <Button icon={<UploadOutlined />} size="small">Upload / Camera</Button>
-                  </Upload>
-                </Col>
-              ))}
+          {/* ─── SECTION 8: Documents Checklist ─── */}
+          <Panel header={<><UploadOutlined /> &nbsp;Documents Submitted</>} key="documents">
+            <Row gutter={12}>
+              <Col span={8}>
+                <Form.Item name={['documentChecklist', 'birthCertificate']} valuePropName="checked">
+                  <Checkbox>Birth Certificate</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name={['documentChecklist', 'aadhaarStudent']} valuePropName="checked">
+                  <Checkbox>Aadhaar (Student)</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name={['documentChecklist', 'aadhaarParents']} valuePropName="checked">
+                  <Checkbox>Aadhaar (Parents)</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name={['documentChecklist', 'previousReportCard']} valuePropName="checked">
+                  <Checkbox>Previous Report Card</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name={['documentChecklist', 'tc']} valuePropName="checked">
+                  <Checkbox>Transfer Certificate</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name={['documentChecklist', 'casteCertificate']} valuePropName="checked">
+                  <Checkbox>Caste Certificate</Checkbox>
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Photos Submitted (Count)" name={['documentChecklist', 'photosCount']} initialValue={0}>
+                  <InputNumber min={0} />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Panel>
+
+          {/* ─── SECTION 9: Office Use ─── */}
+          <Panel header={<><BookOutlined /> &nbsp;For Office Use Only</>} key="officeUse">
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item label="Fee Receipt No" name={['officeUse', 'feeReceiptNo']}>
+                  <Input />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Receipt Date" name={['officeUse', 'receiptDate']}>
+                  <DatePicker style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Documents Verified By" name={['officeUse', 'documentsVerifiedBy']}>
+                  <Input />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Verified Date" name={['officeUse', 'documentsVerifiedDate']}>
+                  <DatePicker style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={24}>
+                <Form.Item label="Principal Remarks" name={['officeUse', 'principalRemarks']}>
+                  <Input.TextArea rows={2} />
+                </Form.Item>
+              </Col>
             </Row>
           </Panel>
         </Collapse>

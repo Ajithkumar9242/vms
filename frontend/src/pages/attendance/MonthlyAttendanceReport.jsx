@@ -9,6 +9,10 @@ import { schoolAPI, attendanceAPI } from '@/services/api';
 
 const { Text } = Typography;
 
+// ERP brand tokens (avoid relying on CSS vars that may be undefined in mobile shell)
+const PRIMARY_DARK = '#9A3412';
+const SECONDARY    = '#7C3AED';
+
 const MonthlyAttendanceReport = () => {
   const { message } = App.useApp();
 
@@ -50,15 +54,16 @@ const MonthlyAttendanceReport = () => {
         rowKey="monthKey"
         pagination={false}
         size="small"
+        scroll={{ x: 340 }}
         columns={[
           { title: 'Month', dataIndex: 'monthKey', key: 'mk',
-            render: mk => dayjs(mk, 'YYYY-MM').format('MMMM YYYY') },
-          { title: 'Conducted', dataIndex: 'conducted', key: 'c', align: 'center' },
-          { title: 'Attended', dataIndex: 'attended', key: 'a', align: 'center',
+            render: mk => dayjs(mk, 'YYYY-MM').format('MMM YYYY') },
+          { title: 'Conducted', dataIndex: 'conducted', key: 'c', align: 'center', width: 90 },
+          { title: 'Attended', dataIndex: 'attended', key: 'a', align: 'center', width: 80,
             render: v => <Tag color="orange">{v}</Tag> },
-          { title: 'Absent', key: 'abs', align: 'center',
+          { title: 'Absent', key: 'abs', align: 'center', width: 70,
             render: (_, r) => <Tag color="red">{r.conducted - r.attended}</Tag> },
-          { title: '%', key: 'pct', align: 'center',
+          { title: '%', key: 'pct', align: 'center', width: 60,
             render: (_, r) => {
               const p = r.conducted > 0 ? Math.round((r.attended / r.conducted) * 100) : 0;
               const color = p >= 75 ? '#22C55E' : p >= 50 ? '#F59E0B' : '#EF4444';
@@ -70,28 +75,28 @@ const MonthlyAttendanceReport = () => {
   };
 
   const columns = [
-    { title: '#', key: 'i', width: 44, render: (_, __, i) => i + 1 },
-    { title: 'Roll No', dataIndex: 'rollNo', key: 'rollNo', width: 80 },
+    { title: '#', key: 'i', width: 40, render: (_, __, i) => i + 1 },
+    { title: 'Roll', dataIndex: 'rollNo', key: 'rollNo', width: 70 },
     {
       title: 'Student Name', dataIndex: 'name', key: 'name',
-      render: t => <Text strong>{t}</Text>,
+      render: t => <Text strong style={{ fontSize: 13 }}>{t}</Text>,
     },
     {
-      title: 'Total Conducted', dataIndex: 'totalConducted', key: 'totalConducted',
-      width: 130, align: 'center',
+      title: 'Conducted', dataIndex: 'totalConducted', key: 'totalConducted',
+      width: 90, align: 'center',
     },
     {
       title: 'Attended', dataIndex: 'totalAttended', key: 'totalAttended',
-      width: 100, align: 'center',
+      width: 85, align: 'center',
       render: v => <Tag color="orange">{v}</Tag>,
     },
     {
-      title: 'Absent', key: 'absent', width: 90, align: 'center',
+      title: 'Absent', key: 'absent', width: 75, align: 'center',
       render: (_, r) => <Tag color="red">{r.totalConducted - r.totalAttended}</Tag>,
     },
     {
-      title: 'Attendance %', dataIndex: 'percentage', key: 'percentage',
-      width: 130, align: 'center',
+      title: '%', dataIndex: 'percentage', key: 'percentage',
+      width: 70, align: 'center',
       sorter: (a, b) => a.percentage - b.percentage,
       render: val => {
         const color = val >= 75 ? '#22C55E' : val >= 50 ? '#F59E0B' : '#EF4444';
@@ -103,56 +108,55 @@ const MonthlyAttendanceReport = () => {
   const stats = reportData;
 
   return (
-    <>
-      {/* Class selector */}
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={24} sm={8} md={6}>
-          <Select
-            placeholder="Select class"
-            style={{ width: '100%' }}
-            value={classId}
-            onChange={val => setClassId(val)}
-            options={classes.map(c => ({ label: c.name, value: c._id }))}
-            allowClear
-            id="monthly-report-class-select"
-          />
-        </Col>
-      </Row>
+    <div className="faculty-module">
 
-      {/* Summary cards */}
+      {/* ── Class selector ── */}
+      <div style={{ marginBottom: 14 }}>
+        <Select
+          placeholder="Select class"
+          style={{ width: '100%' }}
+          value={classId}
+          onChange={val => setClassId(val)}
+          options={classes.map(c => ({ label: c.name, value: c._id }))}
+          allowClear
+          id="monthly-report-class-select"
+        />
+      </div>
+
+      {/* ── Summary stat cards — 2-per-row on mobile ── */}
       {stats && (
-        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <Row gutter={[10, 10]} style={{ marginBottom: 14 }}>
           <Col xs={12} sm={6}>
-            <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <Card size="small" variant="borderless" className="faculty-stat-card">
               <Statistic
-                title={<span style={{ fontSize: 12, color: '#64748B' }}>Total Months</span>}
+                title={<span style={{ fontSize: 11, color: '#64748B' }}>Months</span>}
                 value={stats.months?.length || 0}
                 styles={{ content: { fontSize: 20, fontWeight: 700 } }}
               />
             </Card>
           </Col>
           <Col xs={12} sm={6}>
-            <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <Card size="small" variant="borderless" className="faculty-stat-card">
               <Statistic
-                title={<span style={{ fontSize: 12, color: '#64748B' }}>Total Conducted</span>}
+                title={<span style={{ fontSize: 11, color: '#64748B' }}>Conducted</span>}
                 value={stats.totalConducted || 0}
-                styles={{ content: { fontSize: 20, fontWeight: 700, color: 'var(--color-primary-dark)' } }}
+                styles={{ content: { fontSize: 20, fontWeight: 700, color: PRIMARY_DARK } }}
               />
             </Card>
           </Col>
           <Col xs={12} sm={6}>
-            <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <Card size="small" variant="borderless" className="faculty-stat-card">
               <Statistic
-                title={<span style={{ fontSize: 12, color: '#64748B' }}>Students</span>}
+                title={<span style={{ fontSize: 11, color: '#64748B' }}>Students</span>}
                 value={stats.students?.length || 0}
                 styles={{ content: { fontSize: 20, fontWeight: 700 } }}
               />
             </Card>
           </Col>
           <Col xs={12} sm={6}>
-            <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <Card size="small" variant="borderless" className="faculty-stat-card">
               <Statistic
-                title={<span style={{ fontSize: 12, color: '#64748B' }}>Class Avg %</span>}
+                title={<span style={{ fontSize: 11, color: '#64748B' }}>Class Avg</span>}
                 value={
                   stats.students?.length
                     ? Math.round(
@@ -161,32 +165,35 @@ const MonthlyAttendanceReport = () => {
                     : 0
                 }
                 suffix="%"
-                prefix={<PercentageOutlined style={{ color: 'var(--color-secondary)' }} />}
-                styles={{ content: { fontSize: 20, fontWeight: 700, color: 'var(--color-secondary)' } }}
+                prefix={<PercentageOutlined style={{ color: SECONDARY }} />}
+                styles={{ content: { fontSize: 20, fontWeight: 700, color: SECONDARY } }}
               />
             </Card>
           </Col>
         </Row>
       )}
 
+      {/* ── Table ── */}
       {!classId ? (
         <Empty description="Select a class to view the cumulative monthly report" style={{ marginTop: 48 }} />
       ) : (
-        <Table
-          columns={columns}
-          dataSource={stats?.students || []}
-          rowKey="_id"
-          loading={loading}
-          pagination={{ showSizeChanger: true, showTotal: t => `Total ${t} students`, pageSize: 20 }}
-          scroll={{ x: 740 }}
-          size="middle"
-          bordered={false}
-          style={{ background: '#FFF', borderRadius: 8 }}
-          locale={{ emptyText: 'No monthly attendance data recorded for this class' }}
-          expandable={{ expandedRowRender, rowExpandable: r => r.monthWise?.length > 0 }}
-        />
+        <div className="faculty-table-wrap">
+          <Table
+            columns={columns}
+            dataSource={stats?.students || []}
+            rowKey="_id"
+            loading={loading}
+            pagination={{ showSizeChanger: false, pageSize: 20,
+              showTotal: t => `${t} students` }}
+            scroll={{ x: 500 }}
+            size="small"
+            bordered={false}
+            locale={{ emptyText: 'No monthly attendance data for this class' }}
+            expandable={{ expandedRowRender, rowExpandable: r => r.monthWise?.length > 0 }}
+          />
+        </div>
       )}
-    </>
+    </div>
   );
 };
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Card, Form, Input, Button, Typography, Alert,
-  Steps, Divider, Modal,
+  Steps, Divider, Modal, ConfigProvider,
 } from 'antd';
 import {
   UserOutlined, SafetyCertificateOutlined,
@@ -10,8 +10,35 @@ import {
 import { authAPI } from '@/services/api';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
+import { ERP_COLORS } from '@/theme/colors';
 
 const { Title, Text, Paragraph } = Typography;
+
+const loginTheme = {
+  token: {
+    colorPrimary: ERP_COLORS.primary,
+    colorInfo: ERP_COLORS.primary,
+    colorLink: ERP_COLORS.primary,
+    colorLinkHover: ERP_COLORS.primaryHover,
+    controlOutline: 'rgba(194,65,12,0.20)',
+    controlOutlineWidth: 2,
+    borderRadius: 10,
+  },
+  components: {
+    Input: {
+      activeBorderColor: ERP_COLORS.primary,
+      hoverBorderColor: ERP_COLORS.primaryHover,
+    },
+    Button: {
+      colorPrimary: ERP_COLORS.primary,
+      colorPrimaryHover: ERP_COLORS.primaryHover,
+      colorPrimaryActive: ERP_COLORS.primaryActive,
+    },
+    Steps: {
+      colorPrimary: ERP_COLORS.primary,
+    },
+  },
+};
 
 /**
  * FacultyLogin — OTP-based login for faculty.
@@ -98,6 +125,10 @@ const FacultyLogin = () => {
       setAuth(data.user, token);
       if (data.refreshToken) localStorage.setItem('vms_refresh_token', data.refreshToken);
 
+      // Trigger splash on the faculty shell after redirect
+      localStorage.setItem('erp_show_splash_faculty', '1');
+      sessionStorage.removeItem('erp_faculty_splash_session_seen');
+
       // Redirect to faculty app
       navigate('/faculty-app/dashboard', { replace: true });
     } catch (e) {
@@ -131,12 +162,13 @@ const FacultyLogin = () => {
   };
 
   return (
+    <ConfigProvider theme={loginTheme}>
     <div style={{
       minHeight: '100vh',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary-dark) 50%, var(--color-primary) 100%)',
+      background: `linear-gradient(135deg, ${ERP_COLORS.sidebar} 0%, ${ERP_COLORS.sidebarActive} 58%, ${ERP_COLORS.primaryActive} 100%)`,
       padding: '20px',
     }}>
       <Card style={{
@@ -145,21 +177,23 @@ const FacultyLogin = () => {
         borderRadius: 20,
         boxShadow: '0 24px 72px rgba(0,0,0,0.4)',
         overflow: 'hidden',
-        border: '1px solid rgba(var(--color-primary-rgb),0.2)',
+        border: `1px solid ${ERP_COLORS.border}`,
       }} bodyStyle={{ padding: '36px' }}>
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{
-            width: 68, height: 68, borderRadius: 18,
-            background: 'linear-gradient(135deg, var(--color-primary-dark), var(--color-primary))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 16px',
-            boxShadow: '0 8px 24px rgba(var(--color-primary-rgb),0.35)',
-          }}>
-            <UserOutlined style={{ color: '#fff', fontSize: 30 }} />
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: '50%',
+              background: `linear-gradient(135deg, ${ERP_COLORS.sidebarActive}, ${ERP_COLORS.primary})`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 17, fontWeight: 700,
+            }}>
+              V
+            </div>
+            <div style={{ color: ERP_COLORS.text, fontSize: 18, fontWeight: 700 }}>VSS ERP</div>
           </div>
-          <Title level={3} style={{ margin: 0, color: 'var(--color-primary-dark)' }}>Faculty Login</Title>
+          <Title level={3} style={{ margin: 0, color: ERP_COLORS.text }}>Faculty Login</Title>
           <Text type="secondary" style={{ fontSize: 13 }}>
             {step === 0 ? 'Enter your registered mobile number' : 'Enter the OTP sent to your phone'}
           </Text>
@@ -199,7 +233,7 @@ const FacultyLogin = () => {
                 loading={loading}
                 style={{
                   borderRadius: 10, height: 48, fontSize: 15, fontWeight: 600,
-                  background: 'linear-gradient(135deg, var(--color-primary-dark), var(--color-primary))',
+                  background: `linear-gradient(135deg, ${ERP_COLORS.primaryActive}, ${ERP_COLORS.primary})`,
                   border: 'none',
                 }}
                 id="btn-faculty-send-otp"
@@ -212,12 +246,12 @@ const FacultyLogin = () => {
             <div style={{ textAlign: 'center' }}>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 Admin login?{' '}
-                <a href="/login" style={{ color: 'var(--color-primary)' }}>Login with email</a>
+                <a href="/login" style={{ color: ERP_COLORS.primary }}>Login with email</a>
               </Text>
               <br />
               <Text type="secondary" style={{ fontSize: 12 }}>
                 Parent login?{' '}
-                <a href="/parent-login" style={{ color: 'var(--color-primary)' }}>Parent OTP Login</a>
+                <a href="/parent-login" style={{ color: ERP_COLORS.primary }}>Parent OTP Login</a>
               </Text>
             </div>
           </div>
@@ -248,12 +282,18 @@ const FacultyLogin = () => {
                     border: '2px solid #E2E8F0',
                     borderRadius: 10,
                     outline: 'none',
-                    background: digit ? 'var(--color-primary-light)' : '#fff',
-                    color: 'var(--color-primary-dark)',
+                    background: digit ? ERP_COLORS.primarySoft : '#fff',
+                    color: ERP_COLORS.primaryActive,
                     transition: 'all 0.2s',
                   }}
-                  onFocus={e => (e.target.style.borderColor = 'var(--color-primary)')}
-                  onBlur={e  => (e.target.style.borderColor = '#E2E8F0')}
+                  onFocus={e => {
+                    e.target.style.borderColor = ERP_COLORS.primary;
+                    e.target.style.boxShadow = '0 0 0 2px rgba(194,65,12,0.14)';
+                  }}
+                  onBlur={e  => {
+                    e.target.style.borderColor = '#E2E8F0';
+                    e.target.style.boxShadow = 'none';
+                  }}
                   inputMode="numeric"
                   id={`faculty-otp-${i}`}
                 />
@@ -269,7 +309,7 @@ const FacultyLogin = () => {
               disabled={otpValue.length < 6}
               style={{
                 borderRadius: 10, height: 48, fontSize: 15, fontWeight: 600,
-                background: 'linear-gradient(135deg, var(--color-primary-dark), var(--color-primary))',
+                background: `linear-gradient(135deg, ${ERP_COLORS.primaryActive}, ${ERP_COLORS.primary})`,
                 border: 'none',
               }}
               id="btn-faculty-verify-otp"
@@ -302,6 +342,7 @@ const FacultyLogin = () => {
         )}
       </Card>
     </div>
+    </ConfigProvider>
   );
 };
 

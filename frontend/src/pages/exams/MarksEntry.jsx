@@ -1,12 +1,43 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography, Select, Row, Col, Table, Button,
-  InputNumber, Tag, Empty, App, Space, Alert,
+  InputNumber, Tag, Empty, App, Space, Alert, ConfigProvider,
 } from 'antd';
 import { SaveOutlined, InfoCircleOutlined, LockOutlined } from '@ant-design/icons';
 import { examAPI, studentAPI } from '@/services/api';
+import { ERP_COLORS } from '@/theme/colors';
 
 const { Text } = Typography;
+
+const marksTheme = {
+  token: {
+    colorPrimary: ERP_COLORS.primary,
+    colorInfo: ERP_COLORS.primary,
+    colorLink: ERP_COLORS.primary,
+    controlOutline: 'rgba(194,65,12,0.20)',
+    controlOutlineWidth: 2,
+  },
+  components: {
+    InputNumber: {
+      activeBorderColor: ERP_COLORS.primary,
+      hoverBorderColor: ERP_COLORS.primaryHover,
+    },
+    Select: {
+      optionSelectedBg: ERP_COLORS.primarySoft,
+    },
+    Button: {
+      colorPrimary: ERP_COLORS.primary,
+      colorPrimaryHover: ERP_COLORS.primaryHover,
+      colorPrimaryActive: ERP_COLORS.primaryActive,
+    },
+    Table: {
+      headerBg: ERP_COLORS.tableHeaderBg,
+      headerColor: ERP_COLORS.tableHeaderText,
+      rowHoverBg: ERP_COLORS.tableRowHover,
+      borderColor: ERP_COLORS.border,
+    },
+  },
+};
 
 const getExamSubjects = (exam) => {
   if (!exam?.subjects?.length) return [];
@@ -28,7 +59,6 @@ const MarksEntry = () => {
   useEffect(() => {
     examAPI.getAll().then((res) => {
       const list = res?.data || [];
-      // Show published + locked exams
       setExams(Array.isArray(list) ? list.filter((e) => e.isPublished) : []);
     }).catch(() => {});
   }, []);
@@ -104,12 +134,12 @@ const MarksEntry = () => {
     return {
       title: (
         <span>
-          <Text strong style={{ fontSize: 12 }}>{sub.name || sub.code || '—'}</Text>
+          <Text strong style={{ fontSize: 11 }}>{sub.name || sub.code || '—'}</Text>
           <br />
-          <Text type="secondary" style={{ fontSize: 10 }}>/{maxM} Pass:{passing}</Text>
+          <Text type="secondary" style={{ fontSize: 10 }}>/{maxM} P:{passing}</Text>
         </span>
       ),
-      key: String(subId), width: 120, align: 'center',
+      key: String(subId), width: 100, align: 'center',
       render: (_, record) => {
         const key = `${record._id}_${subId}`;
         const val = marksMap[key] ?? null;
@@ -118,7 +148,7 @@ const MarksEntry = () => {
           <InputNumber
             min={0} max={maxM} value={val} size="small"
             onChange={(v) => updateMark(record._id, String(subId), v)}
-            style={{ width: 72, borderColor: isFail ? '#ef4444' : undefined }}
+            style={{ width: 66, borderColor: isFail ? '#ef4444' : undefined }}
             status={isFail ? 'error' : undefined}
             placeholder="—"
             disabled={isLocked}
@@ -129,15 +159,15 @@ const MarksEntry = () => {
   });
 
   const columns = [
-    { title: '#', key: 'idx', width: 42, fixed: 'left', render: (_, __, i) => i + 1 },
-    { title: 'Roll No', dataIndex: 'rollNo', key: 'rollNo', width: 90, fixed: 'left' },
+    { title: '#', key: 'idx', width: 36, fixed: 'left', render: (_, __, i) => i + 1 },
+    { title: 'Roll', dataIndex: 'rollNo', key: 'rollNo', width: 70, fixed: 'left' },
     {
-      title: 'Student', dataIndex: 'name', key: 'name', width: 160, fixed: 'left',
-      render: (text) => <Text strong>{text}</Text>,
+      title: 'Student', dataIndex: 'name', key: 'name', width: 140, fixed: 'left',
+      render: (text) => <Text strong style={{ fontSize: 13 }}>{text}</Text>,
     },
     ...subjectCols,
     {
-      title: 'Total / %', key: 'total', width: 100, align: 'center',
+      title: 'Total', key: 'total', width: 80, align: 'center',
       render: (_, record) => {
         let tot = 0;
         examSubjects.forEach((sub) => { tot += marksMap[`${record._id}_${sub._id || sub}`] || 0; });
@@ -145,10 +175,9 @@ const MarksEntry = () => {
         const pct = totMax > 0 ? Math.round((tot / totMax) * 100) : 0;
         return tot > 0 ? (
           <span>
-            <Text strong style={{ color: '#1d4ed8' }}>{tot}</Text>
-            <Text type="secondary" style={{ fontSize: 11 }}> / {totMax}</Text>
+            <Text strong style={{ color: ERP_COLORS.primary, fontSize: 13 }}>{tot}</Text>
             <br />
-            <Text type="secondary" style={{ fontSize: 11 }}>{pct}%</Text>
+            <Text type="secondary" style={{ fontSize: 10 }}>{pct}%</Text>
           </span>
         ) : <Text type="secondary">—</Text>;
       },
@@ -156,9 +185,11 @@ const MarksEntry = () => {
   ];
 
   return (
-    <>
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={24} sm={14} md={10}>
+    <ConfigProvider theme={marksTheme}>
+      <div className="faculty-module">
+
+        {/* ── Exam selector ── */}
+        <div style={{ marginBottom: 14 }}>
           <Select
             placeholder="Select a published exam"
             style={{ width: '100%' }}
@@ -171,60 +202,63 @@ const MarksEntry = () => {
             allowClear showSearch optionFilterProp="label"
             id="marks-exam-select"
           />
-        </Col>
-      </Row>
-
-      {isLocked && (
-        <Alert
-          type="warning" showIcon
-          icon={<LockOutlined />}
-          message="This exam is locked. Marks are read-only."
-          style={{ marginBottom: 16 }}
-        />
-      )}
-
-      {exam && (
-        <div style={{
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8,
-          padding: '10px 16px', marginBottom: 16, display: 'flex', gap: 20, flexWrap: 'wrap',
-        }}>
-          <span><Text type="secondary">Class: </Text><Text strong>{exam.classId?.name}</Text></span>
-          <span><Text type="secondary">Max: </Text><Text strong>{maxM}</Text></span>
-          <span><Text type="secondary">Pass: </Text><Text strong>{passing}</Text></span>
-          <span><Text type="secondary">Subjects: </Text><Text strong>{examSubjects.length}</Text></span>
-          <span><Text type="secondary">Students: </Text><Text strong>{students.length}</Text></span>
         </div>
-      )}
 
-      {!selectedExamId ? (
-        <Empty description="Select a published exam to enter marks" style={{ marginTop: 40 }} />
-      ) : examSubjects.length === 0 && !loading ? (
-        <Empty
-          description={<span><InfoCircleOutlined style={{ marginRight: 6 }} />No subjects in this exam</span>}
-          style={{ marginTop: 40 }}
-        />
-      ) : (
-        <>
-          <Table
-            columns={columns} dataSource={students} rowKey="_id" loading={loading}
-            pagination={false}
-            scroll={{ x: 300 + examSubjects.length * 120 }}
-            size="middle" bordered
-            style={{ background: '#fff', borderRadius: 8 }}
-            locale={{ emptyText: 'No students in this class' }}
+        {/* ── Locked warning ── */}
+        {isLocked && (
+          <Alert
+            type="warning" showIcon
+            icon={<LockOutlined />}
+            message="This exam is locked. Marks are read-only."
+            style={{ marginBottom: 12 }}
           />
-          {students.length > 0 && !isLocked && (
-            <Space style={{ marginTop: 16 }}>
-              <Button type="primary" icon={<SaveOutlined />} size="large"
-                onClick={handleSave} loading={saving} id="save-marks-btn">
-                Save Marks
-              </Button>
-              <Text type="secondary">{students.length} students · {examSubjects.length} subjects</Text>
-            </Space>
-          )}
-        </>
-      )}
-    </>
+        )}
+
+        {/* ── Exam meta strip ── */}
+        {exam && (
+          <div className="faculty-info-strip" style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: '4px 16px' }}>
+            <span><Text type="secondary" style={{ fontSize: 12 }}>Class: </Text><Text strong style={{ fontSize: 12 }}>{exam.classId?.name}</Text></span>
+            <span><Text type="secondary" style={{ fontSize: 12 }}>Max: </Text><Text strong style={{ fontSize: 12 }}>{maxM}</Text></span>
+            <span><Text type="secondary" style={{ fontSize: 12 }}>Pass: </Text><Text strong style={{ fontSize: 12 }}>{passing}</Text></span>
+            <span><Text type="secondary" style={{ fontSize: 12 }}>Subjects: </Text><Text strong style={{ fontSize: 12 }}>{examSubjects.length}</Text></span>
+            <span><Text type="secondary" style={{ fontSize: 12 }}>Students: </Text><Text strong style={{ fontSize: 12 }}>{students.length}</Text></span>
+          </div>
+        )}
+
+        {/* ── Table or empty ── */}
+        {!selectedExamId ? (
+          <Empty description="Select a published exam to enter marks" style={{ marginTop: 40 }} />
+        ) : examSubjects.length === 0 && !loading ? (
+          <Empty
+            description={<span><InfoCircleOutlined style={{ marginRight: 6 }} />No subjects in this exam</span>}
+            style={{ marginTop: 40 }}
+          />
+        ) : (
+          <>
+            <div className="faculty-table-wrap">
+              <Table
+                columns={columns} dataSource={students} rowKey="_id" loading={loading}
+                pagination={false}
+                scroll={{ x: 246 + examSubjects.length * 100 }}
+                size="small" bordered
+                locale={{ emptyText: 'No students in this class' }}
+              />
+            </div>
+            {students.length > 0 && !isLocked && (
+              <div style={{ marginTop: 14 }}>
+                <Button type="primary" icon={<SaveOutlined />} size="large"
+                  onClick={handleSave} loading={saving} id="save-marks-btn" block>
+                  Save Marks
+                </Button>
+                <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 6, textAlign: 'center' }}>
+                  {students.length} students · {examSubjects.length} subjects
+                </Text>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </ConfigProvider>
   );
 };
 

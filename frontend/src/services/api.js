@@ -172,6 +172,7 @@ export const admissionAPI = {
 export const studentAPI = {
   getAll: (params) => api.get('/students', { params }),
   getById: (id) => api.get(`/students/${id}`),
+  getProfile: (id) => api.get(`/students/${id}/profile`),
   create: (data) => api.post('/students', data),
   update: (id, data) => api.patch(`/students/${id}`, data),
 };

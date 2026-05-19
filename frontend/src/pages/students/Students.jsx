@@ -3,6 +3,7 @@ import {
   Table, Typography, Input, Select, Row, Col, App, Empty,
   Button, Modal, Form, DatePicker, Tag, Drawer, Tabs, Descriptions, Spin,
   Statistic, Card, List, Badge, Avatar,
+  Divider,
 } from 'antd';
 import {
   SearchOutlined, PlusOutlined, EyeOutlined,
@@ -416,66 +417,48 @@ const Students = () => {
   );
 };
 
+// ─── normalizeUrl helper ─────────────────────────────────────
+const normalizeUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http') || url.startsWith('data:')) return url;
+  const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+  return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 // ─── Student Profile Drawer (tabbed) ──────────────────────────
 const StudentProfileDrawer = ({ student, open, onClose }) => {
-  const [feeData, setFeeData] = useState(null);
-  const [attendData, setAttendData] = useState(null);
-  const [examData, setExamData] = useState(null);
-  const [loading, setLoading] = useState({});
-
-  const load = async (key, fn, setter) => {
-    setLoading((p) => ({ ...p, [key]: true }));
-    try {
-      const res = await fn();
-      setter(res?.data || res);
-    } catch (e) {
-      console.error(key, e);
-      setter(null);
-    } finally {
-      setLoading((p) => ({ ...p, [key]: false }));
-    }
-  };
+  const [profileData, setProfileData] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   useEffect(() => {
     if (!open || !student) return;
-
-    load('fees', () => feesAPI.getStudentFees(student._id), setFeeData);
-    load('attend', () => attendanceAPI.getReport({
-      classId: student.classId?._id || student.classId,
-      studentId: student._id,
-    }), setAttendData);
-    load('exams', () => examAPI.getStudentResults(student._id), setExamData);
-
+    setProfileData(null);
+    setProfileLoading(true);
+    studentAPI.getProfile(student._id)
+      .then(res => {
+        const d = res?.data?.data || res?.data || {};
+        setProfileData(d);
+      })
+      .catch(e => console.error('[Profile]', e))
+      .finally(() => setProfileLoading(false));
   }, [open, student]);
 
   if (!student) return null;
-  // FEES
-  const feeSummary = feeData?.summary || feeData?.data?.summary || {};
-  const feePayments = feeData?.payments || feeData?.data?.payments || [];
 
-  // ATTENDANCE
-  const body = attendData?.data || {};
+  const displayStudent = profileData?.student || student;
+  const admission     = profileData?.admission || {};
+  const fees          = profileData?.fees || {};
+  const feeSummary    = fees.summary || {};
+  const installments  = fees.installments || [];
+  const payments      = fees.payments || [];
+  const attendance    = profileData?.attendance || {};
+  const attSummary    = attendance.summary || {};
+  const monthly       = attendance.monthly || [];
+  const exams         = profileData?.exams || {};
+  const examResults   = exams.results || [];
 
-  const row = Array.isArray(body.report) ? body.report[0] : null;
-
-  const attendStats = row
-    ? {
-      total: row.totalDays ?? 0,
-      present: row.totalPresent ?? 0,
-      absent: row.totalAbsent ?? 0,
-      percentage: row.percentage ?? 0,
-    }
-    : {
-      total: 0,
-      present: 0,
-      absent: 0,
-      percentage: 0,
-    };
-
-  // EXAMS
-  const examList = Array.isArray(examData)
-    ? examData
-    : examData?.results || [];
+  const STATUS_COLOR = { Paid: 'green', paid: 'green', Partial: 'orange', partial: 'orange', Overdue: 'red', overdue: 'red', unpaid: 'default', Pending: 'default' };
+  const INST_STATUS_COLOR = { paid: 'green', partial: 'orange', overdue: 'red', pending: 'default' };
 
   const tabs = [
     {
@@ -485,131 +468,296 @@ const StudentProfileDrawer = ({ student, open, onClose }) => {
         <>
           {/* Avatar */}
           <div style={{ textAlign: 'center', marginBottom: 16 }}>
-            {(student.avatar || student.photo || student.profilePhoto) ? (
+            {(displayStudent.avatar || displayStudent.photo || displayStudent.profilePhoto || admission?.studentPhoto) ? (
               <img
-                src={student.avatar || student.photo || student.profilePhoto}
-                alt={student.name}
+                src={normalizeUrl(displayStudent.avatar || displayStudent.photo || displayStudent.profilePhoto || admission?.studentPhoto)}
+                alt={displayStudent.name}
                 style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '3px solid #E2E8F0' }}
               />
             ) : (
               <Avatar size={80} icon={<UserOutlined />} style={{ background: 'var(--color-primary-dark)', fontSize: 32 }} />
             )}
-            <div style={{ marginTop: 6, fontWeight: 600 }}>{student.name}</div>
+            <div style={{ marginTop: 6, fontWeight: 600 }}>{displayStudent.name}</div>
           </div>
+          <Divider style={{ margin: '8px 0' }}>Academic & Admission</Divider>
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="Admission No">{student.admissionNo || student.admissionNumber || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Register No">{student.registerNo || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Roll No">{student.rollNo || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Class">{student.classId?.name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Section">{student.sectionId?.name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Gender">{student.gender || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Admission No">{displayStudent.admissionNo || displayStudent.admissionNumber || admission?.admissionNo || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Roll No">{displayStudent.rollNo || admission?.rollNo || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Class">{displayStudent.classId?.name || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Section">{displayStudent.sectionId?.name || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Boarding Mode">{admission?.boardingType || admission?.mode || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Second Lang">{admission?.secondLanguage || '—'}</Descriptions.Item>
+          </Descriptions>
+
+          <Divider style={{ margin: '8px 0' }}>Student Details</Divider>
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="Gender">{displayStudent.gender || '—'}</Descriptions.Item>
             <Descriptions.Item label="Date of Birth">
-              {student.dateOfBirth ? dayjs(student.dateOfBirth).format('DD MMM YYYY') : '—'}
+              {displayStudent.dateOfBirth ? dayjs(displayStudent.dateOfBirth).format('DD MMM YYYY') : '—'}
             </Descriptions.Item>
-            <Descriptions.Item label="Parent">{student.parentName || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Parent Phone">{student.parentPhone || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Blood Group">{student.bloodGroup || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Place of Birth">{admission?.placeOfBirth || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Nationality">{admission?.nationality || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Religion / Caste">{[admission?.religion, admission?.caste].filter(Boolean).join(' / ') || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Category">{admission?.category || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Mother Tongue">{admission?.motherTongue || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Aadhaar">{admission?.aadhaarNo || '—'}</Descriptions.Item>
+          </Descriptions>
+
+          <Divider style={{ margin: '8px 0' }}>Parent / Guardian</Divider>
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="Primary Name">{displayStudent.parentName || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Primary Phone">{displayStudent.parentPhone || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Father">{admission?.father?.name || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Mother">{admission?.mother?.name || '—'}</Descriptions.Item>
+          </Descriptions>
+
+          {admission?.previousSchool && (
+            <>
+              <Divider style={{ margin: '8px 0' }}>Previous School</Divider>
+              <Descriptions column={1} size="small" bordered>
+                <Descriptions.Item label="School Name">{admission.previousSchool}</Descriptions.Item>
+                <Descriptions.Item label="Board">{admission.previousBoard || '—'}</Descriptions.Item>
+                <Descriptions.Item label="TC No">{admission.tcNumber || '—'}</Descriptions.Item>
+                <Descriptions.Item label="SATS / PEN">{[admission.satsNumber, admission.penNumber].filter(Boolean).join(' / ') || '—'}</Descriptions.Item>
+              </Descriptions>
+            </>
+          )}
+
+          <Divider style={{ margin: '8px 0' }}>Medical</Divider>
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="Blood Group">{admission?.bloodGroup || displayStudent.bloodGroup || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Allergies">{admission?.allergies || '—'}</Descriptions.Item>
+            <Descriptions.Item label="SEN">{admission?.senType ? `${admission.senType} (${admission.senSupportLevel})` : '—'}</Descriptions.Item>
           </Descriptions>
         </>
       ),
     },
+    // ─── FEES TAB ─────────────────────────────────────────────
     {
       key: 'fees',
       label: <><DollarOutlined /> Fees</>,
-      children: loading.fees ? <Spin /> : feeData ? (
+      children: profileLoading ? <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div> : profileData ? (
         <>
+          {/* Summary Cards */}
           <Row gutter={12} style={{ marginBottom: 16 }}>
             {[
-              { label: 'Total Fee', value: `₹${(feeSummary?.totalFee || 0).toLocaleString('en-IN')}`, color: 'var(--color-primary-dark)' },
-              { label: 'Paid', value: `₹${(feeSummary?.totalPaid || 0).toLocaleString('en-IN')}`, color: '#22C55E' },
-              { label: 'Due', value: `₹${(feeSummary?.totalDue || 0).toLocaleString('en-IN')}`, color: '#EF4444' },
-            ].map((s) => (
+              { label: 'Total Fee',  value: feeSummary.totalFee  || feeSummary.netFee   || 0, color: 'var(--color-primary-dark)' },
+              { label: 'Paid',       value: feeSummary.totalPaid || feeSummary.paidAmount || 0, color: '#22C55E' },
+              { label: 'Due',        value: feeSummary.totalDue  || feeSummary.dueAmount  || 0, color: '#EF4444' },
+            ].map(s => (
               <Col key={s.label} span={8}>
                 <Card size="small" bordered={false} style={{ background: '#F8FAFC', borderRadius: 8 }}>
-                  <Statistic title={<span style={{ fontSize: 11 }}>{s.label}</span>} value={s.value}
-                    valueStyle={{ fontSize: 14, fontWeight: 700, color: s.color }} />
+                  <Statistic
+                    title={<span style={{ fontSize: 11 }}>{s.label}</span>}
+                    value={`₹${Number(s.value).toLocaleString('en-IN')}`}
+                    valueStyle={{ fontSize: 13, fontWeight: 700, color: s.color }}
+                  />
                 </Card>
               </Col>
             ))}
           </Row>
-          <List
-            size="small"
-            dataSource={feePayments || []}
-            renderItem={(p) => (
-              <List.Item>
-                <span style={{ fontWeight: 500 }}>{p.receiptNumber}</span>
-                <span style={{ color: '#22C55E', marginLeft: 'auto' }}>₹{p.amount}</span>
-                <Tag style={{ marginLeft: 8 }}>{p.paymentMode}</Tag>
-              </List.Item>
-            )}
-            locale={{ emptyDescription: 'No payments yet' }}
-          />
+
+          {/* Invoice meta */}
+          {fees.invoice && (
+            <div style={{ padding: '8px 12px', background: '#F1F5F9', borderRadius: 8, marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>Invoice #{fees.invoice.invoiceNumber}</Text>
+                <Tag color={STATUS_COLOR[fees.invoice.status] || 'default'}>
+                  {(fees.invoice.status || 'N/A').toUpperCase()}
+                </Tag>
+              </div>
+              {fees.invoice.nextDueDate && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Next Due:</Text>
+                  <Text strong style={{ fontSize: 12 }}>{dayjs(fees.invoice.nextDueDate).format('DD MMM YYYY')}</Text>
+                </div>
+              )}
+              {(feeSummary.penaltyAmount > 0) && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Penalty:</Text>
+                  <Text strong style={{ fontSize: 12, color: '#EF4444' }}>₹{feeSummary.penaltyAmount.toLocaleString('en-IN')}</Text>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Payment Schedule */}
+          {installments.length > 0 && (
+            <>
+              <Divider style={{ margin: '8px 0', fontSize: 12 }}>Payment Schedule</Divider>
+              {installments.map((inst, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
+                  <div>
+                    <Text style={{ fontSize: 12, fontWeight: 500 }}>{inst.label || `Installment ${inst.installmentNo || i + 1}`}</Text>
+                    {inst.dueDate && <div style={{ fontSize: 11, color: '#94A3B8' }}>{dayjs(inst.dueDate).format('DD MMM YYYY')}</div>}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 12 }}>₹{(inst.amount || 0).toLocaleString('en-IN')}</div>
+                    <Tag color={INST_STATUS_COLOR[inst.status] || 'default'} style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px' }}>
+                      {(inst.status || 'pending').toUpperCase()}
+                    </Tag>
+                    {inst.balanceAmount > 0 && inst.status !== 'paid' && (
+                      <div style={{ fontSize: 10, color: '#EF4444' }}>Due: ₹{inst.balanceAmount.toLocaleString('en-IN')}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Payments / Receipts */}
+          {payments.length > 0 ? (
+            <>
+              <Divider style={{ margin: '8px 0', fontSize: 12 }}>Payment Receipts</Divider>
+              <List
+                size="small"
+                dataSource={payments}
+                renderItem={p => (
+                  <List.Item>
+                    <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <Text style={{ fontSize: 12, fontWeight: 500 }}>#{p.receiptNumber}</Text>
+                        <div style={{ fontSize: 11, color: '#64748B' }}>{p.paidAt ? dayjs(p.paidAt).format('DD MMM YYYY') : '—'} · {p.paymentMode || '—'}</div>
+                      </div>
+                      <Text strong style={{ color: '#22C55E', fontSize: 13 }}>₹{(p.amount || 0).toLocaleString('en-IN')}</Text>
+                    </div>
+                  </List.Item>
+                )}
+                locale={{ emptyDescription: 'No payments yet' }}
+              />
+            </>
+          ) : fees.invoice ? (
+            <Empty description="No payments recorded yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            <Empty description="No fee invoice generated" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          )}
         </>
       ) : <Empty description="Fee data unavailable" />,
     },
+    // ─── ATTENDANCE TAB ───────────────────────────────────────
     {
       key: 'attendance',
       label: <><CalendarOutlined /> Attendance</>,
-      children: loading.attend ? <Spin /> : Object.keys(attendStats).length ? (
-        <Row gutter={12}>
-          {[
-            { label: 'Total Days', value: attendStats.total || 0, color: 'var(--color-primary-dark)' },
-            { label: 'Present', value: attendStats.present || 0, color: '#22C55E' },
-            { label: 'Absent', value: attendStats.absent || 0, color: '#EF4444' },
-            { label: 'Avg %', value: `${attendStats.percentage || 0}%`, color: 'var(--color-secondary)' },
-          ].map((s) => (
-            <Col key={s.label} span={12} style={{ marginBottom: 8 }}>
-              <Card size="small" bordered={false} style={{ background: '#F8FAFC', borderRadius: 8 }}>
-                <Statistic
-                  title={<span style={{ fontSize: 11 }}>{s.label}</span>}
-                  value={s.value}
-                  valueStyle={{ fontSize: 16, fontWeight: 700, color: s.color }}
-                />
-              </Card>
-            </Col>
-          ))}
-        </Row>
-      ) : <Empty description="Attendance data unavailable" />
+      children: profileLoading ? <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div> : (
+        <>
+          <Row gutter={12} style={{ marginBottom: 12 }}>
+            {[
+              { label: 'Conducted', value: attSummary.totalConducted || 0, color: 'var(--color-primary-dark)' },
+              { label: 'Attended',  value: attSummary.totalAttended  || 0, color: '#22C55E' },
+              { label: 'Absent',    value: attSummary.totalAbsent    || 0, color: '#EF4444' },
+              { label: 'Attendance %', value: `${attSummary.percentage || 0}%`, color: attSummary.percentage >= 75 ? '#22C55E' : '#EF4444' },
+            ].map(s => (
+              <Col key={s.label} span={12} style={{ marginBottom: 8 }}>
+                <Card size="small" bordered={false} style={{ background: '#F8FAFC', borderRadius: 8 }}>
+                  <Statistic
+                    title={<span style={{ fontSize: 11 }}>{s.label}</span>}
+                    value={s.value}
+                    valueStyle={{ fontSize: 15, fontWeight: 700, color: s.color }}
+                  />
+                </Card>
+              </Col>
+            ))}
+          </Row>
+
+          {/* Monthly breakdown */}
+          {monthly.length > 0 && (
+            <>
+              <Divider style={{ margin: '8px 0', fontSize: 12 }}>Monthly Breakdown</Divider>
+              {monthly.map((m, i) => {
+                const pct = m.conducted > 0 ? Math.round((m.attended / m.conducted) * 100) : 0;
+                return (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #F8FAFC' }}>
+                    <Text style={{ fontSize: 12 }}>{m.monthKey}</Text>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 11, color: '#64748B' }}>{m.attended}/{m.conducted}</Text>
+                      <Tag color={pct >= 75 ? 'green' : pct >= 50 ? 'orange' : 'red'} style={{ fontSize: 10, padding: '0 4px', margin: 0 }}>
+                        {pct}%
+                      </Tag>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {!attSummary.totalConducted && !profileLoading && (
+            <Empty description="No attendance records found" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          )}
+        </>
+      ),
     },
+    // ─── EXAMS TAB (marks-card style) ────────────────────────
     {
       key: 'exams',
       label: <><BookOutlined /> Exams</>,
-
-      children: loading.exams ? <Spin /> : examList.length ? (
-        <List
-          size="small"
-          dataSource={examList}
-          renderItem={(r) => (
-            <List.Item>
-              <div style={{ width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 600 }}>
-                    {r.exam?.examName || r.exam?.name || 'Exam'}
-                  </span>
-
-                  <Badge
-                    status={r.result === 'Pass' ? 'success' : 'error'}
-                    text={
-                      <span
-                        style={{
-                          fontWeight: 600,
-                          color: r.result === 'Pass' ? '#22C55E' : '#EF4444'
-                        }}
-                      >
-                        {r.result}
-                      </span>
-                    }
-                  />
-                </div>
-
-                <span style={{ fontSize: 11, color: '#64748B' }}>
-                  Total: {r.totalObtained || r.total || 0} | Grade: {r.grade || '—'}
-                </span>
+      children: profileLoading ? <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div> : examResults.length ? (
+        <>
+          {exams.marksCard?.overall && (
+            <div style={{ background: '#FFF7ED', border: '1px solid #FFEDD5', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+              <Text style={{ fontSize: 11, color: '#9A3412' }}>Overall Performance</Text>
+              <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                <Statistic title={<span style={{ fontSize: 10 }}>Total</span>}
+                  value={`${exams.marksCard.overall.totalObtained}/${exams.marksCard.overall.totalMax}`}
+                  valueStyle={{ fontSize: 14, fontWeight: 700, color: '#EA580C' }} />
+                <Statistic title={<span style={{ fontSize: 10 }}>Overall %</span>}
+                  value={`${exams.marksCard.overall.percentage}%`}
+                  valueStyle={{ fontSize: 14, fontWeight: 700, color: '#EA580C' }} />
               </div>
-            </List.Item>
+            </div>
           )}
-        />
-      ) : <Empty description="No exam results yet" />,
+          {examResults.map((r, idx) => {
+            const resultColor = r.result === 'Pass' ? '#22C55E' : r.result === 'Fail' ? '#EF4444' : '#64748B';
+            return (
+              <Card
+                key={idx}
+                size="small"
+                style={{ marginBottom: 10, borderRadius: 8 }}
+                title={
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 13, fontWeight: 600 }}>{r.exam?.examName || r.exam?.name || 'Exam'}</Text>
+                    <span style={{ display: 'flex', gap: 6 }}>
+                      <Tag style={{ fontWeight: 600, margin: 0 }}>{r.grade || '—'}</Tag>
+                      <Tag color={resultColor === '#22C55E' ? 'green' : resultColor === '#EF4444' ? 'red' : 'default'} style={{ margin: 0 }}>
+                        {r.result}
+                      </Tag>
+                    </span>
+                  </div>
+                }
+              >
+                <div style={{ display: 'flex', gap: 16, marginBottom: r.subjects?.length ? 8 : 0 }}>
+                  <Text style={{ fontSize: 12, color: '#64748B' }}>
+                    Total: <strong style={{ color: '#1E293B' }}>{r.totalObtained}/{r.totalMax}</strong>
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#64748B' }}>
+                    Score: <strong style={{ color: '#1E293B' }}>{r.percentage}%</strong>
+                  </Text>
+                </div>
+                {r.subjects?.length > 0 && (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ background: '#F8FAFC' }}>
+                        {['Subject', 'Max', 'Marks', 'Grade'].map(h => (
+                          <th key={h} style={{ padding: '3px 6px', textAlign: 'left', color: '#64748B', fontWeight: 600, borderBottom: '1px solid #E2E8F0' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.subjects.map((s, si) => (
+                        <tr key={si} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: '3px 6px' }}>{s.subject?.name || '—'}</td>
+                          <td style={{ padding: '3px 6px' }}>{s.maxMarks}</td>
+                          <td style={{ padding: '3px 6px', fontWeight: 600, color: s.passed ? '#22C55E' : '#EF4444' }}>{s.marksObtained}</td>
+                          <td style={{ padding: '3px 6px' }}>{s.grade}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </Card>
+            );
+          })}
+        </>
+      ) : <Empty description="No exam results yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
     },
   ];
 
@@ -620,9 +768,14 @@ const StudentProfileDrawer = ({ student, open, onClose }) => {
       onClose={onClose}
       width={500}
     >
-      <Tabs items={tabs} defaultActiveKey="overview" />
+      {profileLoading && !profileData ? (
+        <div style={{ textAlign: 'center', padding: 48 }}><Spin size="large" /></div>
+      ) : (
+        <Tabs items={tabs} defaultActiveKey="overview" />
+      )}
     </Drawer>
   );
 };
+
 
 export default Students;

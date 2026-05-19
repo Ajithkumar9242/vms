@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
 import { notificationAPI } from '@/services/api';
 import useFCM from '@/hooks/useFCM';
-import ParentSplash from './ParentSplash';
+import MobileSplash from './MobileSplash';
 import {
   HomeOutlined, DollarOutlined, CalendarOutlined,
   FileTextOutlined, BellOutlined, UserOutlined,
@@ -18,10 +18,29 @@ const PARENT_NAV = (badge = 0) => [
   { to: '/parent/profile',       label: 'Profile', icon: <UserOutlined /> },
 ];
 
+// Splash key shared with ParentLogin
+const SPLASH_KEY = 'erp_show_splash_parent';
+
 const ParentLayout = ({ title, subtitle, children }) => {
   const user = useAuthStore((s) => s.user);
   const [unread, setUnread] = useState(0);
-  const [showSplash, setShowSplash] = useState(() => sessionStorage.getItem('vss_parent_splash_seen') !== '1');
+
+  const [showSplash, setShowSplash] = useState(() => {
+    if (localStorage.getItem(SPLASH_KEY) === '1') {
+      localStorage.removeItem(SPLASH_KEY);
+      return true;
+    }
+    const seenKey = 'erp_parent_splash_session_seen';
+    if (!sessionStorage.getItem(seenKey)) return true;
+    return false;
+  });
+
+  useEffect(() => {
+    if (!showSplash) return undefined;
+    sessionStorage.setItem('erp_parent_splash_session_seen', '1');
+    const t = setTimeout(() => setShowSplash(false), 1100);
+    return () => clearTimeout(t);
+  }, [showSplash]);
 
   const refreshUnread = useCallback(() => {
     notificationAPI.getUnreadCount()
@@ -30,14 +49,6 @@ const ParentLayout = ({ title, subtitle, children }) => {
   }, []);
 
   useEffect(() => { refreshUnread(); }, [refreshUnread]);
-  useEffect(() => {
-    if (!showSplash) return undefined;
-    const timer = setTimeout(() => {
-      sessionStorage.setItem('vss_parent_splash_seen', '1');
-      setShowSplash(false);
-    }, 1400);
-    return () => clearTimeout(timer);
-  }, [showSplash]);
 
   // Wire FCM — bump unread count when a foreground push arrives
   useFCM(() => refreshUnread());
@@ -46,7 +57,8 @@ const ParentLayout = ({ title, subtitle, children }) => {
 
   return (
     <div className="mobile-shell">
-      {showSplash && <ParentSplash />}
+      <MobileSplash open={showSplash} label="VMS School ERP — Parent" />
+
       <header className="mobile-header">
         <div>
           <div className="mobile-header-title">{title || 'Parent Portal'}</div>
