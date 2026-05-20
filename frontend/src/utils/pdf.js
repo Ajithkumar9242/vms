@@ -1,6 +1,6 @@
 /**
  * VMS ERP — PDF Generation Utilities
- * Uses jsPDF + jspdf-autotable for fee receipts and marksheets.
+ * Uses jsPDF + jspdf-autotable for fee receipts.
  * All generation is client-side — no backend PDF dependency.
  */
 
@@ -199,120 +199,6 @@ export const downloadFeeReceiptPDF = ({
   addPageNumber(doc);
 
   const filename = `FeeReceipt_${student?.name?.replace(/\s+/g, '_') || 'Student'}_${dayjs().format('DDMMMYYYY')}.pdf`;
-  doc.save(filename);
-};
-
-// ════════════════════════════════════════════════════════════
-//  MARKSHEET PDF
-// ════════════════════════════════════════════════════════════
-/**
- * Generate and download a marksheet PDF.
- *
- * @param {Object} opts
- * @param {Object} opts.student     — { name, rollNo }
- * @param {Object} opts.classInfo   — { name }
- * @param {Array}  opts.exams       — array of { examName, subjects: [{ subjectName, marksObtained, maxMarks, passingMarks }] }
- * @param {string} [opts.schoolName]
- */
-export const downloadMarksheetPDF = ({
-  student,
-  classInfo,
-  exams = [],
-  schoolName = 'VMS School',
-}) => {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const W = doc.internal.pageSize.getWidth();
-
-  addSchoolHeader(doc, schoolName);
-
-  // Title
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
-  doc.text('MARK SHEET / REPORT CARD', W / 2, 40, { align: 'center' });
-
-  // Student info
-  doc.setFillColor(LGREY[0], LGREY[1], LGREY[2]);
-  doc.rect(14, 46, W - 28, 20, 'F');
-  labelValue(doc, 18, 52, 'STUDENT NAME', student?.name || '—');
-  labelValue(doc, 18, 62, 'CLASS', classInfo?.name || '—');
-  labelValue(doc, W / 2, 52, 'ROLL NO.', student?.rollNo || '—');
-  labelValue(doc, W / 2, 62, 'DATE', dayjs().format('DD MMM YYYY'));
-
-  let curY = 72;
-
-  exams.forEach((exam, examIdx) => {
-    // Exam heading
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
-    doc.text(`Exam: ${exam.examName}`, 14, curY);
-    if (exam.examDate) {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(GREY[0], GREY[1], GREY[2]);
-      doc.text(dayjs(exam.examDate).format('DD MMM YYYY'), W - 14, curY, { align: 'right' });
-    }
-
-    const totalObtained = exam.subjects.reduce((s, r) => s + (r.marksObtained ?? 0), 0);
-    const totalMax      = exam.subjects.reduce((s, r) => s + (r.maxMarks ?? 100), 0);
-    const pct           = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : 0;
-    const grade         = getGrade(pct);
-
-    const rows = exam.subjects.map((s, i) => {
-      const sp = s.maxMarks > 0 ? Math.round((s.marksObtained / s.maxMarks) * 100) : 0;
-      return [
-        i + 1,
-        s.subjectName || '—',
-        s.maxMarks ?? '—',
-        s.passingMarks ?? '—',
-        s.marksObtained ?? '—',
-        `${sp}%`,
-        getGrade(sp),
-        s.marksObtained >= (s.passingMarks ?? 0) ? 'PASS' : 'FAIL',
-      ];
-    });
-
-    autoTable(doc, {
-      startY: curY + 3,
-      head: [['#', 'Subject', 'Max', 'Pass', 'Obtained', '%', 'Grade', 'Result']],
-      body: rows,
-      foot: [['', 'TOTAL', totalMax, '', totalObtained, `${pct}%`, grade, pct >= 40 ? 'PASS' : 'FAIL']],
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [27, 58, 92], textColor: [255, 255, 255], fontStyle: 'bold' },
-      footStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      columnStyles: {
-        0: { cellWidth: 8 },
-        4: { halign: 'right' },
-        5: { halign: 'center' },
-        6: { halign: 'center', fontStyle: 'bold' },
-        7: { halign: 'center' },
-      },
-      margin: { left: 14, right: 14 },
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 7) {
-          data.cell.styles.textColor = data.cell.raw === 'PASS' ? [22, 163, 74] : [220, 38, 38];
-        }
-      },
-    });
-
-    curY = (doc.lastAutoTable?.finalY || curY) + 10;
-    if (curY > 250 && examIdx < exams.length - 1) {
-      doc.addPage();
-      curY = 20;
-    }
-  });
-
-  // Footer
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(8);
-  doc.setTextColor(GREY[0], GREY[1], GREY[2]);
-  doc.text('This is a computer-generated marksheet. No signature required.', W / 2, curY + 6, { align: 'center' });
-
-  addPageNumber(doc);
-
-  const filename = `Marksheet_${student?.name?.replace(/\s+/g, '_') || 'Student'}_${dayjs().format('DDMMMYYYY')}.pdf`;
   doc.save(filename);
 };
 

@@ -173,16 +173,7 @@ const ParentDashboard = () => {
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => navigate('/parent/profile')}
-              style={{
-                background: '#FFFFFF', color: 'var(--color-primary)', padding: '6px 16px',
-                borderRadius: '9999px', fontSize: '12px', fontWeight: '600',
-                border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
-            >
-              View Profile
-            </button>
+
           </div>
 
           {/* Fee Summary */}

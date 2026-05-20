@@ -263,11 +263,16 @@ export const examAPI = {
   // Results
   getExamResults: (examId) => api.get(`/exams/${examId}/results`),
   getStudentResults: (studentId) => api.get(`/exams/results/${studentId}`),
-  getResultsPdfUrl: (examId) => {
+  getMarksCardPdfUrl: (studentId, params = {}) => {
     const token = localStorage.getItem('vms_token');
-    return `${API_BASE_URL}/exams/${examId}/results/pdf${token ? '?token=' + encodeURIComponent(token) : ''}`;
+    const search = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') search.set(key, value);
+    });
+    if (token) search.set('token', token);
+    const query = search.toString();
+    return `${API_BASE_URL}/exams/marks-card/${studentId}${query ? '?' + query : ''}`;
   },
-
   // Subjects helper
   getSubjectsForClass: (classId) => api.get('/exams/subjects-for-class', { params: { classId } }),
 };
@@ -300,6 +305,7 @@ export const notificationAPI = {
   markRead: (id) => api.patch(`/notifications/${id}/read`),
   markAllRead: () => api.patch('/notifications/read-all'),
   registerDeviceToken: (token, platform = 'web') => api.post('/notifications/device-token', { token, platform }),
+  sendTest: (data = {}) => api.post('/notifications/test', data),
   broadcast: (data) => api.post('/notifications/broadcast', data),
 };
 

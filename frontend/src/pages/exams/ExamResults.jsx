@@ -41,10 +41,9 @@ const ExamResults = ({ initialExamId, onClearExamId }) => {
     }
   }, [initialExamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Download PDF
-  const handleDownloadPdf = () => {
-    if (!selectedExamId) return;
-    window.open(examAPI.getResultsPdfUrl(selectedExamId), '_blank', 'noopener');
+  const handleDownloadMarksCard = (studentId) => {
+    if (!studentId) return;
+    window.open(examAPI.getMarksCardPdfUrl(studentId, { examId: selectedExamId }), '_blank', 'noopener');
   };
 
   const fetchResults = useCallback(async () => {
@@ -154,6 +153,18 @@ const ExamResults = ({ initialExamId, onClearExamId }) => {
           : <Tag color="red"><CloseCircleFilled /> Fail</Tag>;
       },
     },
+    {
+      title: 'Marks Card', key: 'marksCard', width: 120, align: 'center',
+      render: (_, r) => (
+        <Button
+          size="small"
+          icon={<FilePdfOutlined />}
+          onClick={() => handleDownloadMarksCard(r.student?._id)}
+        >
+          PDF
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -174,17 +185,6 @@ const ExamResults = ({ initialExamId, onClearExamId }) => {
             id="results-exam-select"
           />
         </Col>
-        {selectedExamId && (
-          <Col xs={24} sm={4}>
-            <Button
-              icon={<FilePdfOutlined />}
-              onClick={handleDownloadPdf}
-              id="download-pdf-btn"
-            >
-              Download PDF
-            </Button>
-          </Col>
-        )}
         {selectedExamId && (
           <Col xs={24} sm={10} md={6}>
             <Input.Search

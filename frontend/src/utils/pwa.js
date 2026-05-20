@@ -15,12 +15,12 @@
 
 // ─── Firebase config from env ────────────────────────────────
 const firebaseConfig = {
-  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
@@ -62,7 +62,7 @@ export const registerSW = async () => {
 
   try {
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-    console.log('[PWA] Service Worker registered:', reg.scope);
+    // console.log('[PWA] Service Worker registered:', reg.scope);
 
     // Post Firebase config to SW for background message handling
     if (isFirebaseConfigured() && reg.active) {
@@ -100,7 +100,7 @@ export const requestNotificationPermission = async () => {
     const swReg = await navigator.serviceWorker.ready;
     const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (token) {
-      console.log('[FCM] Token obtained:', token.substring(0, 20) + '...');
+      // console.log('[FCM] Token obtained:', token.substring(0, 20) + '...');
       // Persist token for the session; backend integration is opt-in
       localStorage.setItem('vms_fcm_token', token);
       return token;
@@ -114,17 +114,17 @@ export const requestNotificationPermission = async () => {
 // ─── Listen for foreground messages ──────────────────────────
 export const onForegroundMessage = async (callback) => {
   const messaging = await initFirebase();
-  if (!messaging) return () => {};
+  if (!messaging) return () => { };
 
   try {
     const { onMessage } = await import('firebase/messaging');
     return onMessage(messaging, (payload) => {
-      console.log('[FCM] Foreground message:', payload);
+      // console.log('[FCM] Foreground message:', payload);
       callback(payload);
     });
   } catch (e) {
     console.error('[FCM] onMessage failed:', e.message);
-    return () => {};
+    return () => { };
   }
 };
 

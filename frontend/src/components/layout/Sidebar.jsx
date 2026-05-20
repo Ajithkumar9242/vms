@@ -78,12 +78,12 @@ const allMenuItems = [
     label: 'Assignments',
     roles: STAFF_ROLES,
   },
-  {
-    key: '/marks-entry',
-    icon: <EditOutlined />,
-    label: 'Marks Entry',
-    roles: STAFF_ROLES,
-  },
+  // {
+  //   // key: '/marks-entry',
+  //   icon: <EditOutlined />,
+  //   label: 'Marks Entry',
+  //   roles: STAFF_ROLES,
+  // },
   // ── Study Materials: temporarily disabled ────────────────
   // {
   //   key: '/materials',
@@ -245,8 +245,8 @@ const Sidebar = ({ collapsed, onCollapse }) => {
       if (rest.type === 'divider') return { type: 'divider', key: `divider-${index}` };
       return rest;
     });
-  console.log('ROLE FROM STORE:', user?.role, 'NORMALIZED:', userRole);
-  console.log("MENU KEYS:", menuItems.map(i => i?.key || i?.type));
+  // console.log('ROLE FROM STORE:', user?.role, 'NORMALIZED:', userRole);
+  // console.log("MENU KEYS:", menuItems.map(i => i?.key || i?.type));
   // Highlight the current page
   const selectedKey =
     menuItems

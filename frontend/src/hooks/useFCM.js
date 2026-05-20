@@ -3,6 +3,8 @@ import { requestNotificationPermission, onForegroundMessage, showLocalNotificati
 import useAuthStore from '@/store/authStore';
 import { notificationAPI } from '@/services/api';
 
+const registeredTokenKeys = new Set();
+
 /**
  * useFCM — hook that:
  * 1. Requests notification permission on mount (for authenticated users)
@@ -15,6 +17,11 @@ import { notificationAPI } from '@/services/api';
 const useFCM = (onMessage = null) => {
   const user = useAuthStore((s) => s.user);
   const unsubRef = useRef(null);
+  const onMessageRef = useRef(onMessage);
+
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
 
   useEffect(() => {
     if (!user) return;
@@ -25,9 +32,15 @@ const useFCM = (onMessage = null) => {
       // 1. Request permission + get token
       const token = await requestNotificationPermission();
       if (token) {
-        await notificationAPI.registerDeviceToken(token, 'web').catch((e) => {
-          console.warn('[useFCM] token registration failed:', e.message);
-        });
+        const userId = user._id || user.id;
+        const registrationKey = `${userId}:${token}`;
+        if (!registeredTokenKeys.has(registrationKey)) {
+          registeredTokenKeys.add(registrationKey);
+          await notificationAPI.registerDeviceToken(token, 'web').catch((e) => {
+            registeredTokenKeys.delete(registrationKey);
+            console.warn('[useFCM] token registration failed:', e.message);
+          });
+        }
       }
 
       // 2. Listen for foreground messages
@@ -42,8 +55,8 @@ const useFCM = (onMessage = null) => {
         showLocalNotification(title, body, data);
 
         // Optional in-app callback (e.g. refresh notification list, show toast)
-        if (typeof onMessage === 'function') {
-          onMessage({ title, body, data, payload });
+        if (typeof onMessageRef.current === 'function') {
+          onMessageRef.current({ title, body, data, payload });
         }
       });
     };
@@ -56,7 +69,7 @@ const useFCM = (onMessage = null) => {
         unsubRef.current();
       }
     };
-  }, [user]);
+  }, [user?._id, user?.id]);
 };
 
 export default useFCM;

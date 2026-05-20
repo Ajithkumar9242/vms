@@ -3,6 +3,7 @@ import { Layout } from 'antd';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
+import useFCM from '@/hooks/useFCM';
 
 const { Content } = Layout;
 
@@ -11,6 +12,8 @@ const MOBILE_BREAKPOINT = 768;
 const MainLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  useFCM();
 
   // ─── Detect mobile viewport ──────────────────────────────
   useEffect(() => {

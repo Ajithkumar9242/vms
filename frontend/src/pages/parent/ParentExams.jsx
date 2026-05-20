@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import ParentLayout from '@/components/mobile/ParentLayout';
 import { examAPI, studentAPI } from '@/services/api';
 import useAuthStore from '@/store/authStore';
-import { downloadMarksheetPDF, exportResultsCSV, getGrade } from '@/utils/pdf';
+import { exportResultsCSV, getGrade } from '@/utils/pdf';
 import dayjs from 'dayjs';
 
 const GRADE_COLOR = (pct) => {
@@ -117,14 +117,10 @@ const ParentExams = () => {
   };
 
   const handlePDF = () => {
+    if (!studentId) return;
     setExporting(true);
     try {
-      downloadMarksheetPDF({
-        student:    student || { name: user?.name },
-        classInfo:  student?.classId || {},
-        exams:      results,
-        schoolName: 'VMS School',
-      });
+      window.open(examAPI.getMarksCardPdfUrl(studentId), '_blank', 'noopener');
     } catch (e) {
       console.error('PDF error:', e);
     } finally {
