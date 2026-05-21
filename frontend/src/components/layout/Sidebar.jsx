@@ -23,6 +23,7 @@ import {
   ShoppingCartOutlined,
   FileSearchOutlined,
   EditOutlined,
+  TableOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
@@ -33,14 +34,14 @@ const { Sider } = Layout;
 
 // ─── Role groups (mirror router/index.jsx) ────────────────────
 const SETUP_ROLES = ['super_admin', 'admin'];
-const HIGH_PRIV = ['super_admin', 'admin', 'principal'];
-const FINANCE_ROLES = ['super_admin', 'admin', 'principal', 'accountant'];
-const STAFF_ROLES = ['super_admin', 'admin', 'principal', 'faculty'];
+const HIGH_PRIV = ['super_admin', 'admin', 'principal', 'visitor'];
+const FINANCE_ROLES = ['super_admin', 'admin', 'principal', 'accountant', 'visitor'];
+const STAFF_ROLES = ['super_admin', 'admin', 'principal', 'faculty', 'visitor'];
 
 const allMenuItems = [
   // ── Core ───────────────────────────────────────────────────
   {
-    key: '/',
+    key: '/dashboard',
     icon: <DashboardOutlined />,
     label: 'Dashboard',
     roles: [...FINANCE_ROLES, 'faculty'],   // accountant sees dashboard
@@ -71,6 +72,12 @@ const allMenuItems = [
     icon: <TrophyOutlined />,
     label: 'Exams',
     roles: STAFF_ROLES,
+  },
+  {
+    key: '/timetable',
+    icon: <TableOutlined />,
+    label: 'Timetable',
+    roles: [...STAFF_ROLES, 'accountant'],
   },
   {
     key: '/assignments',
@@ -253,15 +260,18 @@ const Sidebar = ({ collapsed, onCollapse }) => {
     });
   // console.log('ROLE FROM STORE:', user?.role, 'NORMALIZED:', userRole);
   // console.log("MENU KEYS:", menuItems.map(i => i?.key || i?.type));
-  // Highlight the current page
+  // Highlight the current page.
+  // Sort by key length descending so longer (more specific) paths match first.
+  // Treat both '/' and '/dashboard' as the Dashboard item ('/dashboard').
+  const currentPath = location.pathname === '/' ? '/dashboard' : location.pathname;
   const selectedKey =
     menuItems
       .filter((i) => i && i.type !== 'divider' && i.key)
-      .find(
-        (item) =>
-          location.pathname === item.key ||
-          (item.key !== '/' && location.pathname.startsWith(item.key))
-      )?.key || '/';
+      .sort((a, b) => (b.key?.length || 0) - (a.key?.length || 0))
+      .find((item) =>
+        currentPath === item.key ||
+        (item.key !== '/dashboard' && currentPath.startsWith(item.key + '/'))
+      )?.key || '/dashboard';
 
   return (
     <Sider
@@ -358,7 +368,7 @@ const Sidebar = ({ collapsed, onCollapse }) => {
           mode="inline"
           selectedKeys={[selectedKey]}
           items={menuItems}
-          onClick={({ key }) => navigate(key)}
+          onClick={({ key }) => navigate(key === '/dashboard' ? '/dashboard' : key)}
           style={{
             borderRight: 'none',
             marginTop: 8,

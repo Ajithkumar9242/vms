@@ -594,4 +594,14 @@ export const invoiceRegistryAPI = {
   },
 };
 
+// ─── Timetable ───────────────────────────────────────────────
+export const timetableAPI = {
+  getAll:       (params)    => api.get('/timetable', { params }),
+  getByClass:   (classId, params) => api.get(`/timetable/class/${classId}`, { params }),
+  getByFaculty: (facultyId, params) => api.get(`/timetable/faculty/${facultyId}`, { params }),
+  create:       (data)      => api.post('/timetable', data),
+  update:       (id, data)  => api.put(`/timetable/${id}`, data),
+  remove:       (id)        => api.delete(`/timetable/${id}`),
+};
+
 export default api;

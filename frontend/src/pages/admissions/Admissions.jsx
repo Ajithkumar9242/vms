@@ -11,6 +11,7 @@ import {
 } from '@ant-design/icons';
 import { admissionAPI, setupAPI } from '@/services/api';
 import AdmissionFormDrawer from './AdmissionFormDrawer';
+import useAuthStore from '@/store/authStore';
 
 const { Search } = Input;
 
@@ -30,6 +31,8 @@ const STATUS_ICONS = {
 
 const Admissions = () => {
   const { message, modal } = App.useApp();
+  const role = useAuthStore((s) => s.user?.role);
+  const canWrite = role !== 'visitor';
 
   // ─── State ──────────────────────────────────────────────────
   const [admissions, setAdmissions] = useState([]);
@@ -241,7 +244,7 @@ const Admissions = () => {
             <Button size="small" icon={<EyeOutlined />}
               onClick={() => setFormDrawer({ open: true, admission: r })} />
           </Tooltip>
-          {r.status === 'pending' || r.status === 'hold' ? (
+          {(r.status === 'pending' || r.status === 'hold') && canWrite ? (
             <>
               <Button size="small" type="primary" icon={<CheckCircleOutlined />}
                 onClick={() => openRemarkModal('approve', r._id, r.studentName)}>
@@ -319,13 +322,16 @@ const Admissions = () => {
                   unCheckedChildren="CLOSED"
                   style={{ minWidth: 80 }}
                   id="admission-toggle"
+                  disabled={!canWrite}
                 />
               </Spin>
-              <Button icon={<PlusOutlined />} type="primary"
-                onClick={() => setFormDrawer({ open: true, admission: null })}
-                id="btn-new-admission">
-                New Application
-              </Button>
+              {canWrite && (
+                <Button icon={<PlusOutlined />} type="primary"
+                  onClick={() => setFormDrawer({ open: true, admission: null })}
+                  id="btn-new-admission">
+                  New Application
+                </Button>
+              )}
             </Space>
           </Col>
         </Row>

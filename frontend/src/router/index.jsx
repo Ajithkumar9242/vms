@@ -17,6 +17,7 @@ const AdminFaculty = React.lazy(() => import('@/pages/admin/AdminFaculty'));
 const ParentsPage = React.lazy(() => import('@/pages/parents/Parents'));
 const CommunicationPage = React.lazy(() => import('@/pages/communication/Communication'));
 const ActivityLogsPage = React.lazy(() => import('@/pages/activity/ActivityLogs'));
+const TimetablePage = React.lazy(() => import('@/pages/timetable/Timetable'));
 
 // ─── School Operations Modules ─────────────────────────────
 const HostelPage = React.lazy(() => import('@/pages/hostel/Hostel'));
@@ -93,14 +94,14 @@ const ComingSoonPage = (title) => React.lazy(() =>
 const StudyMaterialsPage = ComingSoonPage('Study Materials — Temporarily Disabled');
 
 // ─── Role constants ─────────────────────────────────────────
-/** Setup pages: super_admin + admin only */
+/** Setup pages: super_admin + admin only — visitor explicitly excluded */
 const SETUP_ROLES = ['super_admin', 'admin'];
-/** Full management: admin + principal (not accountant) */
-const HIGH_PRIV = ['super_admin', 'admin', 'principal'];
-/** Finance: admin + principal + accountant */
-const FINANCE_ROLES = ['super_admin', 'admin', 'principal', 'accountant'];
-/** Operations (attendance, exams, hostel…): admin + principal + faculty */
-const STAFF_ROLES = ['super_admin', 'admin', 'principal', 'faculty'];
+/** Full management + visitor (read-only for visitor) */
+const HIGH_PRIV = ['super_admin', 'admin', 'principal', 'visitor'];
+/** Finance + visitor (read-only for visitor) */
+const FINANCE_ROLES = ['super_admin', 'admin', 'principal', 'accountant', 'visitor'];
+/** Operations + visitor (read-only for visitor) */
+const STAFF_ROLES = ['super_admin', 'admin', 'principal', 'faculty', 'visitor'];
 /** Faculty mobile app */
 const FACULTY_ROLES = ['faculty'];
 /** Parent mobile app */
@@ -186,6 +187,10 @@ const AppRouter = () => (
           {/* Exams — staff (admin + principal + faculty) */}
           <Route path="/exams"
             element={<RoleRoute roles={STAFF_ROLES}><ExamsPage /></RoleRoute>} />
+
+          {/* Timetable — staff + accountant + visitor */}
+          <Route path="/timetable"
+            element={<RoleRoute roles={[...STAFF_ROLES, 'accountant']}><TimetablePage /></RoleRoute>} />
 
           {/* ── HIGH_PRIV only (admin + principal) ──── */}
           <Route path="/admissions"
