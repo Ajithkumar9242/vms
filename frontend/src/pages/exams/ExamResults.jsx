@@ -17,6 +17,27 @@ const GRADE_COLOR = {
   C: 'orange', D: 'gold', F: 'red', 'N/A': 'default',
 };
 
+// Canonical max for labelling component context in results view
+const COMPONENT_MAX = {
+  'periodic test': 10,
+  'notebook': 5,
+  'sea': 5,
+  'half yearly examination': 80,
+  'yearly examination': 80,
+};
+
+const componentLabel = (examName, maxMarks) => {
+  const n = (examName || '').toLowerCase().trim();
+  const abbr = {
+    'periodic test': 'PT',
+    'notebook': 'NB',
+    'sea': 'SEA',
+    'half yearly examination': 'HY Exam',
+    'yearly examination': 'Yearly',
+  };
+  return abbr[n] ? `${abbr[n]} /${COMPONENT_MAX[n] ?? maxMarks}` : examName;
+};
+
 const ExamResults = ({ initialExamId, onClearExamId }) => {
   const { message } = App.useApp();
   const [exams, setExams] = useState([]);
@@ -24,14 +45,45 @@ const ExamResults = ({ initialExamId, onClearExamId }) => {
   const [resultData, setResultData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  
+  // ── Filters ────────────────────────────────────────────────
+  const [classFilter, setClassFilter] = useState(undefined);
+  const [termFilter, setTermFilter] = useState(undefined);
 
   // Load exam list
   useEffect(() => {
-    examAPI.getAll().then((r) => {
+    examAPI.getAll({ status: 'locked' }).then((r) => {
+      // Results should typically show published or locked exams
+      // We will fetch all published/locked, or just all since the backend usually handles it.
+      // Actually, examAPI.getAll() handles it.
       const list = r?.data || [];
       setExams(Array.isArray(list) ? list : []);
     }).catch(() => { });
   }, []);
+
+  const classOptions = React.useMemo(() => {
+    const map = new Map();
+    exams.forEach(e => {
+      if (e.classId?._id && e.classId?.name) {
+        map.set(e.classId._id, e.classId.name);
+      }
+    });
+    return Array.from(map.entries()).map(([value, label]) => ({ label, value }));
+  }, [exams]);
+
+  const filteredExams = React.useMemo(() => {
+    return exams.filter(e => {
+      if (classFilter && e.classId?._id !== classFilter) return false;
+      if (termFilter && e.term !== termFilter && !(termFilter === 'term1' && e.name === 'Half Yearly Examination') && !(termFilter === 'term2' && e.name === 'Yearly Examination')) {
+        // Strict match on term, or implicit match for HY/YE if they lack the `term` field in legacy data
+        if (e.term) return false; 
+        if (termFilter === 'term1' && e.name?.toLowerCase().includes('half yearly')) return true;
+        if (termFilter === 'term2' && e.name?.toLowerCase().includes('yearly') && !e.name?.toLowerCase().includes('half')) return true;
+        return false;
+      }
+      return true;
+    });
+  }, [exams, classFilter, termFilter]);
 
   // If parent passes an initialExamId, set it
   useEffect(() => {
@@ -71,7 +123,7 @@ const ExamResults = ({ initialExamId, onClearExamId }) => {
       r.student?.rollNo?.toLowerCase().includes(q);
   });
 
-  // ── Expandable: subject-wise marks ───────────────────────
+  // ── Expandable: subject-wise marks with component context ─────────────────
   const expandedRowRender = (record) => (
     <Table
       dataSource={record.subjects}
@@ -85,8 +137,20 @@ const ExamResults = ({ initialExamId, onClearExamId }) => {
           render: (_, s) => s.subject?.name || '—',
         },
         {
+          title: 'Component', width: 140,
+          render: (_, s) => {
+            const label = componentLabel(s.examName || s.exam?.name, s.maxMarks);
+            return <Tag color="blue" style={{ fontFamily: 'monospace' }}>{label}</Tag>;
+          },
+        },
+        {
           title: 'Marks', width: 120, align: 'center',
-          render: (_, s) => `${s.marksObtained} / ${s.maxMarks}`,
+          render: (_, s) => (
+            <Text strong>
+              {s.marksObtained}
+              <Text type="secondary" style={{ fontWeight: 400 }}>/{s.maxMarks}</Text>
+            </Text>
+          ),
         },
         {
           title: '%', width: 80, align: 'center',
@@ -105,6 +169,7 @@ const ExamResults = ({ initialExamId, onClearExamId }) => {
       ]}
     />
   );
+
 
   // ── Main table columns ────────────────────────────────────
   const columns = [
@@ -169,34 +234,52 @@ const ExamResults = ({ initialExamId, onClearExamId }) => {
 
   return (
     <>
-      {/* Exam selector */}
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }} align="middle">
-        <Col xs={24} sm={14} md={10}>
-          <Select
-            placeholder="Select exam to view results"
-            style={{ width: '100%' }}
-            value={selectedExamId}
-            onChange={(v) => { setSelectedExamId(v); setSearch(''); }}
-            options={exams.map((e) => ({
-              label: `${e.examName || e.name} — ${e.classId?.name || ''}`,
-              value: e._id,
-            }))}
-            allowClear showSearch optionFilterProp="label"
-            id="results-exam-select"
-          />
-        </Col>
+      {/* Exam selector & Filters */}
+      <div style={{ marginBottom: 16, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <Select
+          placeholder="Filter Class"
+          style={{ width: 140 }}
+          value={classFilter}
+          onChange={(v) => { setClassFilter(v); setSelectedExamId(undefined); }}
+          options={classOptions}
+          allowClear
+          showSearch
+          optionFilterProp="label"
+        />
+        <Select
+          placeholder="Filter Term"
+          style={{ width: 120 }}
+          value={termFilter}
+          onChange={(v) => { setTermFilter(v); setSelectedExamId(undefined); }}
+          options={[
+            { label: 'Term 1', value: 'term1' },
+            { label: 'Term 2', value: 'term2' },
+          ]}
+          allowClear
+        />
+        <Select
+          placeholder="Select exam to view results"
+          style={{ flex: 1, minWidth: 250 }}
+          value={selectedExamId}
+          onChange={(v) => { setSelectedExamId(v); setSearch(''); }}
+          options={filteredExams.map((e) => ({
+            label: `${e.examName || e.name} — ${e.classId?.name || ''}${e.term ? ` (${e.term})` : ''}`,
+            value: e._id,
+          }))}
+          allowClear showSearch optionFilterProp="label"
+          id="results-exam-select"
+        />
         {selectedExamId && (
-          <Col xs={24} sm={10} md={6}>
-            <Input.Search
-              placeholder="Search student…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              allowClear
-              id="results-search"
-            />
-          </Col>
+          <Input.Search
+            placeholder="Search student…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            allowClear
+            id="results-search"
+            style={{ width: 220 }}
+          />
         )}
-      </Row>
+      </div>
 
       {!selectedExamId ? (
         <Empty description="Select an exam to view results" style={{ marginTop: 40 }} />

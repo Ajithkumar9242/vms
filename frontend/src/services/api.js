@@ -197,6 +197,7 @@ export const feesAPI = {
   bulkSaveProfiles: (data) => api.post('/fees/profiles/bulk-save', data),
   getStudentProfile: (studentId, params) => api.get(`/fees/profiles/student/${studentId}`, { params }),
   addDiscount: (studentId, data, params) => api.post(`/fees/profiles/student/${studentId}/discount`, data, { params }),
+  getDiscounts: (params) => api.get('/fees/discounts', { params }),
   lockProfile: (studentId, data) => api.post(`/fees/profiles/student/${studentId}/lock`, data),
   unlockProfile: (studentId, data) => api.post(`/fees/profiles/student/${studentId}/unlock`, data),
   getStudentFees: (studentId, params) => api.get(`/fees/invoice/${studentId}`, { params }),

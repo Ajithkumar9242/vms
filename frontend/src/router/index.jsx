@@ -10,6 +10,7 @@ const DashboardPage = React.lazy(() => import('@/pages/dashboard/Dashboard'));
 const StudentsPage = React.lazy(() => import('@/pages/students/Students'));
 const AdmissionsPage = React.lazy(() => import('@/pages/admissions/Admissions'));
 const FeesPage = React.lazy(() => import('@/pages/fees/Fees'));
+const DiscountReport = React.lazy(() => import('@/pages/fees/DiscountReport'));
 const AttendancePage = React.lazy(() => import('@/pages/attendance/Attendance'));
 const ExamsPage = React.lazy(() => import('@/pages/exams/Exams'));
 const AdminFaculty = React.lazy(() => import('@/pages/admin/AdminFaculty'));
@@ -93,17 +94,17 @@ const StudyMaterialsPage = ComingSoonPage('Study Materials — Temporarily Disab
 
 // ─── Role constants ─────────────────────────────────────────
 /** Setup pages: super_admin + admin only */
-const SETUP_ROLES   = ['super_admin', 'admin'];
+const SETUP_ROLES = ['super_admin', 'admin'];
 /** Full management: admin + principal (not accountant) */
-const HIGH_PRIV     = ['super_admin', 'admin', 'principal'];
+const HIGH_PRIV = ['super_admin', 'admin', 'principal'];
 /** Finance: admin + principal + accountant */
 const FINANCE_ROLES = ['super_admin', 'admin', 'principal', 'accountant'];
 /** Operations (attendance, exams, hostel…): admin + principal + faculty */
-const STAFF_ROLES   = ['super_admin', 'admin', 'principal', 'faculty'];
+const STAFF_ROLES = ['super_admin', 'admin', 'principal', 'faculty'];
 /** Faculty mobile app */
 const FACULTY_ROLES = ['faculty'];
 /** Parent mobile app */
-const PARENT_ROLES  = ['parent'];
+const PARENT_ROLES = ['parent'];
 
 /**
  * Smart post-login redirect:
@@ -122,13 +123,13 @@ const AppRouter = () => (
       <Routes>
 
         {/* ── Public ─────────────────────────────────────── */}
-        <Route path="/login"             element={<LoginPage />} />
-        <Route path="/parent-login"      element={<ParentLoginPage />} />
-        <Route path="/parent/login"      element={<ParentLoginPage />} />
-        <Route path="/faculty-login"     element={<FacultyLoginPage />} />
-        <Route path="/faculty/login"     element={<FacultyLoginPage />} />
-        <Route path="/online-admission"  element={<OnlineAdmissionPage />} />
-        <Route path="/admission-status"  element={<ApplicationStatusPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/parent-login" element={<ParentLoginPage />} />
+        <Route path="/parent/login" element={<ParentLoginPage />} />
+        <Route path="/faculty-login" element={<FacultyLoginPage />} />
+        <Route path="/faculty/login" element={<FacultyLoginPage />} />
+        <Route path="/online-admission" element={<OnlineAdmissionPage />} />
+        <Route path="/admission-status" element={<ApplicationStatusPage />} />
 
         {/* ── Parent Mobile App ──────────────────────────── */}
         {/* Safety: non-parent users hitting /parent/* get redirected to login */}
@@ -137,15 +138,15 @@ const AppRouter = () => (
             <RoleRoute roles={[...PARENT_ROLES, ...HIGH_PRIV]}>
               <Routes>
                 <Route index element={<Navigate to="dashboard" replace />} />
-                <Route path="dashboard"      element={<ParentDashboard />} />
-                <Route path="fees"           element={<ParentFees />} />
-                <Route path="attendance"     element={<ParentAttendance />} />
-                <Route path="exams"          element={<ParentExams />} />
-                <Route path="notifications"  element={<ParentNotifications />} />
-                <Route path="profile"        element={<ParentProfile />} />
-                <Route path="vault"          element={<ParentVault />} />
-                <Route path="requests"       element={<ParentDocumentRequests />} />
-                <Route path="documents"      element={<ParentDocuments />} />
+                <Route path="dashboard" element={<ParentDashboard />} />
+                <Route path="fees" element={<ParentFees />} />
+                <Route path="attendance" element={<ParentAttendance />} />
+                <Route path="exams" element={<ParentExams />} />
+                <Route path="notifications" element={<ParentNotifications />} />
+                <Route path="profile" element={<ParentProfile />} />
+                <Route path="vault" element={<ParentVault />} />
+                <Route path="requests" element={<ParentDocumentRequests />} />
+                <Route path="documents" element={<ParentDocuments />} />
                 <Route path="privacy-policy" element={<ParentPrivacyPolicy />} />
               </Routes>
             </RoleRoute>
@@ -158,14 +159,14 @@ const AppRouter = () => (
             <RoleRoute roles={FACULTY_ROLES}>
               <Routes>
                 <Route index element={<Navigate to="dashboard" replace />} />
-                <Route path="dashboard"    element={<FacultyAttendance />} />
-                <Route path="attendance"   element={<FacultyAttendance />} />
-                <Route path="students"     element={<FacultyStudents />} />
+                <Route path="dashboard" element={<FacultyAttendance />} />
+                <Route path="attendance" element={<FacultyAttendance />} />
+                <Route path="students" element={<FacultyStudents />} />
                 <Route path="notifications" element={<FacultyNotifications />} />
-                <Route path="profile"      element={<FacultyProfile />} />
-                <Route path="assignments"  element={<AssignmentManager />} />
-                <Route path="marks"        element={<FacultyMarksEntry />} />
-                <Route path="materials"    element={<StudyMaterialsPage />} />
+                <Route path="profile" element={<FacultyProfile />} />
+                <Route path="assignments" element={<AssignmentManager />} />
+                <Route path="marks" element={<FacultyMarksEntry />} />
+                <Route path="materials" element={<StudyMaterialsPage />} />
               </Routes>
             </RoleRoute>
           </ProtectedRoute>
@@ -222,6 +223,8 @@ const AppRouter = () => (
           {/* ── FINANCE_ROLES (admin + principal + accountant) ── */}
           <Route path="/fees"
             element={<RoleRoute roles={[...FINANCE_ROLES, 'parent']}><FeesPage /></RoleRoute>} />
+          <Route path="/fees/discounts"
+            element={<RoleRoute roles={FINANCE_ROLES}><DiscountReport /></RoleRoute>} />
           <Route path="/pos/catalog"
             element={<RoleRoute roles={FINANCE_ROLES}><PosItemCatalogAdmin /></RoleRoute>} />
           <Route path="/pos/billing"

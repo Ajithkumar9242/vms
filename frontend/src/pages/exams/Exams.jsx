@@ -1,16 +1,17 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography, Select, Row, Col, Table, Button, Tag, App,
-  Empty, Popconfirm, Space, Tooltip,
+  Empty, Popconfirm, Space, Tooltip, Input,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined,
   LockOutlined, CheckCircleOutlined, EyeOutlined,
 } from '@ant-design/icons';
-import { examAPI, schoolAPI } from '@/services/api';
+import { examAPI, schoolAPI, setupAPI } from '@/services/api';
 import CreateExamModal from './CreateExamModal';
 import MarksEntry from './MarksEntry';
 import ExamResults from './ExamResults';
+import { SearchOutlined } from '@ant-design/icons';
 
 const { Title, Text } = Typography;
 
@@ -38,8 +39,12 @@ const Exams = () => {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(false);
   const [classes, setClasses] = useState([]);
+  const [academicYears, setAcademicYears] = useState([]);
   const [classFilter, setClassFilter] = useState(undefined);
   const [statusFilter, setStatusFilter] = useState(undefined);
+  const [termFilter, setTermFilter] = useState(undefined);
+  const [yearFilter, setYearFilter] = useState(undefined);
+  const [search, setSearch] = useState('');
 
   // ── Modal ─────────────────────────────────────────────────
   const [modalOpen, setModalOpen] = useState(false);
@@ -52,19 +57,29 @@ const Exams = () => {
   const fetchExams = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await examAPI.getAll({ classId: classFilter, status: statusFilter });
+      const res = await examAPI.getAll({
+        classId: classFilter,
+        status: statusFilter,
+        academicYearId: yearFilter,
+        term: termFilter,
+        search: search || undefined,
+      });
       setExams(res?.data || []);
     } catch (err) {
       message.error(err.message || 'Failed to load exams');
     } finally {
       setLoading(false);
     }
-  }, [classFilter, statusFilter, message]);
+  }, [classFilter, statusFilter, yearFilter, termFilter, search, message]);
 
   useEffect(() => {
     schoolAPI.getClasses({ limit: 50 }).then((r) => {
       const list = r?.data?.classes || r?.data || [];
       setClasses(Array.isArray(list) ? list : []);
+    }).catch(() => {});
+    setupAPI.getAcademicYears().then((r) => {
+      const list = r?.data || [];
+      setAcademicYears(Array.isArray(list) ? list : []);
     }).catch(() => {});
   }, []);
 
@@ -256,34 +271,60 @@ const Exams = () => {
       {tab === 'exams' && (
         <>
           {/* Toolbar */}
-          <Row gutter={[12, 12]} style={{ marginBottom: 16 }} justify="space-between" align="middle">
-            <Col>
-              <Space>
-                <Select
-                  placeholder="All classes"
-                  style={{ width: 160 }}
-                  value={classFilter}
-                  onChange={setClassFilter}
-                  options={classes.map((c) => ({ label: c.name, value: c._id }))}
-                  allowClear
-                  id="exams-class-filter"
-                />
-                <Select
-                  placeholder="All statuses"
-                  style={{ width: 150 }}
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  options={[
-                    { label: '🟡 Draft', value: 'draft' },
-                    { label: '🟢 Published', value: 'published' },
-                    { label: '🔒 Locked', value: 'locked' },
-                  ]}
-                  allowClear
-                  id="exams-status-filter"
-                />
-              </Space>
-            </Col>
-            <Col>
+          <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between' }}>
+            <Space wrap style={{ flex: 1 }}>
+              <Select
+                placeholder="Academic Year"
+                style={{ width: 150 }}
+                value={yearFilter}
+                onChange={setYearFilter}
+                options={academicYears.map((y) => ({ label: y.name, value: y._id }))}
+                allowClear
+              />
+              <Select
+                placeholder="All classes"
+                style={{ width: 140 }}
+                value={classFilter}
+                onChange={setClassFilter}
+                options={classes.map((c) => ({ label: c.name, value: c._id }))}
+                allowClear
+                showSearch
+                optionFilterProp="label"
+              />
+              <Select
+                placeholder="Term"
+                style={{ width: 120 }}
+                value={termFilter}
+                onChange={setTermFilter}
+                options={[
+                  { label: 'Term 1', value: 'term1' },
+                  { label: 'Term 2', value: 'term2' },
+                ]}
+                allowClear
+              />
+              <Select
+                placeholder="Status"
+                style={{ width: 130 }}
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={[
+                  { label: '🟡 Draft', value: 'draft' },
+                  { label: '🟢 Published', value: 'published' },
+                  { label: '🔒 Locked', value: 'locked' },
+                ]}
+                allowClear
+              />
+            </Space>
+            <Space wrap>
+              <Input
+                placeholder="Search exam name..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onPressEnter={fetchExams}
+                prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                style={{ width: 200 }}
+                allowClear
+              />
               <Button
                 type="primary" icon={<PlusOutlined />}
                 onClick={() => { setEditRecord(null); setModalOpen(true); }}
@@ -291,8 +332,8 @@ const Exams = () => {
               >
                 Create Exam
               </Button>
-            </Col>
-          </Row>
+            </Space>
+          </div>
 
           <Table
             columns={columns}

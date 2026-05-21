@@ -55,13 +55,41 @@ const MarksEntry = () => {
   const [marksMap, setMarksMap] = useState({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  
+  // ── Filters ────────────────────────────────────────────────
+  const [classFilter, setClassFilter] = useState(undefined);
+  const [termFilter, setTermFilter] = useState(undefined);
 
   useEffect(() => {
-    examAPI.getAll().then((res) => {
+    examAPI.getAll({ status: 'published' }).then((res) => {
       const list = res?.data || [];
-      setExams(Array.isArray(list) ? list.filter((e) => e.isPublished) : []);
+      setExams(Array.isArray(list) ? list : []);
     }).catch(() => {});
   }, []);
+
+  const classOptions = React.useMemo(() => {
+    const map = new Map();
+    exams.forEach(e => {
+      if (e.classId?._id && e.classId?.name) {
+        map.set(e.classId._id, e.classId.name);
+      }
+    });
+    return Array.from(map.entries()).map(([value, label]) => ({ label, value }));
+  }, [exams]);
+
+  const filteredExams = React.useMemo(() => {
+    return exams.filter(e => {
+      if (classFilter && e.classId?._id !== classFilter) return false;
+      if (termFilter && e.term !== termFilter && !(termFilter === 'term1' && e.name === 'Half Yearly Examination') && !(termFilter === 'term2' && e.name === 'Yearly Examination')) {
+        // Strict match on term, or implicit match for HY/YE if they lack the `term` field in legacy data
+        if (e.term) return false; 
+        if (termFilter === 'term1' && e.name?.toLowerCase().includes('half yearly')) return true;
+        if (termFilter === 'term2' && e.name?.toLowerCase().includes('yearly') && !e.name?.toLowerCase().includes('half')) return true;
+        return false;
+      }
+      return true;
+    });
+  }, [exams, classFilter, termFilter]);
 
   const loadExamData = useCallback(async () => {
     if (!selectedExamId) return;
@@ -188,15 +216,36 @@ const MarksEntry = () => {
     <ConfigProvider theme={marksTheme}>
       <div className="faculty-module">
 
-        {/* ── Exam selector ── */}
-        <div style={{ marginBottom: 14 }}>
+        {/* ── Exam selector & Filters ── */}
+        <div style={{ marginBottom: 14, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <Select
+            placeholder="Filter Class"
+            style={{ width: 140 }}
+            value={classFilter}
+            onChange={(v) => { setClassFilter(v); setSelectedExamId(undefined); }}
+            options={classOptions}
+            allowClear
+            showSearch
+            optionFilterProp="label"
+          />
+          <Select
+            placeholder="Filter Term"
+            style={{ width: 120 }}
+            value={termFilter}
+            onChange={(v) => { setTermFilter(v); setSelectedExamId(undefined); }}
+            options={[
+              { label: 'Term 1', value: 'term1' },
+              { label: 'Term 2', value: 'term2' },
+            ]}
+            allowClear
+          />
           <Select
             placeholder="Select a published exam"
-            style={{ width: '100%' }}
+            style={{ flex: 1, minWidth: 250 }}
             value={selectedExamId}
             onChange={setSelectedExamId}
-            options={exams.map((e) => ({
-              label: `${e.examName || e.name} — ${e.classId?.name || ''}`,
+            options={filteredExams.map((e) => ({
+              label: `${e.examName || e.name} — ${e.classId?.name || ''}${e.term ? ` (${e.term})` : ''}`,
               value: e._id,
             }))}
             allowClear showSearch optionFilterProp="label"

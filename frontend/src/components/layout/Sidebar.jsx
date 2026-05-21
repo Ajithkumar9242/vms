@@ -116,6 +116,12 @@ const allMenuItems = [
     roles: FINANCE_ROLES,
   },
   {
+    key: '/fees/discounts',
+    icon: <FileTextOutlined />,
+    label: 'Discount List',
+    roles: FINANCE_ROLES,
+  },
+  {
     key: '/pos/billing',
     icon: <ShoppingCartOutlined />,
     label: 'POS Billing',

@@ -1,9 +1,33 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Modal, Form, Input, InputNumber, Select, DatePicker, App, Row, Col,
+  Modal, Form, InputNumber, Select, DatePicker, App, Row, Col,
 } from 'antd';
 import dayjs from 'dayjs';
 import { examAPI, schoolAPI } from '@/services/api';
+
+// ── School canonical exam names (used by the marks card PDF) ────────────────
+// ONLY these 5 names appear correctly in the Progress Report.
+const SCHOOL_EXAM_OPTIONS = [
+  { label: '📋 Periodic Test  (/10)', value: 'Periodic Test' },
+  { label: '📓 Notebook  (/5)', value: 'Notebook' },
+  { label: '🔬 SEA  (/5)', value: 'SEA' },
+  { label: '📝 Half Yearly Examination  (Term 1 · /80)', value: 'Half Yearly Examination' },
+  { label: '📝 Yearly Examination  (Term 2 · /80)', value: 'Yearly Examination' },
+];
+
+// Canonical rules: maxMarks + passing + auto-term (null = user must pick).
+const EXAM_RULES = {
+  'Periodic Test':          { maxMarks: 10, passingMarks: 4,  autoTerm: null },
+  'Notebook':               { maxMarks: 5,  passingMarks: 2,  autoTerm: null },
+  'SEA':                    { maxMarks: 5,  passingMarks: 2,  autoTerm: null },
+  'Half Yearly Examination':{ maxMarks: 80, passingMarks: 27, autoTerm: 'term1' },
+  'Yearly Examination':     { maxMarks: 80, passingMarks: 27, autoTerm: 'term2' },
+};
+
+const TERM_OPTIONS = [
+  { label: '📄 Term 1  (Jan – Jun)', value: 'term1' },
+  { label: '📄 Term 2  (Jul – Dec)', value: 'term2' },
+];
 
 const { RangePicker } = DatePicker;
 
@@ -23,6 +47,8 @@ const CreateExamModal = ({ open, editRecord, onClose, onSuccess }) => {
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
+  // Track whether a canonical name is selected so we can lock the marks fields
+  const [canonicalRule, setCanonicalRule] = useState(null);
 
   const isEdit = !!(editRecord?._id);
 
@@ -69,21 +95,26 @@ const CreateExamModal = ({ open, editRecord, onClose, onSuccess }) => {
       loadSubjectsForClass(classId).then(() => {
         const start = editRecord.startDate ? dayjs(editRecord.startDate) : null;
         const end = editRecord.endDate ? dayjs(editRecord.endDate) : null;
+        const name = editRecord.examName || editRecord.name;
 
         form.setFieldsValue({
-          examName: editRecord.examName || editRecord.name,
+          examName: name,
+          term: editRecord.term || undefined,
           classId,
           dateRange: start ? [start, end || null] : undefined,
           maxMarks: editRecord.maxMarks ?? 100,
           passingMarks: editRecord.passingMarks ?? 35,
           subjects: (editRecord.subjects || []).map((s) => s?._id?.toString() || s?.toString?.() || s),
         });
+        // Restore lock state for canonical names in edit mode
+        setCanonicalRule(EXAM_RULES[name] || null);
       });
     } else {
       // Create mode — clean slate
       form.resetFields();
       form.setFieldsValue({ maxMarks: 100, passingMarks: 35 });
       setSubjects([]);
+      setCanonicalRule(null);
     }
   }, [open, editRecord, isEdit, form, loadSubjectsForClass]);
 
@@ -91,6 +122,24 @@ const CreateExamModal = ({ open, editRecord, onClose, onSuccess }) => {
   const handleClassChange = (classId) => {
     form.setFieldValue('subjects', undefined);
     loadSubjectsForClass(classId);
+  };
+
+  // ── Exam name change: auto-fill + lock marks + auto-set term ────────────
+  const handleExamNameChange = (value) => {
+    const rule = EXAM_RULES[value] || null;
+    setCanonicalRule(rule);
+    if (rule) {
+      form.setFieldsValue({ maxMarks: rule.maxMarks, passingMarks: rule.passingMarks });
+      // Auto-lock term for HY (term1) and YE (term2); clear it for PT/NB/SEA so user picks
+      if (rule.autoTerm) {
+        form.setFieldValue('term', rule.autoTerm);
+      } else {
+        form.setFieldValue('term', undefined);
+      }
+    } else {
+      // Non-canonical name selected (or cleared) — also clear term
+      form.setFieldValue('term', undefined);
+    }
   };
 
   // ── Submit ────────────────────────────────────────────────
@@ -108,6 +157,7 @@ const CreateExamModal = ({ open, editRecord, onClose, onSuccess }) => {
 
       const payload = {
         examName: values.examName,
+        term: values.term || undefined,
         classId: values.classId,
         maxMarks: values.maxMarks,
         passingMarks: values.passingMarks ?? 35,
@@ -160,13 +210,53 @@ const CreateExamModal = ({ open, editRecord, onClose, onSuccess }) => {
         requiredMark="optional"
         style={{ marginTop: 16 }}
       >
-        {/* Exam Name */}
+        {/* Exam Name — locked to school canonical names */}
         <Form.Item
           name="examName"
           label="Exam Name"
-          rules={[{ required: true, message: 'Enter exam name' }]}
+          rules={[{ required: true, message: 'Select an exam component' }]}
+          extra={
+            canonicalRule
+              ? <span style={{ fontSize: 11, color: '#16a34a' }}>
+                  ✅ Max marks auto-set to <strong>{canonicalRule.maxMarks}</strong> and locked.
+                  Appears in the <strong>CBSE Progress Report</strong>.
+                </span>
+              : <span style={{ fontSize: 11, color: '#6b7280' }}>
+                  Only these 5 names appear in the marks card PDF.
+                </span>
+          }
         >
-          <Input placeholder="e.g. Mid Term Exam, Unit Test 1" id="exam-name-input" />
+          <Select
+            placeholder="Select exam component…"
+            id="exam-name-input"
+            options={SCHOOL_EXAM_OPTIONS}
+            onChange={handleExamNameChange}
+            allowClear
+          />
+        </Form.Item>
+
+        {/* Term — required for marks card column placement */}
+        <Form.Item
+          name="term"
+          label="Term"
+          rules={[{ required: true, message: 'Select a term (Term 1 or Term 2)' }]}
+          extra={
+            canonicalRule?.autoTerm
+              ? <span style={{ fontSize: 11, color: '#16a34a' }}>
+                  🔒 Auto-set: <strong>{canonicalRule.autoTerm === 'term1' ? 'Term 1' : 'Term 2'}</strong>
+                </span>
+              : <span style={{ fontSize: 11, color: '#6b7280' }}>
+                  Periodic Test / Notebook / SEA appear in both terms — select which one.
+                </span>
+          }
+        >
+          <Select
+            placeholder="Select term…"
+            id="exam-term-select"
+            options={TERM_OPTIONS}
+            disabled={!!(canonicalRule?.autoTerm)}
+            allowClear={!canonicalRule?.autoTerm}
+          />
         </Form.Item>
 
         {/* Class */}
@@ -196,20 +286,43 @@ const CreateExamModal = ({ open, editRecord, onClose, onSuccess }) => {
           />
         </Form.Item>
 
-        {/* Max / Passing Marks */}
+        {/* Max / Passing Marks — locked when a canonical exam name is selected */}
         <Row gutter={12}>
           <Col span={12}>
             <Form.Item
               name="maxMarks"
               label="Max Marks"
-              rules={[{ required: true, message: 'Required' }]}
+              rules={[
+                { required: true, message: 'Required' },
+                {
+                  validator(_, value) {
+                    if (!canonicalRule) return Promise.resolve();
+                    if (value !== canonicalRule.maxMarks) {
+                      return Promise.reject(
+                        new Error(`"${form.getFieldValue('examName')}" must be /${canonicalRule.maxMarks}`)
+                      );
+                    }
+                    return Promise.resolve();
+                  },
+                },
+              ]}
             >
-              <InputNumber min={1} style={{ width: '100%' }} id="exam-max-marks" />
+              <InputNumber
+                min={1}
+                style={{ width: '100%' }}
+                id="exam-max-marks"
+                disabled={!!canonicalRule}
+              />
             </Form.Item>
           </Col>
           <Col span={12}>
             <Form.Item name="passingMarks" label="Passing Marks">
-              <InputNumber min={0} style={{ width: '100%' }} id="exam-passing-marks" />
+              <InputNumber
+                min={0}
+                style={{ width: '100%' }}
+                id="exam-passing-marks"
+                disabled={!!canonicalRule}
+              />
             </Form.Item>
           </Col>
         </Row>

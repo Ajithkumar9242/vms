@@ -15,42 +15,42 @@ import AdmissionFormDrawer from './AdmissionFormDrawer';
 const { Search } = Input;
 
 const STATUS_COLORS = {
-  pending:  'blue',
+  pending: 'blue',
   approved: 'green',
   rejected: 'red',
-  hold:     'orange',
+  hold: 'orange',
 };
 
 const STATUS_ICONS = {
-  pending:  null,
+  pending: null,
   approved: <CheckCircleOutlined />,
   rejected: <CloseCircleOutlined />,
-  hold:     <PauseCircleOutlined />,
+  hold: <PauseCircleOutlined />,
 };
 
 const Admissions = () => {
   const { message, modal } = App.useApp();
 
   // ─── State ──────────────────────────────────────────────────
-  const [admissions, setAdmissions]   = useState([]);
-  const [total, setTotal]             = useState(0);
-  const [loading, setLoading]         = useState(false);
-  const [page, setPage]               = useState(1);
+  const [admissions, setAdmissions] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
 
   // Settings state
-  const [settings, setSettings]         = useState({ admissionsOpen: false, activeAdmissionAcademicYearId: null });
+  const [settings, setSettings] = useState({ admissionsOpen: false, activeAdmissionAcademicYearId: null });
   const [academicYears, setAcademicYears] = useState([]);
   const [settingsLoading, setSettingsLoading] = useState(false);
 
   // Action modals
-  const [remarkModal, setRemarkModal]   = useState({ open: false, type: '', id: '', name: '' });
-  const [remarkText, setRemarkText]     = useState('');
+  const [remarkModal, setRemarkModal] = useState({ open: false, type: '', id: '', name: '' });
+  const [remarkText, setRemarkText] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
   // Drawer
-  const [formDrawer, setFormDrawer]   = useState({ open: false, admission: null });
+  const [formDrawer, setFormDrawer] = useState({ open: false, admission: null });
 
   // ─── Load settings ──────────────────────────────────────────
   const loadSettings = useCallback(async () => {
@@ -73,7 +73,7 @@ const Admissions = () => {
     try {
       const params = { page, limit: 15 };
       if (statusFilter) params.status = statusFilter;
-      if (searchPhone)  params.phone  = searchPhone;
+      if (searchPhone) params.phone = searchPhone;
       const res = await admissionAPI.getAll(params);
       const data = res.data || res;
       setAdmissions(data.admissions || data);
@@ -152,6 +152,30 @@ const Admissions = () => {
       key: 'applicationNo',
       width: 130,
       render: (v) => <code style={{ fontSize: 11 }}>{v}</code>,
+    },
+    {
+      title: 'Adm No',
+      dataIndex: 'admissionNo',
+      key: 'admissionNo',
+      width: 100,
+      render: (v) =>
+        v ? (
+          <span style={{ fontWeight: 600 }}>{v}</span>
+        ) : (
+          <span style={{ color: '#94A3B8' }}>—</span>
+        ),
+    },
+    {
+      title: 'Roll No',
+      dataIndex: 'rollNo',
+      key: 'rollNo',
+      width: 90,
+      render: (v) =>
+        v ? (
+          <span>{v}</span>
+        ) : (
+          <span style={{ color: '#94A3B8' }}>—</span>
+        ),
     },
     {
       title: 'Student',
@@ -242,10 +266,10 @@ const Admissions = () => {
 
   // ─── Stats ──────────────────────────────────────────────────
   const stats = {
-    total:    admissions.length,
-    pending:  admissions.filter(a => a.status === 'pending').length,
+    total: admissions.length,
+    pending: admissions.filter(a => a.status === 'pending').length,
     approved: admissions.filter(a => a.status === 'approved').length,
-    hold:     admissions.filter(a => a.status === 'hold').length,
+    hold: admissions.filter(a => a.status === 'hold').length,
     rejected: admissions.filter(a => a.status === 'rejected').length,
   };
 
@@ -310,10 +334,10 @@ const Admissions = () => {
       {/* ─── Stats Row ───────────────────────────────────── */}
       <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
         {[
-          { label: 'Total', value: stats.total,    color: 'var(--color-secondary)' },
-          { label: 'Pending', value: stats.pending,  color: '#F59E0B' },
+          { label: 'Total', value: stats.total, color: 'var(--color-secondary)' },
+          { label: 'Pending', value: stats.pending, color: '#F59E0B' },
           { label: 'Approved', value: stats.approved, color: '#10B981' },
-          { label: 'On Hold', value: stats.hold,     color: '#F97316' },
+          { label: 'On Hold', value: stats.hold, color: '#F97316' },
           { label: 'Rejected', value: stats.rejected, color: '#EF4444' },
         ].map(s => (
           <Col xs={12} sm={8} md={4} key={s.label}>
@@ -377,8 +401,8 @@ const Admissions = () => {
         open={remarkModal.open}
         title={
           remarkModal.type === 'approve' ? `✅ Approve — ${remarkModal.name}` :
-          remarkModal.type === 'hold'    ? `⏸ Hold — ${remarkModal.name}` :
-                                          `❌ Reject — ${remarkModal.name}`
+            remarkModal.type === 'hold' ? `⏸ Hold — ${remarkModal.name}` :
+              `❌ Reject — ${remarkModal.name}`
         }
         onOk={handleAction}
         onCancel={() => setRemarkModal({ open: false, type: '', id: '', name: '' })}
@@ -394,8 +418,8 @@ const Admissions = () => {
           {remarkModal.type === 'approve'
             ? 'Approving will create a student record. You can optionally add a remark.'
             : remarkModal.type === 'hold'
-            ? 'Enter the reason for placing this application on hold (sent to parent).'
-            : 'Enter the reason for rejection (sent to parent).'}
+              ? 'Enter the reason for placing this application on hold (sent to parent).'
+              : 'Enter the reason for rejection (sent to parent).'}
         </p>
         <Input.TextArea
           rows={3}

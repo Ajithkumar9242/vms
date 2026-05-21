@@ -471,44 +471,63 @@ const StudentProfileDrawer = ({ student, open, onClose }) => {
             {(displayStudent.avatar || displayStudent.photo || displayStudent.profilePhoto || admission?.studentPhoto) ? (
               <img
                 src={normalizeUrl(displayStudent.avatar || displayStudent.photo || displayStudent.profilePhoto || admission?.studentPhoto)}
-                alt={displayStudent.name}
+                alt={displayStudent.name || admission?.studentName}
                 style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '3px solid #E2E8F0' }}
               />
             ) : (
               <Avatar size={80} icon={<UserOutlined />} style={{ background: 'var(--color-primary-dark)', fontSize: 32 }} />
             )}
-            <div style={{ marginTop: 6, fontWeight: 600 }}>{displayStudent.name}</div>
+            <div style={{ marginTop: 6, fontWeight: 600 }}>{displayStudent.name || admission?.studentName}</div>
           </div>
+          
           <Divider style={{ margin: '8px 0' }}>Academic & Admission</Divider>
           <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="Application No">{admission?.applicationNo || '—'}</Descriptions.Item>
             <Descriptions.Item label="Admission No">{displayStudent.admissionNo || displayStudent.admissionNumber || admission?.admissionNo || '—'}</Descriptions.Item>
             <Descriptions.Item label="Roll No">{displayStudent.rollNo || admission?.rollNo || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Class">{displayStudent.classId?.name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Section">{displayStudent.sectionId?.name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Boarding Mode">{admission?.boardingType || admission?.mode || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Second Lang">{admission?.secondLanguage || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Academic Year">{displayStudent.academicYearId?.name || admission?.academicYear || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Class">{displayStudent.classId?.name || admission?.class || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Section">{displayStudent.sectionId?.name || admission?.section || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Boarding Type">{admission?.boardingType || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Admission Mode">{admission?.mode || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Admission Type">{admission?.type || '—'}</Descriptions.Item>
           </Descriptions>
 
-          <Divider style={{ margin: '8px 0' }}>Student Details</Divider>
+          <Divider style={{ margin: '8px 0' }}>Personal Information</Divider>
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="Gender">{displayStudent.gender || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Gender">{displayStudent.gender || admission?.gender || '—'}</Descriptions.Item>
             <Descriptions.Item label="Date of Birth">
-              {displayStudent.dateOfBirth ? dayjs(displayStudent.dateOfBirth).format('DD MMM YYYY') : '—'}
+              {displayStudent.dateOfBirth || admission?.dateOfBirth ? dayjs(displayStudent.dateOfBirth || admission?.dateOfBirth).format('DD MMM YYYY') : '—'}
             </Descriptions.Item>
+            <Descriptions.Item label="DOB (Words)">{admission?.dobInWords || '—'}</Descriptions.Item>
             <Descriptions.Item label="Place of Birth">{admission?.placeOfBirth || '—'}</Descriptions.Item>
             <Descriptions.Item label="Nationality">{admission?.nationality || '—'}</Descriptions.Item>
             <Descriptions.Item label="Religion / Caste">{[admission?.religion, admission?.caste].filter(Boolean).join(' / ') || '—'}</Descriptions.Item>
             <Descriptions.Item label="Category">{admission?.category || '—'}</Descriptions.Item>
             <Descriptions.Item label="Mother Tongue">{admission?.motherTongue || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Aadhaar">{admission?.aadhaarNo || '—'}</Descriptions.Item>
           </Descriptions>
 
-          <Divider style={{ margin: '8px 0' }}>Parent / Guardian</Divider>
+          <Divider style={{ margin: '8px 0' }}>Medical Information</Divider>
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="Primary Name">{displayStudent.parentName || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Primary Phone">{displayStudent.parentPhone || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Father">{admission?.father?.name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Mother">{admission?.mother?.name || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Blood Group">{admission?.bloodGroup || displayStudent.bloodGroup || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Allergies">{admission?.allergies || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Medical Conditions">{admission?.medicalConditions || '—'}</Descriptions.Item>
+            <Descriptions.Item label="SEN Support Level">{admission?.senSupportLevel || '—'}</Descriptions.Item>
+          </Descriptions>
+
+          <Divider style={{ margin: '8px 0' }}>Parent Information</Divider>
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="Primary Name">{displayStudent.parentName || admission?.parentName || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Primary Phone">{displayStudent.parentPhone || admission?.parentPhone || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Primary Email">{admission?.parentEmail || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Father's Name">{admission?.father?.name || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Mother's Name">{admission?.mother?.name || '—'}</Descriptions.Item>
+          </Descriptions>
+
+          <Divider style={{ margin: '8px 0' }}>Family Details (Optional)</Divider>
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="Number of Siblings">{admission?.numberOfSiblings ?? '—'}</Descriptions.Item>
+            <Descriptions.Item label="Sibling in School">{admission?.siblingStudyingInSchool ? 'Yes' : 'No'}</Descriptions.Item>
           </Descriptions>
 
           {admission?.previousSchool && (
@@ -516,18 +535,20 @@ const StudentProfileDrawer = ({ student, open, onClose }) => {
               <Divider style={{ margin: '8px 0' }}>Previous School</Divider>
               <Descriptions column={1} size="small" bordered>
                 <Descriptions.Item label="School Name">{admission.previousSchool}</Descriptions.Item>
+                <Descriptions.Item label="School Address">{admission.previousSchoolAddress || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Board">{admission.previousBoard || '—'}</Descriptions.Item>
+                <Descriptions.Item label="TC Provided">{admission.hasTC ? 'Yes' : 'No'}</Descriptions.Item>
                 <Descriptions.Item label="TC No">{admission.tcNumber || '—'}</Descriptions.Item>
-                <Descriptions.Item label="SATS / PEN">{[admission.satsNumber, admission.penNumber].filter(Boolean).join(' / ') || '—'}</Descriptions.Item>
               </Descriptions>
             </>
           )}
 
-          <Divider style={{ margin: '8px 0' }}>Medical</Divider>
+          <Divider style={{ margin: '8px 0' }}>Government IDs</Divider>
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="Blood Group">{admission?.bloodGroup || displayStudent.bloodGroup || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Allergies">{admission?.allergies || '—'}</Descriptions.Item>
-            <Descriptions.Item label="SEN">{admission?.senType ? `${admission.senType} (${admission.senSupportLevel})` : '—'}</Descriptions.Item>
+            <Descriptions.Item label="Aadhaar No">{admission?.aadhaarNo || '—'}</Descriptions.Item>
+            <Descriptions.Item label="SATS No">{admission?.satsNumber || '—'}</Descriptions.Item>
+            <Descriptions.Item label="PEN No">{admission?.penNumber || '—'}</Descriptions.Item>
+            <Descriptions.Item label="APAAR No">{admission?.apaarNumber || '—'}</Descriptions.Item>
           </Descriptions>
         </>
       ),
