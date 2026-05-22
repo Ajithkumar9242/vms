@@ -4,6 +4,8 @@ import { PlusOutlined, ScheduleOutlined } from '@ant-design/icons';
 import { dutyAPI, facultyAPI } from '@/services/api';
 import dayjs from 'dayjs';
 
+import useAuthStore from '@/store/authStore';
+
 const { Option } = Select;
 const { TextArea } = Input;
 
@@ -20,6 +22,8 @@ const shiftLabels = {
 };
 
 const DutyAssignment = () => {
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [duties, setDuties] = useState([]);
   const [faculty, setFaculty] = useState([]);
   const [total, setTotal] = useState(0);
@@ -124,7 +128,7 @@ const DutyAssignment = () => {
               <Option key={k} value={k}>{v}</Option>
             ))}
           </Select>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)}>Assign Duty</Button>
+          {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)}>Assign Duty</Button>}
         </Space>
       </div>
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography, Select, DatePicker, Row, Col, Table, Button,
-  Switch, Tag, Tabs, Card, Statistic, Empty, App, Modal, Divider, Badge,
+  Switch, Tag, Tabs, Card, Statistic, Empty, App, Modal, Divider, Badge, Alert,
 } from 'antd';
 import {
   SaveOutlined, CheckCircleOutlined, CloseCircleOutlined,
@@ -20,6 +20,7 @@ const Attendance = () => {
   const { message, modal } = App.useApp();
   const { user: authUser } = useAuthStore();
   const isAdmin = authUser?.role === 'admin' || authUser?.role === 'super_admin';
+  const isVisitor = authUser?.role === 'visitor';
   useEffect(() => {
     if (!authUser) {
       console.warn("❌ No user in store");
@@ -258,7 +259,7 @@ const Attendance = () => {
             onChange={() => toggleStatus(record._id)}
             checkedChildren="Present"
             unCheckedChildren="Absent"
-            disabled={isLocked && !isAdmin}
+            disabled={(isLocked && !isAdmin) || isVisitor}
             style={{ backgroundColor: isPresent ? '#22C55E' : '#EF4444' }}
           />
         );
@@ -364,304 +365,312 @@ const Attendance = () => {
       label: '📊 Monthly Report',
       children: <MonthlyAttendanceReport />,
     },
-    {
-      key: 'mark',
-      label: 'Daily Mark',
-      children: (
-        <>
-          {/* Filters */}
-          <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-            <Col xs={24} sm={8} md={5}>
-              <Select
-                placeholder="Select class"
-                style={{ width: '100%' }}
-                value={markClassId}
-                onChange={(val) => setMarkClassId(val)}
-                options={classes.map((c) => ({ label: c.name, value: c._id }))}
-                allowClear
-                id="mark-class-select"
-              />
-            </Col>
-            <Col xs={24} sm={8} md={5}>
-              <Select
-                placeholder="Select section"
-                style={{ width: '100%' }}
-                value={markSectionId}
-                onChange={(val) => setMarkSectionId(val)}
-                options={sections.map((s) => ({ label: s.name, value: s._id }))}
-                allowClear
-                disabled={!markClassId}
-                id="mark-section-select"
-              />
-            </Col>
-            <Col xs={24} sm={8} md={5}>
-              <DatePicker
-                style={{ width: '100%' }}
-                value={markDate}
-                onChange={(val) => setMarkDate(val)}
-                disabledDate={(d) => d && d.isAfter(dayjs(), 'day')}
-                format="DD-MM-YYYY"
-                id="mark-date-picker"
-              />
-            </Col>
-            <Col xs={24} sm={8} md={5}>
-              <Select
-                placeholder="Session"
-                style={{ width: '100%' }}
-                value={markSession}
-                onChange={(val) => setMarkSession(val)}
-                options={sessions.map((s) => ({
-                  label: typeof s === 'string' ? s : s.name,
-                  value: typeof s === 'string' ? s : s.name,
-                }))}
-                id="mark-session-select"
-              />
-            </Col>
-          </Row>
+    // {
+    //   key: 'mark',
+    //   label: 'Daily Mark',
+    //   children: (
+    //     <>
+    //       {isVisitor && (
+    //         <Alert
+    //           type="info"
+    //           showIcon
+    //           message="You are logged in as a visitor. Daily attendance records are read-only."
+    //           style={{ marginBottom: 12 }}
+    //         />
+    //       )}
+    //       {/* Filters */}
+    //       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+    //         <Col xs={24} sm={8} md={5}>
+    //           <Select
+    //             placeholder="Select class"
+    //             style={{ width: '100%' }}
+    //             value={markClassId}
+    //             onChange={(val) => setMarkClassId(val)}
+    //             options={classes.map((c) => ({ label: c.name, value: c._id }))}
+    //             allowClear
+    //             id="mark-class-select"
+    //           />
+    //         </Col>
+    //         <Col xs={24} sm={8} md={5}>
+    //           <Select
+    //             placeholder="Select section"
+    //             style={{ width: '100%' }}
+    //             value={markSectionId}
+    //             onChange={(val) => setMarkSectionId(val)}
+    //             options={sections.map((s) => ({ label: s.name, value: s._id }))}
+    //             allowClear
+    //             disabled={!markClassId}
+    //             id="mark-section-select"
+    //           />
+    //         </Col>
+    //         <Col xs={24} sm={8} md={5}>
+    //           <DatePicker
+    //             style={{ width: '100%' }}
+    //             value={markDate}
+    //             onChange={(val) => setMarkDate(val)}
+    //             disabledDate={(d) => d && d.isAfter(dayjs(), 'day')}
+    //             format="DD-MM-YYYY"
+    //             id="mark-date-picker"
+    //           />
+    //         </Col>
+    //         <Col xs={24} sm={8} md={5}>
+    //           <Select
+    //             placeholder="Session"
+    //             style={{ width: '100%' }}
+    //             value={markSession}
+    //             onChange={(val) => setMarkSession(val)}
+    //             options={sessions.map((s) => ({
+    //               label: typeof s === 'string' ? s : s.name,
+    //               value: typeof s === 'string' ? s : s.name,
+    //             }))}
+    //             id="mark-session-select"
+    //           />
+    //         </Col>
+    //       </Row>
 
-          {/* Lock banner */}
-          {isLocked && (
-            <div style={{
-              background: '#FEF9C3', border: '1px solid #FDE047',
-              borderRadius: 8, padding: '8px 14px', marginBottom: 12,
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}>
-              <LockOutlined style={{ color: '#CA8A04' }} />
-              <Text style={{ color: '#92400E', fontWeight: 500 }}>
-                Attendance is LOCKED for this session. Only admin can modify.
-              </Text>
-            </div>
-          )}
+    //       {/* Lock banner */}
+    //       {isLocked && (
+    //         <div style={{
+    //           background: '#FEF9C3', border: '1px solid #FDE047',
+    //           borderRadius: 8, padding: '8px 14px', marginBottom: 12,
+    //           display: 'flex', alignItems: 'center', gap: 8,
+    //         }}>
+    //           <LockOutlined style={{ color: '#CA8A04' }} />
+    //           <Text style={{ color: '#92400E', fontWeight: 500 }}>
+    //             Attendance is LOCKED for this session. Only admin can modify.
+    //           </Text>
+    //         </div>
+    //       )}
 
-          {/* Stats bar */}
-          {students.length > 0 && (
-            <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-              <Col xs={8}>
-                <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                  <Statistic
-                    title={<span style={{ fontSize: 12, color: '#64748B' }}>Total</span>}
-                    value={students.length}
-                    prefix={<CalendarOutlined style={{ color: 'var(--color-secondary)' }} />}
-                    styles={{ content: { fontSize: 20, fontWeight: 700, color: 'var(--color-primary-dark)' } }}
-                  />
-                </Card>
-              </Col>
-              <Col xs={8}>
-                <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                  <Statistic
-                    title={<span style={{ fontSize: 12, color: '#64748B' }}>Present</span>}
-                    value={presentCount}
-                    prefix={<CheckCircleOutlined style={{ color: '#22C55E' }} />}
-                    styles={{ content: { fontSize: 20, fontWeight: 700, color: '#22C55E' } }}
-                  />
-                </Card>
-              </Col>
-              <Col xs={8}>
-                <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                  <Statistic
-                    title={<span style={{ fontSize: 12, color: '#64748B' }}>Absent</span>}
-                    value={absentCount}
-                    prefix={<CloseCircleOutlined style={{ color: '#EF4444' }} />}
-                    styles={{ content: { fontSize: 20, fontWeight: 700, color: '#EF4444' } }}
-                  />
-                </Card>
-              </Col>
-            </Row>
-          )}
+    //       {/* Stats bar */}
+    //       {students.length > 0 && (
+    //         <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+    //           <Col xs={8}>
+    //             <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+    //               <Statistic
+    //                 title={<span style={{ fontSize: 12, color: '#64748B' }}>Total</span>}
+    //                 value={students.length}
+    //                 prefix={<CalendarOutlined style={{ color: 'var(--color-secondary)' }} />}
+    //                 styles={{ content: { fontSize: 20, fontWeight: 700, color: 'var(--color-primary-dark)' } }}
+    //               />
+    //             </Card>
+    //           </Col>
+    //           <Col xs={8}>
+    //             <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+    //               <Statistic
+    //                 title={<span style={{ fontSize: 12, color: '#64748B' }}>Present</span>}
+    //                 value={presentCount}
+    //                 prefix={<CheckCircleOutlined style={{ color: '#22C55E' }} />}
+    //                 styles={{ content: { fontSize: 20, fontWeight: 700, color: '#22C55E' } }}
+    //               />
+    //             </Card>
+    //           </Col>
+    //           <Col xs={8}>
+    //             <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+    //               <Statistic
+    //                 title={<span style={{ fontSize: 12, color: '#64748B' }}>Absent</span>}
+    //                 value={absentCount}
+    //                 prefix={<CloseCircleOutlined style={{ color: '#EF4444' }} />}
+    //                 styles={{ content: { fontSize: 20, fontWeight: 700, color: '#EF4444' } }}
+    //               />
+    //             </Card>
+    //           </Col>
+    //         </Row>
+    //       )}
 
-          {/* Bulk actions */}
-          {students.length > 0 && !isLocked && (
-            <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
-              <Button size="small" onClick={markAllPresent} style={{ color: '#22C55E', borderColor: '#22C55E' }}>
-                ✓ All Present
-              </Button>
-              <Button size="small" onClick={markAllAbsent} style={{ color: '#EF4444', borderColor: '#EF4444' }}>
-                ✗ All Absent
-              </Button>
-            </div>
-          )}
+    //       {/* Bulk actions */}
+    //       {students.length > 0 && !isLocked && !isVisitor && (
+    //         <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+    //           <Button size="small" onClick={markAllPresent} style={{ color: '#22C55E', borderColor: '#22C55E' }}>
+    //             ✓ All Present
+    //           </Button>
+    //           <Button size="small" onClick={markAllAbsent} style={{ color: '#EF4444', borderColor: '#EF4444' }}>
+    //             ✗ All Absent
+    //           </Button>
+    //         </div>
+    //       )}
 
-          {/* Table */}
-          {!markClassId ? (
-            <Empty description="Select a class to load students" style={{ marginTop: 40 }} />
-          ) : (
-            <>
-              <Table
-                columns={markColumns}
-                dataSource={students}
-                rowKey="_id"
-                loading={loadingStudents}
-                pagination={false}
-                scroll={{ x: 580 }}
-                size="middle"
-                bordered={false}
-                style={{ background: '#FFF', borderRadius: 8 }}
-                locale={{ emptyText: 'No students found for this class' }}
-              />
-              {students.length > 0 && (
-                <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  {/* Save button: hidden when locked AND not admin */}
-                  {(!isLocked || isAdmin) && (
-                    <Button
-                      type="primary"
-                      icon={<SaveOutlined />}
-                      size="large"
-                      onClick={handleSave}
-                      loading={saving}
-                      disabled={saving}
-                      id="save-attendance-btn"
-                    >
-                      {existingLoaded ? (isLocked ? 'Override (Admin)' : 'Update Attendance') : 'Save Attendance'}
-                    </Button>
-                  )}
-                  {/* Lock button: visible to both admin and faculty */}
-                  {existingLoaded && !isLocked && (
-                    <Button
-                      icon={<LockOutlined />}
-                      size="large"
-                      loading={locking}
-                      onClick={handleLock}
-                      style={{ background: '#F59E0B', borderColor: '#F59E0B', color: '#FFF' }}
-                      id="lock-attendance-btn"
-                    >
-                      Lock Attendance
-                    </Button>
-                  )}
-                  {existingLoaded && (
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      {isLocked
-                        ? '🔒 Locked — only admin can modify'
-                        : '⚠ Attendance already saved — saving will update it.'}
-                    </Text>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </>
-      ),
-    },
-    {
-      key: 'view',
-      label: 'View Report',
-      children: (
-        <>
-          {/* Filters */}
-          <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-            <Col xs={24} sm={8} md={5}>
-              <Select
-                placeholder="Select class"
-                style={{ width: '100%' }}
-                value={viewClassId}
-                onChange={(val) => setViewClassId(val)}
-                options={classes.map((c) => ({ label: c.name, value: c._id }))}
-                allowClear
-                id="view-class-select"
-              />
-            </Col>
-            <Col xs={24} sm={8} md={5}>
-              <DatePicker
-                style={{ width: '100%' }}
-                value={viewDateFrom}
-                onChange={(val) => setViewDateFrom(val)}
-                placeholder="From date"
-                format="DD-MM-YYYY"
-                id="view-date-from"
-              />
-            </Col>
-            <Col xs={24} sm={8} md={5}>
-              <DatePicker
-                style={{ width: '100%' }}
-                value={viewDateTo}
-                onChange={(val) => setViewDateTo(val)}
-                placeholder="To date"
-                format="DD-MM-YYYY"
-                id="view-date-to"
-              />
-            </Col>
-            <Col xs={24} sm={8} md={5}>
-              <Select
-                placeholder="All sessions"
-                style={{ width: '100%' }}
-                value={viewSession}
-                onChange={(val) => setViewSession(val)}
-                options={[
-                  { label: 'All Sessions', value: undefined },
-                  ...sessions.map((s) => ({
-                    label: typeof s === 'string' ? s : s.name,
-                    value: typeof s === 'string' ? s : s.name,
-                  }))
-                ]}
-                allowClear
-                id="view-session-select"
-              />
-            </Col>
-          </Row>
+    //       {/* Table */}
+    //       {!markClassId ? (
+    //         <Empty description="Select a class to load students" style={{ marginTop: 40 }} />
+    //       ) : (
+    //         <>
+    //           <Table
+    //             columns={markColumns}
+    //             dataSource={students}
+    //             rowKey="_id"
+    //             loading={loadingStudents}
+    //             pagination={false}
+    //             scroll={{ x: 580 }}
+    //             size="middle"
+    //             bordered={false}
+    //             style={{ background: '#FFF', borderRadius: 8 }}
+    //             locale={{ emptyText: 'No students found for this class' }}
+    //           />
+    //           {students.length > 0 && (
+    //             <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+    //               {/* Save button: hidden when locked AND not admin */}
+    //               {(!isLocked || isAdmin) && !isVisitor && (
+    //                 <Button
+    //                   type="primary"
+    //                   icon={<SaveOutlined />}
+    //                   size="large"
+    //                   onClick={handleSave}
+    //                   loading={saving}
+    //                   disabled={saving}
+    //                   id="save-attendance-btn"
+    //                 >
+    //                   {existingLoaded ? (isLocked ? 'Override (Admin)' : 'Update Attendance') : 'Save Attendance'}
+    //                 </Button>
+    //               )}
+    //               {/* Lock button: visible to both admin and faculty */}
+    //               {existingLoaded && !isLocked && !isVisitor && (
+    //                 <Button
+    //                   icon={<LockOutlined />}
+    //                   size="large"
+    //                   loading={locking}
+    //                   onClick={handleLock}
+    //                   style={{ background: '#F59E0B', borderColor: '#F59E0B', color: '#FFF' }}
+    //                   id="lock-attendance-btn"
+    //                 >
+    //                   Lock Attendance
+    //                 </Button>
+    //               )}
+    //               {existingLoaded && (
+    //                 <Text type="secondary" style={{ fontSize: 12 }}>
+    //                   {isLocked
+    //                     ? '🔒 Locked — only admin can modify'
+    //                     : '⚠ Attendance already saved — saving will update it.'}
+    //                 </Text>
+    //               )}
+    //             </div>
+    //           )}
+    //         </>
+    //       )}
+    //     </>
+    //   ),
+    // },
+    // {
+    //   key: 'view',
+    //   label: 'View Report',
+    //   children: (
+    //     <>
+    //       {/* Filters */}
+    //       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+    //         <Col xs={24} sm={8} md={5}>
+    //           <Select
+    //             placeholder="Select class"
+    //             style={{ width: '100%' }}
+    //             value={viewClassId}
+    //             onChange={(val) => setViewClassId(val)}
+    //             options={classes.map((c) => ({ label: c.name, value: c._id }))}
+    //             allowClear
+    //             id="view-class-select"
+    //           />
+    //         </Col>
+    //         <Col xs={24} sm={8} md={5}>
+    //           <DatePicker
+    //             style={{ width: '100%' }}
+    //             value={viewDateFrom}
+    //             onChange={(val) => setViewDateFrom(val)}
+    //             placeholder="From date"
+    //             format="DD-MM-YYYY"
+    //             id="view-date-from"
+    //           />
+    //         </Col>
+    //         <Col xs={24} sm={8} md={5}>
+    //           <DatePicker
+    //             style={{ width: '100%' }}
+    //             value={viewDateTo}
+    //             onChange={(val) => setViewDateTo(val)}
+    //             placeholder="To date"
+    //             format="DD-MM-YYYY"
+    //             id="view-date-to"
+    //           />
+    //         </Col>
+    //         <Col xs={24} sm={8} md={5}>
+    //           <Select
+    //             placeholder="All sessions"
+    //             style={{ width: '100%' }}
+    //             value={viewSession}
+    //             onChange={(val) => setViewSession(val)}
+    //             options={[
+    //               { label: 'All Sessions', value: undefined },
+    //               ...sessions.map((s) => ({
+    //                 label: typeof s === 'string' ? s : s.name,
+    //                 value: typeof s === 'string' ? s : s.name,
+    //               }))
+    //             ]}
+    //             allowClear
+    //             id="view-session-select"
+    //           />
+    //         </Col>
+    //       </Row>
 
-          {/* Stats cards */}
-          {reportStats && (
-            <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-              <Col xs={12} sm={6}>
-                <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                  <Statistic
-                    title={<span style={{ fontSize: 12, color: '#64748B' }}>Students</span>}
-                    value={reportStats.studentCount}
-                    styles={{ content: { fontSize: 20, fontWeight: 700 } }}
-                  />
-                </Card>
-              </Col>
-              <Col xs={12} sm={6}>
-                <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                  <Statistic
-                    title={<span style={{ fontSize: 12, color: '#64748B' }}>Total Present</span>}
-                    value={reportStats.totalPresent}
-                    styles={{ content: { fontSize: 20, fontWeight: 700, color: '#22C55E' } }}
-                  />
-                </Card>
-              </Col>
-              <Col xs={12} sm={6}>
-                <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                  <Statistic
-                    title={<span style={{ fontSize: 12, color: '#64748B' }}>Total Absent</span>}
-                    value={reportStats.totalAbsent}
-                    styles={{ content: { fontSize: 20, fontWeight: 700, color: '#EF4444' } }}
-                  />
-                </Card>
-              </Col>
-              <Col xs={12} sm={6}>
-                <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                  <Statistic
-                    title={<span style={{ fontSize: 12, color: '#64748B' }}>Avg Attendance</span>}
-                    value={reportStats.avgPercentage}
-                    suffix="%"
-                    prefix={<PercentageOutlined style={{ color: 'var(--color-secondary)' }} />}
-                    styles={{ content: { fontSize: 20, fontWeight: 700, color: reportStats.avgPercentage >= 75 ? '#22C55E' : '#EF4444' } }}
-                  />
-                </Card>
-              </Col>
-            </Row>
-          )}
+    //       {/* Stats cards */}
+    //       {reportStats && (
+    //         <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+    //           <Col xs={12} sm={6}>
+    //             <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+    //               <Statistic
+    //                 title={<span style={{ fontSize: 12, color: '#64748B' }}>Students</span>}
+    //                 value={reportStats.studentCount}
+    //                 styles={{ content: { fontSize: 20, fontWeight: 700 } }}
+    //               />
+    //             </Card>
+    //           </Col>
+    //           <Col xs={12} sm={6}>
+    //             <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+    //               <Statistic
+    //                 title={<span style={{ fontSize: 12, color: '#64748B' }}>Total Present</span>}
+    //                 value={reportStats.totalPresent}
+    //                 styles={{ content: { fontSize: 20, fontWeight: 700, color: '#22C55E' } }}
+    //               />
+    //             </Card>
+    //           </Col>
+    //           <Col xs={12} sm={6}>
+    //             <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+    //               <Statistic
+    //                 title={<span style={{ fontSize: 12, color: '#64748B' }}>Total Absent</span>}
+    //                 value={reportStats.totalAbsent}
+    //                 styles={{ content: { fontSize: 20, fontWeight: 700, color: '#EF4444' } }}
+    //               />
+    //             </Card>
+    //           </Col>
+    //           <Col xs={12} sm={6}>
+    //             <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+    //               <Statistic
+    //                 title={<span style={{ fontSize: 12, color: '#64748B' }}>Avg Attendance</span>}
+    //                 value={reportStats.avgPercentage}
+    //                 suffix="%"
+    //                 prefix={<PercentageOutlined style={{ color: 'var(--color-secondary)' }} />}
+    //                 styles={{ content: { fontSize: 20, fontWeight: 700, color: reportStats.avgPercentage >= 75 ? '#22C55E' : '#EF4444' } }}
+    //               />
+    //             </Card>
+    //           </Col>
+    //         </Row>
+    //       )}
 
-          {/* Table */}
-          {!viewClassId ? (
-            <Empty description="Select a class to view attendance report" style={{ marginTop: 40 }} />
-          ) : (
-            <Table
-              columns={viewColumns}
-              dataSource={report}
-              rowKey="_id"
-              loading={loadingReport}
-              pagination={{ showSizeChanger: true, showTotal: (t) => `Total ${t} students`, pageSize: 20 }}
-              scroll={{ x: 840 }}
-              size="middle"
-              bordered={false}
-              style={{ background: '#FFF', borderRadius: 8 }}
-              locale={{ emptyText: 'No attendance data found' }}
-            />
-          )}
-        </>
-      ),
-    },
+    //       {/* Table */}
+    //       {!viewClassId ? (
+    //         <Empty description="Select a class to view attendance report" style={{ marginTop: 40 }} />
+    //       ) : (
+    //         <Table
+    //           columns={viewColumns}
+    //           dataSource={report}
+    //           rowKey="_id"
+    //           loading={loadingReport}
+    //           pagination={{ showSizeChanger: true, showTotal: (t) => `Total ${t} students`, pageSize: 20 }}
+    //           scroll={{ x: 840 }}
+    //           size="middle"
+    //           bordered={false}
+    //           style={{ background: '#FFF', borderRadius: 8 }}
+    //           locale={{ emptyText: 'No attendance data found' }}
+    //         />
+    //       )}
+    //     </>
+    //   ),
+    // },
   ];
 
   return (

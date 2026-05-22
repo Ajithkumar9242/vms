@@ -4,12 +4,16 @@ import { PlusOutlined, CheckOutlined, CloseOutlined, ExportOutlined, ImportOutli
 import { leaveAPI, studentAPI } from '@/services/api';
 import dayjs from 'dayjs';
 
+import useAuthStore from '@/store/authStore';
+
 const { Option } = Select;
 const { TextArea } = Input;
 
 const statusColors = { pending: 'orange', approved: 'green', rejected: 'red' };
 
 const LeaveRequests = () => {
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [leaves, setLeaves] = useState([]);
   const [students, setStudents] = useState([]);
   const [total, setTotal] = useState(0);
@@ -86,15 +90,15 @@ const LeaveRequests = () => {
         if (r.status !== 'approved') return '-';
         return (
           <Space size={4}>
-            {!r.outTime && <Button size="small" icon={<ExportOutlined />} onClick={() => handleMarkOut(r._id)}>Out</Button>}
-            {r.outTime && !r.inTime && <Button size="small" icon={<ImportOutlined />} onClick={() => handleMarkIn(r._id)}>In</Button>}
+            {canWrite && !r.outTime && <Button size="small" icon={<ExportOutlined />} onClick={() => handleMarkOut(r._id)}>Out</Button>}
+            {canWrite && r.outTime && !r.inTime && <Button size="small" icon={<ImportOutlined />} onClick={() => handleMarkIn(r._id)}>In</Button>}
             {r.outTime && <Tag color="volcano">{dayjs(r.outTime).format('HH:mm')}</Tag>}
             {r.inTime && <Tag color="cyan">{dayjs(r.inTime).format('HH:mm')}</Tag>}
           </Space>
         );
       },
     },
-    {
+    ...(canWrite ? [{
       title: 'Action', key: 'action', width: 120,
       render: (_, r) => r.status === 'pending' && (
         <Space size={4}>
@@ -102,7 +106,7 @@ const LeaveRequests = () => {
           <Button size="small" danger icon={<CloseOutlined />} onClick={() => handleReject(r._id)} />
         </Space>
       ),
-    },
+    }] : []),
   ];
 
   return (
@@ -118,7 +122,7 @@ const LeaveRequests = () => {
             <Option value="approved">Approved</Option>
             <Option value="rejected">Rejected</Option>
           </Select>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)}>New Request</Button>
+          {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)}>New Request</Button>}
         </Space>
       </div>
 

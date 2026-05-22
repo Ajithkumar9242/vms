@@ -1,5 +1,6 @@
 import React from 'react';
-import { Card, Row, Col, Typography } from 'antd';
+import { Card, Row, Col, Typography, Alert } from 'antd';
+import useAuthStore from '@/store/authStore';
 import {
   BankOutlined, CalendarOutlined, BookOutlined,
   TeamOutlined, TrophyOutlined,
@@ -28,9 +29,19 @@ const tiles = [
 
 const SetupDashboard = () => {
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   return (
     <div style={{ padding: 24 }}>
       <Title level={4} style={{ marginBottom: 4 }}>⚙️ System Setup</Title>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. All system setup controls are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <Text type="secondary" style={{ display: 'block', marginBottom: 24 }}>
         Configure your school ERP from scratch. Set up once, run forever.
       </Text>

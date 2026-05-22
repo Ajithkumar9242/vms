@@ -13,8 +13,8 @@ const { Title, Text } = Typography;
 const Parents = () => {
   const { message } = App.useApp();
   const userRole = useAuthStore((s) => s.user?.role);
-  // Accountant is read-only — cannot add, edit, or link parents
-  const canWrite = !['accountant'].includes(userRole);
+  // Accountant and visitor are read-only — cannot add, edit, or link parents
+  const canWrite = !['accountant', 'visitor'].includes(userRole);
 
   const [parents, setParents] = useState([]);
   const [loading, setLoading] = useState(false);

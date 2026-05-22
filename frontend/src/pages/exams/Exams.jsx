@@ -13,6 +13,8 @@ import MarksEntry from './MarksEntry';
 import ExamResults from './ExamResults';
 import { SearchOutlined } from '@ant-design/icons';
 
+import useAuthStore from '@/store/authStore';
+
 const { Title, Text } = Typography;
 
 // ── Status badge ────────────────────────────────────────────
@@ -33,6 +35,8 @@ const fmtDate = (d) =>
 // ═══════════════════════════════════════════════════════════
 const Exams = () => {
   const { message, modal } = App.useApp();
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [tab, setTab] = useState('exams');
 
   // ── Exams list ─────────────────────────────────────────────
@@ -176,7 +180,7 @@ const Exams = () => {
           </Tooltip>
 
           {/* Edit — Draft or Published (admin can edit published) */}
-          {(r.status === 'draft' || r.status === 'published') && (
+          {canWrite && (r.status === 'draft' || r.status === 'published') && (
             <Tooltip title="Edit">
               <Button
                 size="small" icon={<EditOutlined />}
@@ -186,7 +190,7 @@ const Exams = () => {
           )}
 
           {/* Publish — only Draft */}
-          {r.status === 'draft' && (
+          {canWrite && r.status === 'draft' && (
             <Tooltip title="Publish">
               <Button
                 size="small" type="primary" icon={<CheckCircleOutlined />}
@@ -198,7 +202,7 @@ const Exams = () => {
           )}
 
           {/* Lock — only Published */}
-          {r.status === 'published' && (
+          {canWrite && r.status === 'published' && (
             <Tooltip title="Lock & Finalize">
               <Button
                 size="small" danger icon={<LockOutlined />}
@@ -210,7 +214,7 @@ const Exams = () => {
           )}
 
           {/* Delete — only Draft */}
-          {r.status === 'draft' && (
+          {canWrite && r.status === 'draft' && (
             <Popconfirm
               title="Delete this exam?"
               description="This action cannot be undone."
@@ -325,13 +329,15 @@ const Exams = () => {
                 style={{ width: 200 }}
                 allowClear
               />
-              <Button
-                type="primary" icon={<PlusOutlined />}
-                onClick={() => { setEditRecord(null); setModalOpen(true); }}
-                id="create-exam-btn"
-              >
-                Create Exam
-              </Button>
+              {canWrite && (
+                <Button
+                  type="primary" icon={<PlusOutlined />}
+                  onClick={() => { setEditRecord(null); setModalOpen(true); }}
+                  id="create-exam-btn"
+                >
+                  Create Exam
+                </Button>
+              )}
             </Space>
           </div>
 

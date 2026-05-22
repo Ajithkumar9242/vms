@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Select, DatePicker, InputNumber, Table, Button,
-  Typography, Row, Col, App, Empty,
+  Typography, Row, Col, App, Empty, Alert,
 } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { studentAPI, schoolAPI, attendanceAPI } from '@/services/api';
+import useAuthStore from '@/store/authStore';
 
 const { Text } = Typography;
 
 const MonthlyAttendanceEntry = () => {
   const { message } = App.useApp();
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
 
   const [classes, setClasses]           = useState([]);
   const [classId, setClassId]           = useState(undefined);
@@ -118,6 +121,7 @@ const MonthlyAttendanceEntry = () => {
           status={record.attendedClasses > (totalConducted ?? Infinity) ? 'error' : undefined}
           id={`attended-${record.studentId}`}
           size="small"
+          disabled={isVisitor}
         />
       ),
     },
@@ -134,6 +138,15 @@ const MonthlyAttendanceEntry = () => {
 
   return (
     <div className="faculty-module">
+
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Monthly attendance is read-only."
+          style={{ marginBottom: 12 }}
+        />
+      )}
 
       {/* ── Controls ── */}
       <Row gutter={[10, 10]} style={{ marginBottom: 14 }}>
@@ -173,6 +186,7 @@ const MonthlyAttendanceEntry = () => {
             style={{ width: '100%' }}
             addonBefore="Total"
             id="monthly-total-conducted"
+            disabled={isVisitor}
           />
         </Col>
       </Row>
@@ -204,7 +218,7 @@ const MonthlyAttendanceEntry = () => {
               locale={{ emptyText: 'No students found for this class' }}
             />
           </div>
-          {rows.length > 0 && (
+          {!isVisitor && rows.length > 0 && (
             <div style={{ marginTop: 14 }}>
               <Button
                 type="primary"

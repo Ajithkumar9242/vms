@@ -94,8 +94,8 @@ const ComingSoonPage = (title) => React.lazy(() =>
 const StudyMaterialsPage = ComingSoonPage('Study Materials — Temporarily Disabled');
 
 // ─── Role constants ─────────────────────────────────────────
-/** Setup pages: super_admin + admin only — visitor explicitly excluded */
-const SETUP_ROLES = ['super_admin', 'admin'];
+/** Setup pages: super_admin + admin + visitor — visitor has read-only access */
+const SETUP_ROLES = ['super_admin', 'admin', 'visitor'];
 /** Full management + visitor (read-only for visitor) */
 const HIGH_PRIV = ['super_admin', 'admin', 'principal', 'visitor'];
 /** Finance + visitor (read-only for visitor) */

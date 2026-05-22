@@ -15,8 +15,8 @@ const { Title, Text } = Typography;
 const AdminFaculty = () => {
   const { message } = App.useApp();
   const userRole  = useAuthStore((s) => s.user?.role);
-  // Accountant is read-only — cannot add or edit faculty
-  const canWrite  = !['accountant'].includes(userRole);
+  // Accountant and visitor are read-only — cannot add or edit faculty
+  const canWrite  = !['accountant', 'visitor'].includes(userRole);
   const [faculty, setFaculty]     = useState([]);
   const [loading, setLoading]     = useState(false);
   const [search, setSearch]       = useState('');

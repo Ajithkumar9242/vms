@@ -3,9 +3,13 @@ import { Table, Button, Modal, Form, Input, InputNumber, Select, Tag, message, C
 import { PlusOutlined, HomeOutlined, DeleteOutlined } from '@ant-design/icons';
 import { hostelAPI, studentAPI } from '@/services/api';
 
+import useAuthStore from '@/store/authStore';
+
 const { Option } = Select;
 
 const Hostel = () => {
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [rooms, setRooms] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -73,7 +77,7 @@ const Hostel = () => {
     {
       title: 'Students', key: 'students',
       render: (_, r) => (r.allocations || []).map(a => (
-        <Tag key={a._id} closable onClose={() => handleRemove(a.studentId?._id)}>
+        <Tag key={a._id} closable={canWrite} onClose={() => handleRemove(a.studentId?._id)}>
           Bed {a.bedNumber}: {a.studentId?.name || 'N/A'}
         </Tag>
       )),
@@ -87,10 +91,12 @@ const Hostel = () => {
           <h2 style={{ margin: 0 }}><HomeOutlined /> Hostel Management</h2>
           <p style={{ color: '#888', margin: 0 }}>Manage rooms and student allocations</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Button icon={<PlusOutlined />} onClick={() => setRoomModal(true)}>Add Room</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setAssignModal(true)}>Assign Student</Button>
-        </div>
+        {canWrite && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button icon={<PlusOutlined />} onClick={() => setRoomModal(true)}>Add Room</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setAssignModal(true)}>Assign Student</Button>
+          </div>
+        )}
       </div>
 
       {/* Summary Cards */}

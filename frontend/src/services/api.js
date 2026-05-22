@@ -175,6 +175,13 @@ export const studentAPI = {
   getProfile: (id) => api.get(`/students/${id}/profile`),
   create: (data) => api.post('/students', data),
   update: (id, data) => api.patch(`/students/${id}`, data),
+  /** Bulk import from parsed CSV rows. Body: { rows: [...] } */
+  bulkImport: (rows) => api.post('/students/bulk-import', { rows }),
+  /** Returns a URL for downloading the sample CSV template */
+  getSampleCsvUrl: () => {
+    const token = localStorage.getItem('vms_token');
+    return `/api/students/sample-csv${token ? '?token=' + encodeURIComponent(token) : ''}`;
+  },
 };
 
 // ─── Fees ───────────────────────────────────────────────────

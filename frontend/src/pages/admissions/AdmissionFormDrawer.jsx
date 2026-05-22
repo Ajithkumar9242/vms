@@ -50,11 +50,12 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
   const [sections, setSections] = useState([]);
   const [academicYears, setAcademicYears] = useState([]);
   const [secondLang, setSecondLang] = useState('');
-  const isEdit = !!admission;
   const { user } = useAuthStore();
+  const isEdit = !!admission;
   const isSuperAdmin = user?.role === 'super_admin';
   const isApproved = admission?.status === 'approved';
-  const canEdit = !isApproved || isSuperAdmin;
+  const canWrite = user?.role !== 'visitor';
+  const canEdit = (!isApproved || isSuperAdmin) && canWrite;
 
   // ─── Load dropdowns on open ───────────────────────────────
   useEffect(() => {
@@ -162,14 +163,14 @@ const AdmissionFormDrawer = ({ open, admission, onClose, onSuccess }) => {
       extra={
         <Space>
           <Button onClick={onClose}>Cancel</Button>
-          <Button type="primary" loading={loading} onClick={handleSubmit} disabled={isEdit && !canEdit}>
+          <Button type="primary" loading={loading} onClick={handleSubmit} disabled={!canWrite || (isEdit && !canEdit)}>
             {isEdit ? 'Update Application' : 'Create Application'}
           </Button>
         </Space>
       }
     >
-      <Form form={form} layout="vertical" size="small" disabled={isEdit && !canEdit}>
-        {isEdit && !canEdit && (
+      <Form form={form} layout="vertical" size="small" disabled={!canWrite || (isEdit && !canEdit)}>
+        {isEdit && !canEdit && canWrite && (
           <Alert message="Approved admissions cannot be edited directly." type="warning" showIcon style={{ marginBottom: 16 }} />
         )}
         <Collapse defaultActiveKey={['academic', 'student']} ghost>

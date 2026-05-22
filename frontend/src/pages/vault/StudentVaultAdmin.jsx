@@ -7,10 +7,14 @@ import { UploadOutlined, DeleteOutlined, ReloadOutlined, DownloadOutlined } from
 import dayjs from 'dayjs';
 import { vaultAPI, studentAPI } from '@/services/api';
 
+import useAuthStore from '@/store/authStore';
+
 const { Title, Text } = Typography;
 
 const StudentVaultAdmin = () => {
   const { message } = App.useApp();
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [students, setStudents] = useState([]);
   const [studentId, setStudentId] = useState(null);
   const [files, setFiles] = useState([]);
@@ -168,17 +172,19 @@ const StudentVaultAdmin = () => {
             Download
           </Button>
 
-          <Popconfirm
-            title="Delete this file?"
-            onConfirm={() => handleDelete(r._id)}
-            okType="danger"
-          >
-            <Button
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-            />
-          </Popconfirm>
+          {canWrite && (
+            <Popconfirm
+              title="Delete this file?"
+              onConfirm={() => handleDelete(r._id)}
+              okType="danger"
+            >
+              <Button
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+              />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -197,7 +203,7 @@ const StudentVaultAdmin = () => {
             options={students.map(s => ({ label: `${s.name} (${s.rollNo})`, value: s._id }))}
           />
           <Button icon={<ReloadOutlined />} onClick={loadFiles} disabled={!studentId}>Refresh</Button>
-          <Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadOpen(true)} disabled={!studentId}>Upload File</Button>
+          {canWrite && <Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadOpen(true)} disabled={!studentId}>Upload File</Button>}
         </Space>
       </Row>
 

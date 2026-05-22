@@ -9,6 +9,8 @@ import {
 import dayjs from 'dayjs';
 import { vaultAPI } from '@/services/api';
 
+import useAuthStore from '@/store/authStore';
+
 const { Title, Text } = Typography;
 
 const STATUS_COLORS = { requested: 'default', approved: 'blue', rejected: 'red', fulfilled: 'green' };
@@ -16,6 +18,8 @@ const PAY_COLORS = { unpaid: 'default', paid: 'green', refunded: 'orange' };
 
 const DocumentRequestsQueue = () => {
   const { message, modal } = App.useApp();
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState({ paymentStatus: 'paid', requestStatus: 'requested' });
@@ -99,13 +103,13 @@ const DocumentRequestsQueue = () => {
       render: (_, r) => (
         <Space size="small">
           <Button size="small" onClick={() => { setDetail(r); setDrawerOpen(true); }}>View</Button>
-          {r.paymentStatus === 'paid' && r.requestStatus === 'requested' && (
+          {canWrite && r.paymentStatus === 'paid' && r.requestStatus === 'requested' && (
             <>
               <Button size="small" type="primary" icon={<CheckCircleOutlined />} onClick={() => handleApprove(r)}>Approve</Button>
               <Button size="small" danger icon={<CloseCircleOutlined />} onClick={() => handleReject(r)}>Reject</Button>
             </>
           )}
-          {r.requestStatus === 'approved' && (
+          {canWrite && r.requestStatus === 'approved' && (
             <Button size="small" icon={<GiftOutlined />} onClick={() => setFulfillId(r._id)} style={{ borderColor: '#16A34A', color: '#16A34A' }}>Fulfill</Button>
           )}
           {r.paymentStatus === 'paid' && vaultAPI.getReceiptUrl && (

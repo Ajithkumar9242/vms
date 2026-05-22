@@ -7,6 +7,7 @@ import {
   PlusOutlined, EditOutlined, SettingOutlined, CheckCircleOutlined,
 } from '@ant-design/icons';
 import { setupAPI, schoolAPI, subjectAPI } from '@/services/api';
+import useAuthStore from '@/store/authStore';
 
 const { Title, Text } = Typography;
 
@@ -19,6 +20,8 @@ const extractList = (res) => {
 };
 
 const ClassConfig = () => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [configs,      setConfigs]      = useState([]);
   const [classes,      setClasses]      = useState([]);
   const [sections,     setSections]     = useState([]);
@@ -181,7 +184,7 @@ const ClassConfig = () => {
         return <Badge status="warning" text="Incomplete" />;
       },
     },
-    {
+    ...(!isVisitor ? [{
       title: '',
       width: 80,
       render: (_, record) => (
@@ -189,11 +192,19 @@ const ClassConfig = () => {
           <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
         </Tooltip>
       ),
-    },
+    }] : []),
   ];
 
   return (
     <div style={{ padding: 24 }}>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Class configuration is read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       {/* ── Header ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
@@ -216,9 +227,11 @@ const ClassConfig = () => {
               </Select.Option>
             ))}
           </Select>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            New Config
-          </Button>
+          {!isVisitor && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              New Config
+            </Button>
+          )}
         </Space>
       </div>
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   Table, Button, Modal, Form, Input, Select, Switch, Tag,
   Space, Typography, Tooltip, Popconfirm, message, Badge,
-  Row, Col, Card,
+  Row, Col, Card, Alert,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined,
@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { subjectAPI } from '@/services/api';
 import { schoolAPI } from '@/services/api';
+import useAuthStore from '@/store/authStore';
 
 const { Title, Text } = Typography;
 
@@ -28,6 +29,8 @@ const extractList = (res) => {
 };
 
 const Subjects = () => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [subjects,     setSubjects]     = useState([]);
   const [classes,      setClasses]      = useState([]);
   const [loading,      setLoading]      = useState(false);
@@ -171,7 +174,7 @@ const Subjects = () => {
         <Badge status={active ? 'success' : 'error'} text={active ? 'Active' : 'Inactive'} />
       ),
     },
-    {
+    ...(!isVisitor ? [{
       title: 'Actions',
       width: 160,
       render: (_, record) => (
@@ -212,11 +215,19 @@ const Subjects = () => {
           </Popconfirm>
         </Space>
       ),
-    },
+    }] : []),
   ];
 
   return (
     <div style={{ padding: 24 }}>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Subjects are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       {/* ── Page Header ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
@@ -226,9 +237,11 @@ const Subjects = () => {
           </Title>
           <Text type="secondary">Manage all school subjects — assign to classes, toggle status</Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          New Subject
-        </Button>
+        {!isVisitor && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+            New Subject
+          </Button>
+        )}
       </div>
 
       {/* ── Stats Cards ── */}

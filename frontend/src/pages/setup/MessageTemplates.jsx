@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Form, Input, Switch, Button, Tabs, Typography, App, Row, Col, Tag } from 'antd';
+import { Card, Form, Input, Switch, Button, Tabs, Typography, App, Row, Col, Tag, Alert } from 'antd';
 import { MessageOutlined } from '@ant-design/icons';
+import useAuthStore from '@/store/authStore';
 import { setupAPI } from '@/services/api';
 
 const { Text } = Typography;
@@ -28,6 +29,8 @@ const renderTemplate = (template = '', values = sampleValues) =>
 
 const MessageTemplates = () => {
   const { message } = App.useApp();
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -79,13 +82,23 @@ const MessageTemplates = () => {
 
   return (
     <div style={{ padding: 24 }}>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Message templates are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <Card loading={loading} title={<><MessageOutlined /> Message Templates</>}>
         <div style={{ marginBottom: 12 }}>
           {Object.keys(sampleValues).map((v) => <Tag key={v}>{`{{${v}}}`}</Tag>)}
         </div>
-        <Form form={form} layout="vertical" onFinish={save}>
+        <Form form={form} layout="vertical" onFinish={save} disabled={isVisitor}>
           <Tabs items={items} />
-          <Button type="primary" htmlType="submit" loading={saving}>Save Templates</Button>
+          {!isVisitor && (
+            <Button type="primary" htmlType="submit" loading={saving}>Save Templates</Button>
+          )}
         </Form>
       </Card>
     </div>

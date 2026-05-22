@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, DatePicker, Select, Popconfirm, message, Typography, Space } from 'antd';
+import { Table, Button, Modal, Form, Input, DatePicker, Select, Popconfirm, message, Typography, Space, Alert } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { setupAPI } from '@/services/api';
+import useAuthStore from '@/store/authStore';
 
 const { Title } = Typography;
 const { Option } = Select;
 
 const AcademicTerm = () => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [data, setData] = useState([]);
   const [years, setYears] = useState([]);
   const [activeYearId, setActiveYearId] = useState(null);
@@ -73,25 +76,35 @@ const AcademicTerm = () => {
     { title: 'Name', dataIndex: 'name' },
     { title: 'Start', dataIndex: 'startDate', render: (v) => dayjs(v).format('DD MMM YYYY') },
     { title: 'End', dataIndex: 'endDate', render: (v) => dayjs(v).format('DD MMM YYYY') },
-    { title: '', key: 'action', width: 90, render: (_, r) => (
+    ...(!isVisitor ? [{ title: '', key: 'action', width: 90, render: (_, r) => (
       <Space>
         <Button size="small" icon={<EditOutlined />} onClick={() => openModal(r)} />
         <Popconfirm title="Delete this term?" onConfirm={() => deleteTerm(r._id)}>
           <Button size="small" danger icon={<DeleteOutlined />} />
         </Popconfirm>
       </Space>
-    ) },
+    ) }] : []),
   ];
 
   return (
     <div style={{ padding: 24 }}>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Academic terms are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>📆 Academic Terms</Title>
         <Space>
           <Select value={filterYear} onChange={setFilterYear} style={{ width: 160 }} placeholder="Select Year">
             {years.map((y) => <Option key={y._id} value={y._id}>{y.name}</Option>)}
           </Select>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>New Term</Button>
+          {!isVisitor && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>New Term</Button>
+          )}
         </Space>
       </div>
       <Table rowKey="_id" columns={columns} dataSource={data} loading={loading} pagination={false} />

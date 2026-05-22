@@ -1,19 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import {
   Form, Input, Select, Button, Card, App, Typography, Row, Col,
-  Divider, Upload, Avatar, Space,
+  Divider, Upload, Avatar, Space, Alert,
 } from 'antd';
 import {
   UploadOutlined, BankOutlined, UserOutlined, PhoneOutlined,
   GlobalOutlined, SaveOutlined,
 } from '@ant-design/icons';
 import { setupAPI } from '@/services/api';
+import useAuthStore from '@/store/authStore';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
 
 const SchoolSettings = () => {
   const { message } = App.useApp();
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -61,13 +64,21 @@ const SchoolSettings = () => {
 
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. School settings are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <BankOutlined style={{ fontSize: 22, color: 'var(--color-secondary)' }} />
         <Title level={4} style={{ margin: 0 }}>School Settings</Title>
       </div>
 
       <Card loading={loading} bordered={false} style={{ boxShadow: '0 1px 6px rgba(0,0,0,0.06)', borderRadius: 12 }}>
-        <Form form={form} layout="vertical" onFinish={onFinish}>
+        <Form form={form} layout="vertical" onFinish={onFinish} disabled={isVisitor}>
 
           {/* ─── Logo ──────────────────────────────────────────── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
@@ -78,16 +89,18 @@ const SchoolSettings = () => {
               style={{ background: 'var(--color-primary-light)', color: 'var(--color-secondary)', border: '2px solid var(--color-primary-light)' }}
             />
             <div>
-              <Upload
-                showUploadList={false}
-                accept="image/*"
-                customRequest={handleLogoUpload}
-                disabled={uploadingLogo}
-              >
-                <Button icon={<UploadOutlined />} loading={uploadingLogo} size="small">
-                  Upload Logo
-                </Button>
-              </Upload>
+              {!isVisitor && (
+                <Upload
+                  showUploadList={false}
+                  accept="image/*"
+                  customRequest={handleLogoUpload}
+                  disabled={uploadingLogo}
+                >
+                  <Button icon={<UploadOutlined />} loading={uploadingLogo} size="small">
+                    Upload Logo
+                  </Button>
+                </Upload>
+              )}
               <Text type="secondary" style={{ display: 'block', fontSize: 11, marginTop: 4 }}>
                 PNG, JPG up to 5MB
               </Text>
@@ -218,11 +231,13 @@ const SchoolSettings = () => {
             )}
           </Form.List>
 
-          <Form.Item style={{ marginTop: 24 }}>
-            <Button type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />} size="large">
-              Save Settings
-            </Button>
-          </Form.Item>
+          {!isVisitor && (
+            <Form.Item style={{ marginTop: 24 }}>
+              <Button type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />} size="large">
+                Save Settings
+              </Button>
+            </Form.Item>
+          )}
         </Form>
       </Card>
     </div>

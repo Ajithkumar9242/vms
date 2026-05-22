@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, InputNumber, Popconfirm, message, Typography, Space } from 'antd';
+import { Table, Button, Modal, Form, Input, InputNumber, Popconfirm, message, Typography, Space, Alert } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import useAuthStore from '@/store/authStore';
 import { setupAPI } from '@/services/api';
 
 const { Title } = Typography;
 
 const GradeSetup = () => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState({ open: false, record: null });
@@ -42,21 +45,31 @@ const GradeSetup = () => {
     { title: 'Min Marks (%)', dataIndex: 'minMarks' },
     { title: 'Max Marks (%)', dataIndex: 'maxMarks' },
     { title: 'Remarks', dataIndex: 'remarks' },
-    { title: '', key: 'act', width: 90, render: (_, r) => (
+    ...(!isVisitor ? [{ title: '', key: 'act', width: 90, render: (_, r) => (
       <Space>
         <Button size="small" icon={<EditOutlined />} onClick={() => openModal(r)} />
         <Popconfirm title="Delete?" onConfirm={() => onDelete(r._id)}>
           <Button size="small" danger icon={<DeleteOutlined />} />
         </Popconfirm>
       </Space>
-    ) },
+    ) }] : []),
   ];
 
   return (
     <div style={{ padding: 24 }}>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Grade configurations are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>🏆 Grade System</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>Add Grade</Button>
+        {!isVisitor && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>Add Grade</Button>
+        )}
       </div>
       <Table rowKey="_id" columns={cols} dataSource={data} loading={loading} pagination={false} />
 

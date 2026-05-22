@@ -7,10 +7,14 @@ import { SendOutlined } from '@ant-design/icons';
 import { communicationAPI, schoolAPI } from '@/services/api';
 import dayjs from 'dayjs';
 
+import useAuthStore from '@/store/authStore';
+
 const { Title, Text } = Typography;
 
 const Communication = () => {
   const { message } = App.useApp();
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -97,9 +101,11 @@ const Communication = () => {
           <Title level={3} className="page-title" style={{ margin: 0 }}>Communication</Title>
           <Text className="page-subtitle">Send messages and announcements</Text>
         </div>
-        <Button type="primary" icon={<SendOutlined />} onClick={() => setSendOpen(true)} id="send-message-btn">
-          Send Message
-        </Button>
+        {canWrite && (
+          <Button type="primary" icon={<SendOutlined />} onClick={() => setSendOpen(true)} id="send-message-btn">
+            Send Message
+          </Button>
+        )}
       </div>
 
       <Table

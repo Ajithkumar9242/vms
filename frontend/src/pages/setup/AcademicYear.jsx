@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, DatePicker, Switch, Tag, message, Typography, Space } from 'antd';
+import { Table, Button, Modal, Form, Input, DatePicker, Switch, Tag, message, Typography, Space, Alert } from 'antd';
 import { PlusOutlined, EditOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { setupAPI } from '@/services/api';
+import useAuthStore from '@/store/authStore';
 
 const { Title } = Typography;
 
 const AcademicYear = () => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState({ open: false, record: null });
@@ -65,16 +68,26 @@ const AcademicYear = () => {
     ) },
     { title: 'Start', dataIndex: 'startDate', key: 'start', render: (v) => dayjs(v).format('DD MMM YYYY') },
     { title: 'End', dataIndex: 'endDate', key: 'end', render: (v) => dayjs(v).format('DD MMM YYYY') },
-    { title: '', key: 'action', width: 60, render: (_, r) => (
+    ...(!isVisitor ? [{ title: '', key: 'action', width: 60, render: (_, r) => (
       <Button size="small" icon={<EditOutlined />} onClick={() => openModal(r)} />
-    ) },
+    ) }] : []),
   ];
 
   return (
     <div style={{ padding: 24 }}>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Academic years are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>📅 Academic Years</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>New Year</Button>
+        {!isVisitor && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>New Year</Button>
+        )}
       </div>
       <Table rowKey="_id" columns={columns} dataSource={data} loading={loading} pagination={false} />
 

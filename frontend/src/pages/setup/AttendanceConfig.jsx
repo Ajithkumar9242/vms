@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import { setupAPI } from '@/services/api';
 import dayjs from 'dayjs';
+import useAuthStore from '@/store/authStore';
 
 const { Title, Text } = Typography;
 
@@ -49,6 +50,8 @@ const MODE_OPTIONS = [
 ];
 
 const AttendanceConfig = () => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [years, setYears] = useState([]);
   const [selectedYear, setSelectedYear] = useState(null);
   const [mode, setMode] = useState('session');
@@ -200,36 +203,38 @@ const AttendanceConfig = () => {
       dataIndex: 'endTime',
       render: (v) => v || <Text type="secondary">—</Text>,
     },
-    {
-      title: 'Reorder',
-      width: 90,
-      render: (_, r) => (
-        <Space>
+    ...(isVisitor ? [] : [
+      {
+        title: 'Reorder',
+        width: 90,
+        render: (_, r) => (
+          <Space>
+            <Button
+              size="small"
+              disabled={r.order === 1}
+              onClick={() => moveSession(r.order, -1)}
+            >↑</Button>
+            <Button
+              size="small"
+              disabled={r.order === sessions.length}
+              onClick={() => moveSession(r.order, 1)}
+            >↓</Button>
+          </Space>
+        ),
+      },
+      {
+        title: '',
+        width: 44,
+        render: (_, r) => (
           <Button
+            danger
             size="small"
-            disabled={r.order === 1}
-            onClick={() => moveSession(r.order, -1)}
-          >↑</Button>
-          <Button
-            size="small"
-            disabled={r.order === sessions.length}
-            onClick={() => moveSession(r.order, 1)}
-          >↓</Button>
-        </Space>
-      ),
-    },
-    {
-      title: '',
-      width: 44,
-      render: (_, r) => (
-        <Button
-          danger
-          size="small"
-          icon={<DeleteOutlined />}
-          onClick={() => removeSession(r.order)}
-        />
-      ),
-    },
+            icon={<DeleteOutlined />}
+            onClick={() => removeSession(r.order)}
+          />
+        ),
+      },
+    ]),
   ];
 
   // Duplicate name check for UI warning
@@ -239,6 +244,15 @@ const AttendanceConfig = () => {
   return (
     <div style={{ padding: 24 }}>
       <Title level={4} style={{ marginBottom: 16 }}>✅ Attendance Configuration</Title>
+
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Attendance configuration is read-only."
+          style={{ marginBottom: 16, maxWidth: 760 }}
+        />
+      )}
 
       <Card style={{ maxWidth: 760 }} loading={loading}>
         {/* ── Year Selector ── */}
@@ -276,6 +290,7 @@ const AttendanceConfig = () => {
                   size="small"
                   icon={<ThunderboltOutlined />}
                   onClick={() => applyPreset(p)}
+                  disabled={isVisitor}
                 >
                   {p.label}
                 </Button>
@@ -304,49 +319,51 @@ const AttendanceConfig = () => {
             />
 
             {/* ── Add new session ── */}
-            <Card
-              size="small"
-              style={{ background: '#f9f9ff', borderRadius: 8 }}
-              title={<Text strong>Add Session</Text>}
-            >
-              <Space wrap align="end">
-                <Form.Item label="Name" style={{ marginBottom: 0 }}>
-                  <Input
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="e.g. P7 or Lunch"
-                    style={{ width: 140 }}
-                    onPressEnter={addSession}
-                  />
-                </Form.Item>
-                <Form.Item label="Start Time (optional)" style={{ marginBottom: 0 }}>
-                  <TimePicker
-                    value={newStart}
-                    onChange={setNewStart}
-                    format="HH:mm"
-                    style={{ width: 110 }}
-                  />
-                </Form.Item>
-                <Form.Item label="End Time (optional)" style={{ marginBottom: 0 }}>
-                  <TimePicker
-                    value={newEnd}
-                    onChange={setNewEnd}
-                    format="HH:mm"
-                    style={{ width: 110 }}
-                  />
-                </Form.Item>
-                <Form.Item label=" " style={{ marginBottom: 0 }}>
-                  <Button
-                    type="dashed"
-                    icon={<PlusOutlined />}
-                    onClick={addSession}
-                    disabled={sessions.length >= 10}
-                  >
-                    Add
-                  </Button>
-                </Form.Item>
-              </Space>
-            </Card>
+            {!isVisitor && (
+              <Card
+                size="small"
+                style={{ background: '#f9f9ff', borderRadius: 8 }}
+                title={<Text strong>Add Session</Text>}
+              >
+                <Space wrap align="end">
+                  <Form.Item label="Name" style={{ marginBottom: 0 }}>
+                    <Input
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder="e.g. P7 or Lunch"
+                      style={{ width: 140 }}
+                      onPressEnter={addSession}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Start Time (optional)" style={{ marginBottom: 0 }}>
+                    <TimePicker
+                      value={newStart}
+                      onChange={setNewStart}
+                      format="HH:mm"
+                      style={{ width: 110 }}
+                    />
+                  </Form.Item>
+                  <Form.Item label="End Time (optional)" style={{ marginBottom: 0 }}>
+                    <TimePicker
+                      value={newEnd}
+                      onChange={setNewEnd}
+                      format="HH:mm"
+                      style={{ width: 110 }}
+                    />
+                  </Form.Item>
+                  <Form.Item label=" " style={{ marginBottom: 0 }}>
+                    <Button
+                      type="dashed"
+                      icon={<PlusOutlined />}
+                      onClick={addSession}
+                      disabled={sessions.length >= 10}
+                    >
+                      Add
+                    </Button>
+                  </Form.Item>
+                </Space>
+              </Card>
+            )}
           </Form.Item>
 
           {sessions.length === 0 && (
@@ -357,14 +374,16 @@ const AttendanceConfig = () => {
             />
           )}
 
-          <Button
-            type="primary"
-            onClick={save}
-            loading={saving}
-            disabled={hasDuplicates || sessions.length === 0}
-          >
-            Save Config
-          </Button>
+          {!isVisitor && (
+            <Button
+              type="primary"
+              onClick={save}
+              loading={saving}
+              disabled={hasDuplicates || sessions.length === 0}
+            >
+              Save Config
+            </Button>
+          )}
         </Form>
       </Card>
     </div>

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   Table, Button, Modal, Form, Input, Select,
-  Popconfirm, message, Typography, Space, Tag,
+  Popconfirm, message, Typography, Space, Tag, Alert,
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined } from '@ant-design/icons';
 import { setupAPI, schoolAPI, facultyAPI } from '@/services/api';
+import useAuthStore from '@/store/authStore';
 
 const { Title, Text } = Typography;
 
@@ -26,6 +27,8 @@ const extractList = (res) => {
   return [];
 };
 const ClassGroups = () => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [data, setData] = useState([]);
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
@@ -151,7 +154,7 @@ const ClassGroups = () => {
         );
       },
     },
-    {
+    ...(!isVisitor ? [{
       title: '',
       key: 'act',
       width: 100,
@@ -163,16 +166,26 @@ const ClassGroups = () => {
           </Popconfirm>
         </Space>
       ),
-    },
+    }] : []),
   ];
 
   return (
     <div style={{ padding: 24 }}>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Class groups are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>🗂️ Class Groups</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
-          New Group
-        </Button>
+        {!isVisitor && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
+            New Group
+          </Button>
+        )}
       </div>
 
       <Table

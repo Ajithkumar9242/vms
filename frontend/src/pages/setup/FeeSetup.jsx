@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { setupAPI, schoolAPI } from '@/services/api';
 import dayjs from 'dayjs';
+import useAuthStore from '@/store/authStore';
 
 const { Title, Text } = Typography;
 
@@ -27,6 +28,8 @@ const STATUS_COLOR = { pending: 'default', partial: 'orange', paid: 'green' };
 //  FEE GROUPS TAB
 // ═════════════════════════════════════════════════════════════
 const FeeGroupsTab = () => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [data,    setData]    = useState([]);
   const [loading, setLoading] = useState(false);
   const [modal,   setModal]   = useState({ open: false, record: null });
@@ -70,19 +73,29 @@ const FeeGroupsTab = () => {
       title: 'Status', dataIndex: 'isActive',
       render: (v) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag>,
     },
-    {
+    ...(!isVisitor ? [{
       title: '', key: 'act', width: 60,
       render: (_, r) => <Button size="small" icon={<EditOutlined />} onClick={() => openModal(r)} />,
-    },
+    }] : []),
   ];
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => openModal()}>
-          New Fee Group
-        </Button>
-      </div>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Fee groups are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
+      {!isVisitor && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => openModal()}>
+            New Fee Group
+          </Button>
+        </div>
+      )}
       <Table rowKey="_id" columns={cols} dataSource={data} loading={loading} pagination={false} size="small" />
       <Modal
         title={modal.record ? 'Edit Fee Group' : 'New Fee Group'}
@@ -111,6 +124,8 @@ const FeeGroupsTab = () => {
 //  FEE STRUCTURE TAB
 // ═════════════════════════════════════════════════════════════
 const FeeStructureTab = ({ classes, feeGroups, years }) => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [data,       setData]       = useState([]);
   const [loading,    setLoading]    = useState(false);
   const [modal,      setModal]      = useState({ open: false, record: null });
@@ -234,13 +249,13 @@ const FeeStructureTab = ({ classes, feeGroups, years }) => {
         );
       },
     },
-    {
+    ...(!isVisitor ? [{
       title: '',
       width: 60,
       render: (_, r) => (
         <Button size="small" icon={<EditOutlined />} onClick={() => openModal(r)} />
       ),
-    },
+    }] : []),
   ];
 
   const sumOk       = autoSplit || !form.getFieldValue('installments')?.length || Math.abs(manualSum - totalAmt) <= 1;
@@ -248,11 +263,21 @@ const FeeStructureTab = ({ classes, feeGroups, years }) => {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => openModal()}>
-          New Structure
-        </Button>
-      </div>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Fee structures are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
+      {!isVisitor && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => openModal()}>
+            New Structure
+          </Button>
+        </div>
+      )}
       <Table
         rowKey="_id"
         columns={cols}

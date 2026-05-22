@@ -4,6 +4,8 @@ import { PlusOutlined, WarningOutlined, EditOutlined } from '@ant-design/icons';
 import { incidentAPI, studentAPI } from '@/services/api';
 import dayjs from 'dayjs';
 
+import useAuthStore from '@/store/authStore';
+
 const { Option } = Select;
 const { TextArea } = Input;
 
@@ -14,6 +16,8 @@ const typeLabels = {
 };
 
 const Incidents = () => {
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [incidents, setIncidents] = useState([]);
   const [students, setStudents] = useState([]);
   const [total, setTotal] = useState(0);
@@ -87,7 +91,7 @@ const Incidents = () => {
     },
     { title: 'Date', dataIndex: 'date', render: d => dayjs(d).format('DD/MM/YYYY') },
     { title: 'Reported By', key: 'reporter', render: (_, r) => r.reportedBy?.name || '-' },
-    {
+    ...(canWrite ? [{
       title: 'Action', key: 'actions', width: 80,
       render: (_, r) => (
         <Button size="small" icon={<EditOutlined />} onClick={() => {
@@ -97,7 +101,7 @@ const Incidents = () => {
           Update
         </Button>
       ),
-    },
+    }] : []),
   ];
 
   return (
@@ -114,7 +118,7 @@ const Incidents = () => {
               <Option key={k} value={k}>{v}</Option>
             ))}
           </Select>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)}>Report Incident</Button>
+          {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)}>Report Incident</Button>}
         </Space>
       </div>
 

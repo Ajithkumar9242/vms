@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, InputNumber, Select, message, Typography } from 'antd';
+import { Table, Button, Modal, Form, Input, InputNumber, Select, message, Typography, Alert } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
+import useAuthStore from '@/store/authStore';
 import { schoolAPI } from '@/services/api';
 import api from '@/services/api';
 
 const { Title } = Typography;
 
 const Sections = () => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [sections, setSections] = useState([]);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -53,6 +56,14 @@ const Sections = () => {
 
   return (
     <div style={{ padding: 24 }}>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Sections are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>🔷 Sections</Title>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -65,7 +76,9 @@ const Sections = () => {
           >
             {classes.map((c) => <Select.Option key={c._id} value={c._id}>{c.name}</Select.Option>)}
           </Select>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)}>New Section</Button>
+          {!isVisitor && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)}>New Section</Button>
+          )}
         </div>
       </div>
       <Table rowKey="_id" columns={cols} dataSource={sections} loading={loading} pagination={false} />

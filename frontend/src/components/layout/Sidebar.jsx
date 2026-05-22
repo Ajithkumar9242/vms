@@ -33,7 +33,7 @@ import { setupAPI } from '@/services/api';
 const { Sider } = Layout;
 
 // ─── Role groups (mirror router/index.jsx) ────────────────────
-const SETUP_ROLES = ['super_admin', 'admin'];
+const SETUP_ROLES = ['super_admin', 'admin', 'visitor'];
 const HIGH_PRIV = ['super_admin', 'admin', 'principal', 'visitor'];
 const FINANCE_ROLES = ['super_admin', 'admin', 'principal', 'accountant', 'visitor'];
 const STAFF_ROLES = ['super_admin', 'admin', 'principal', 'faculty', 'visitor'];
@@ -79,12 +79,12 @@ const allMenuItems = [
     label: 'Timetable',
     roles: [...STAFF_ROLES, 'accountant'],
   },
-  {
-    key: '/assignments',
-    icon: <FileTextOutlined />,
-    label: 'Assignments',
-    roles: STAFF_ROLES,
-  },
+  // {
+  //   key: '/assignments',
+  //   icon: <FileTextOutlined />,
+  //   label: 'Assignments',
+  //   roles: STAFF_ROLES,
+  // },
   // {
   //   // key: '/marks-entry',
   //   icon: <EditOutlined />,

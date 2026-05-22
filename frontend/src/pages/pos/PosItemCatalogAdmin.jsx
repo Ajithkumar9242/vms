@@ -6,6 +6,8 @@ import {
 import { PlusOutlined, EditOutlined, PoweroffOutlined } from '@ant-design/icons';
 import { posAPI } from '@/services/api';
 
+import useAuthStore from '@/store/authStore';
+
 const { Title, Text } = Typography;
 
 const CATEGORY_OPTS = [
@@ -17,6 +19,8 @@ const CATEGORY_OPTS = [
 
 const PosItemCatalogAdmin = () => {
   const { message } = App.useApp();
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving]   = useState(false);
@@ -69,7 +73,7 @@ const PosItemCatalogAdmin = () => {
     { title: 'Tax %', dataIndex: 'taxPercent', key: 't', width: 70, align: 'right', render: v => `${v}%` },
     { title: 'Needs Student', dataIndex: 'requiresStudent', key: 'rs', width: 110, render: v => <Tag>{v ? 'Yes' : 'No'}</Tag> },
     { title: 'Status', dataIndex: 'active', key: 'a', width: 80, render: v => <Tag color={v ? 'green' : 'default'}>{v ? 'Active' : 'Off'}</Tag> },
-    {
+    ...(canWrite ? [{
       title: 'Actions', key: 'act', width: 140,
       render: (_, r) => (
         <Space>
@@ -79,14 +83,14 @@ const PosItemCatalogAdmin = () => {
           </Popconfirm>
         </Space>
       ),
-    },
+    }] : []),
   ];
 
   return (
     <div style={{ padding: 24 }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>🏪 POS Item Catalog</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>Add Item</Button>
+        {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>Add Item</Button>}
       </Row>
 
       <Table columns={columns} dataSource={items} rowKey="_id" loading={loading} size="middle" scroll={{ x: 700 }} />

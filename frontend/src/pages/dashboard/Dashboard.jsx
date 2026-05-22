@@ -42,13 +42,19 @@ const Dashboard = () => {
           schoolAPI.getClasses({ limit: 1 }),
         ]);
 
+      const getCount = (settled) => {
+        if (settled.status !== 'fulfilled') return 0;
+        const val = settled.value;
+        return val?.pagination?.total ?? val?.data?.total ?? 0;
+      };
+
       setStats({
-        totalStudents: students.status === 'fulfilled' ? students.value.pagination?.total || 0 : 0,
-        totalAdmissions: admissions.status === 'fulfilled' ? admissions.value.pagination?.total || 0 : 0,
-        pendingAdmissions: pendingAdm.status === 'fulfilled' ? pendingAdm.value.pagination?.total || 0 : 0,
-        approvedAdmissions: approvedAdm.status === 'fulfilled' ? approvedAdm.value.pagination?.total || 0 : 0,
-        rejectedAdmissions: rejectedAdm.status === 'fulfilled' ? rejectedAdm.value.pagination?.total || 0 : 0,
-        totalClasses: classes.status === 'fulfilled' ? classes.value.pagination?.total || 0 : 0,
+        totalStudents: getCount(students),
+        totalAdmissions: getCount(admissions),
+        pendingAdmissions: getCount(pendingAdm),
+        approvedAdmissions: getCount(approvedAdm),
+        rejectedAdmissions: getCount(rejectedAdm),
+        totalClasses: getCount(classes),
       });
     } catch {
       // Stats will remain 0 on error — acceptable for dashboard

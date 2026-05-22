@@ -6,6 +6,7 @@ import {
 import { SaveOutlined, InfoCircleOutlined, LockOutlined } from '@ant-design/icons';
 import { examAPI, studentAPI } from '@/services/api';
 import { ERP_COLORS } from '@/theme/colors';
+import useAuthStore from '@/store/authStore';
 
 const { Text } = Typography;
 
@@ -48,6 +49,8 @@ const getExamSubjects = (exam) => {
 
 const MarksEntry = () => {
   const { message } = App.useApp();
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [exams, setExams] = useState([]);
   const [selectedExamId, setSelectedExamId] = useState(undefined);
   const [exam, setExam] = useState(null);
@@ -179,7 +182,7 @@ const MarksEntry = () => {
             style={{ width: 66, borderColor: isFail ? '#ef4444' : undefined }}
             status={isFail ? 'error' : undefined}
             placeholder="—"
-            disabled={isLocked}
+            disabled={isLocked || !canWrite}
           />
         );
       },
@@ -293,7 +296,7 @@ const MarksEntry = () => {
                 locale={{ emptyText: 'No students in this class' }}
               />
             </div>
-            {students.length > 0 && !isLocked && (
+            {students.length > 0 && !isLocked && canWrite && (
               <div style={{ marginTop: 14 }}>
                 <Button type="primary" icon={<SaveOutlined />} size="large"
                   onClick={handleSave} loading={saving} id="save-marks-btn" block>

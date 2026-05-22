@@ -4,10 +4,14 @@ import { PlusOutlined, MedicineBoxOutlined } from '@ant-design/icons';
 import { healthAPI, studentAPI } from '@/services/api';
 import dayjs from 'dayjs';
 
+import useAuthStore from '@/store/authStore';
+
 const { Option } = Select;
 const { TextArea } = Input;
 
 const HealthRecords = () => {
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [records, setRecords] = useState([]);
   const [students, setStudents] = useState([]);
   const [total, setTotal] = useState(0);
@@ -67,7 +71,7 @@ const HealthRecords = () => {
           <h2 style={{ margin: 0 }}><MedicineBoxOutlined /> Health Records</h2>
           <p style={{ color: '#888', margin: 0 }}>Track student health issues and medical logs</p>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)}>Add Record</Button>
+        {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal(true)}>Add Record</Button>}
       </div>
 
       <Table columns={columns} dataSource={records} rowKey="_id" loading={loading}

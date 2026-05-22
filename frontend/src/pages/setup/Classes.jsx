@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, InputNumber, Select, message, Typography, Space } from 'antd';
+import { Table, Button, Modal, Form, Input, InputNumber, Select, message, Typography, Space, Alert } from 'antd';
 import { PlusOutlined, EditOutlined } from '@ant-design/icons';
+import useAuthStore from '@/store/authStore';
 import { setupAPI, schoolAPI } from '@/services/api';
 import api from '@/services/api';
 
@@ -8,6 +9,8 @@ const { Title } = Typography;
 
 // ─── ClassGroups tab ──────────────────────────────────────────
 const ClassGroupsTab = ({ classes, sections }) => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState(false);
@@ -42,9 +45,11 @@ const ClassGroupsTab = ({ classes, sections }) => {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setModal(true)}>New Group</Button>
-      </div>
+      {!isVisitor && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setModal(true)}>New Group</Button>
+        </div>
+      )}
       <Table rowKey="_id" columns={cols} dataSource={data} loading={loading} pagination={false} size="small" />
       <Modal title="New Class Group" open={modal} onCancel={() => setModal(false)} footer={null} destroyOnHidden>
         <Form form={form} layout="vertical" onFinish={onFinish} style={{ marginTop: 16 }}>
@@ -64,6 +69,8 @@ const ClassGroupsTab = ({ classes, sections }) => {
 
 // ─── Main Classes page ────────────────────────────────────────
 const Classes = () => {
+  const user = useAuthStore((s) => s.user);
+  const isVisitor = user?.role === 'visitor';
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -108,7 +115,7 @@ const Classes = () => {
     { title: 'Name', dataIndex: 'name' },
     { title: 'Code', dataIndex: 'code' },
     { title: 'Order', dataIndex: 'order' },
-    { title: '', key: 'act', width: 60, render: (_, r) => <Button size="small" icon={<EditOutlined />} onClick={() => openModal(r)} /> },
+    ...(!isVisitor ? [{ title: '', key: 'act', width: 60, render: (_, r) => <Button size="small" icon={<EditOutlined />} onClick={() => openModal(r)} /> }] : []),
   ];
 
   const tabStyle = (key) => ({
@@ -119,9 +126,17 @@ const Classes = () => {
 
   return (
     <div style={{ padding: 24 }}>
+      {isVisitor && (
+        <Alert
+          type="info"
+          showIcon
+          message="You are logged in as a visitor. Classes and groups are read-only."
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>📚 Classes & Groups</Title>
-        {tab === 'classes' && (
+        {!isVisitor && tab === 'classes' && (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>New Class</Button>
         )}
       </div>

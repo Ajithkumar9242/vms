@@ -170,7 +170,7 @@ const Fees = () => {
       title: 'Actions', key: 'actions', width: 220, fixed: 'right',
       render: (_, record) => (
         <Space size="small">
-          {record.invoiceId && record.status !== 'Paid' && (
+          {record.invoiceId && record.status !== 'Paid' && user?.role !== 'visitor' && (
             <Button type="primary" size="small" icon={<DollarOutlined />}
               onClick={() => setCollectModal({
                 open: true,

@@ -313,6 +313,7 @@ const Admissions = () => {
                 allowClear
                 size="small"
                 id="admission-year-select"
+                disabled={!canWrite}
               />
               <Spin spinning={settingsLoading}>
                 <Switch

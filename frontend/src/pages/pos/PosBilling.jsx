@@ -8,6 +8,8 @@ import {
 } from '@ant-design/icons';
 import { posAPI, studentAPI } from '@/services/api';
 
+import useAuthStore from '@/store/authStore';
+
 const { Title, Text } = Typography;
 
 const PAYMENT_MODES = [
@@ -19,6 +21,8 @@ const PAYMENT_MODES = [
 
 const PosBilling = () => {
   const { message } = App.useApp();
+  const { user } = useAuthStore();
+  const canWrite = user?.role !== 'visitor';
   const [catalog, setCatalog]         = useState([]);
   const [students, setStudents]       = useState([]);
   const [selectedStudentId, setSelectedStudentId] = useState(null);
@@ -98,15 +102,15 @@ const PosBilling = () => {
     { title: 'Item', dataIndex: 'nameSnapshot', key: 'n', render: t => <Text strong>{t}</Text> },
     {
       title: 'Qty', key: 'qty', width: 80,
-      render: (_, r, i) => <InputNumber min={1} size="small" value={r.qty} onChange={v => updateLine(i, 'qty', v)} style={{ width: 64 }} />,
+      render: (_, r, i) => <InputNumber min={1} size="small" value={r.qty} onChange={v => updateLine(i, 'qty', v)} style={{ width: 64 }} disabled={!canWrite} />,
     },
     {
       title: 'Unit ₹', key: 'up', width: 100,
-      render: (_, r, i) => <InputNumber min={0} size="small" value={r.unitPrice} onChange={v => updateLine(i, 'unitPrice', v)} style={{ width: 80 }} />,
+      render: (_, r, i) => <InputNumber min={0} size="small" value={r.unitPrice} onChange={v => updateLine(i, 'unitPrice', v)} style={{ width: 80 }} disabled={!canWrite} />,
     },
     {
       title: 'Disc ₹', key: 'd', width: 100,
-      render: (_, r, i) => <InputNumber min={0} size="small" value={r.discount} onChange={v => updateLine(i, 'discount', v)} style={{ width: 80 }} />,
+      render: (_, r, i) => <InputNumber min={0} size="small" value={r.discount} onChange={v => updateLine(i, 'discount', v)} style={{ width: 80 }} disabled={!canWrite} />,
     },
     { title: 'Tax %', dataIndex: 'taxPercent', key: 't', width: 70, render: v => `${v}%` },
     {
@@ -117,7 +121,7 @@ const PosBilling = () => {
         return <Text strong>₹{(base + tax).toFixed(2)}</Text>;
       },
     },
-    { title: '', key: 'del', width: 40, render: (_, __, i) => <Button danger size="small" icon={<DeleteOutlined />} onClick={() => removeLine(i)} /> },
+    ...(canWrite ? [{ title: '', key: 'del', width: 40, render: (_, __, i) => <Button danger size="small" icon={<DeleteOutlined />} onClick={() => removeLine(i)} /> }] : []),
   ];
 
   return (
@@ -134,6 +138,7 @@ const PosBilling = () => {
               value={null}
               onChange={addItem}
               options={(catalog.filter(c => c.active)).map(c => ({ label: `${c.name} — ₹${c.price}`, value: c._id }))}
+              disabled={!canWrite}
             />
           </Card>
 
@@ -154,12 +159,13 @@ const PosBilling = () => {
               value={selectedStudentId}
               onChange={setSelectedStudentId}
               options={students.map(s => ({ label: `${s.name} (${s.rollNo})`, value: s._id }))}
+              disabled={!canWrite}
             />
             <Divider style={{ margin: '8px 0' }} />
             <Row justify="space-between"><Col>Subtotal</Col><Col><Text>₹{subtotal.toFixed(2)}</Text></Col></Row>
             <Row justify="space-between" style={{ marginTop: 4 }}>
               <Col>Discount (₹)</Col>
-              <Col><InputNumber min={0} size="small" value={invoiceDiscount} onChange={v => setInvoiceDiscount(Number(v) || 0)} style={{ width: 80 }} /></Col>
+              <Col><InputNumber min={0} size="small" value={invoiceDiscount} onChange={v => setInvoiceDiscount(Number(v) || 0)} style={{ width: 80 }} disabled={!canWrite} /></Col>
             </Row>
             <Row justify="space-between" style={{ marginTop: 4 }}><Col>Tax</Col><Col><Text>₹{taxTotal.toFixed(2)}</Text></Col></Row>
             <Divider style={{ margin: '8px 0' }} />
@@ -170,10 +176,10 @@ const PosBilling = () => {
           </Card>
 
           <Card size="small" title="Payment">
-            <Select options={PAYMENT_MODES} value={paymentMode} onChange={setPaymentMode} style={{ width: '100%', marginBottom: 8 }} />
-            <Input placeholder="Payment ref / transaction ID" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} style={{ marginBottom: 8 }} />
-            <Input.TextArea rows={2} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} style={{ marginBottom: 12 }} />
-            <Button type="primary" block loading={saving} onClick={handleSave} disabled={!lineItems.length}>
+            <Select options={PAYMENT_MODES} value={paymentMode} onChange={setPaymentMode} style={{ width: '100%', marginBottom: 8 }} disabled={!canWrite} />
+            <Input placeholder="Payment ref / transaction ID" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} style={{ marginBottom: 8 }} disabled={!canWrite} />
+            <Input.TextArea rows={2} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} style={{ marginBottom: 12 }} disabled={!canWrite} />
+            <Button type="primary" block loading={saving} onClick={handleSave} disabled={!canWrite || !lineItems.length}>
               Save Invoice
             </Button>
           </Card>
