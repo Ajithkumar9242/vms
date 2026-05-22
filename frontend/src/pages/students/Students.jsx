@@ -65,7 +65,39 @@ const Students = () => {
         (Array.isArray(envelope) ? envelope : null) ??
         [];
 
-      setStudents(list);
+      const sortedList = [...list].sort((a, b) => {
+        // 1. Class
+        const classA = a.classId?.name || a.className || '';
+        const classB = b.classId?.name || b.className || '';
+        const classComp = classA.localeCompare(classB);
+        if (classComp !== 0) return classComp;
+
+        // 2. Section
+        const secA = a.sectionId?.name || a.sectionName || '';
+        const secB = b.sectionId?.name || b.sectionName || '';
+        const secComp = secA.localeCompare(secB);
+        if (secComp !== 0) return secComp;
+
+        // 3. Roll No
+        const rollA = a.rollNo || '';
+        const rollB = b.rollNo || '';
+        const numA = parseInt(rollA.replace(/\D/g, ''), 10);
+        const numB = parseInt(rollB.replace(/\D/g, ''), 10);
+        let rollComp = 0;
+        if (!isNaN(numA) && !isNaN(numB)) {
+          rollComp = numA - numB;
+        } else {
+          rollComp = rollA.localeCompare(rollB);
+        }
+        if (rollComp !== 0) return rollComp;
+
+        // 4. Student Name
+        const nameA = a.name || '';
+        const nameB = b.name || '';
+        return nameA.localeCompare(nameB);
+      });
+
+      setStudents(sortedList);
 
       const pag = envelope?.pagination ?? {};
       setPagination({
@@ -233,6 +265,13 @@ const Students = () => {
       width: 200,
       fixed: 'left',
       ellipsis: true,
+      sorter: (a, b) => (a.name || '').localeCompare(b.name || ''),
+      filters: [
+        { text: 'Male', value: 'male' },
+        { text: 'Female', value: 'female' },
+        { text: 'Other', value: 'other' }
+      ],
+      onFilter: (value, record) => record.gender === value,
       render: (_, s) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Avatar
@@ -255,12 +294,23 @@ const Students = () => {
       title: 'Admission No',
       key: 'admissionNo',
       width: 130,
+      sorter: (a, b) => (a.admissionNo || a.admissionNumber || '').localeCompare(b.admissionNo || b.admissionNumber || ''),
       render: (_, s) => s.admissionNo || s.admissionNumber || '—',
     },
     {
       title: 'Register No',
       key: 'registerNo',
       width: 130,
+      sorter: (a, b) => {
+        const valA = a.registerNo || a.rollNo || '';
+        const valB = b.registerNo || b.rollNo || '';
+        const numA = parseInt(valA.replace(/\D/g, ''), 10);
+        const numB = parseInt(valB.replace(/\D/g, ''), 10);
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return numA - numB;
+        }
+        return valA.localeCompare(valB);
+      },
       render: (_, s) => s.registerNo || s.rollNo || '—',
     },
     {
@@ -268,6 +318,16 @@ const Students = () => {
       key: 'class',
       width: 110,
       ellipsis: true,
+      sorter: (a, b) => {
+        const nameA = a.classId?.name || a.className || '';
+        const nameB = b.classId?.name || b.className || '';
+        return nameA.localeCompare(nameB);
+      },
+      filters: classes.map(c => ({ text: c.name, value: c._id })),
+      onFilter: (value, record) => {
+        const id = record.classId?._id || record.classId;
+        return id === value;
+      },
       render: (_, s) => s.classId?.name || s.className || '—',
     },
     {
@@ -275,6 +335,16 @@ const Students = () => {
       key: 'section',
       width: 90,
       ellipsis: true,
+      sorter: (a, b) => {
+        const nameA = a.sectionId?.name || a.sectionName || '';
+        const nameB = b.sectionId?.name || b.sectionName || '';
+        return nameA.localeCompare(nameB);
+      },
+      filters: [...new Set(sections.map(s => s.name))].filter(Boolean).map(name => ({ text: name, value: name })),
+      onFilter: (value, record) => {
+        const name = record.sectionId?.name || record.sectionName;
+        return name === value;
+      },
       render: (_, s) => s.sectionId?.name || s.sectionName || '—',
     },
     {
@@ -282,6 +352,7 @@ const Students = () => {
       key: 'parent',
       width: 160,
       ellipsis: true,
+      sorter: (a, b) => (a.parentName || '').localeCompare(b.parentName || ''),
       render: (_, s) => (
         <div>
           <Text ellipsis style={{ display: 'block', maxWidth: 150 }}>{s.parentName || '—'}</Text>
@@ -290,7 +361,22 @@ const Students = () => {
       ),
     },
     {
+      title: 'Created Date',
+      key: 'createdAt',
+      width: 120,
+      sorter: (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0),
+      render: (_, s) => s.createdAt ? new Date(s.createdAt).toLocaleDateString() : '—',
+    },
+    {
       title: 'Status', dataIndex: 'isActive', key: 'status', width: 90,
+      filters: [
+        { text: 'Active', value: true },
+        { text: 'Inactive', value: false }
+      ],
+      onFilter: (value, record) => {
+        const active = record.isActive !== false;
+        return active === value;
+      },
       render: (isActive) => <StatusTag status={isActive !== false ? 'active' : 'inactive'} />,
     },
     {
