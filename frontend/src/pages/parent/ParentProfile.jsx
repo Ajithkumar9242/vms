@@ -90,7 +90,7 @@ const ParentProfile = () => {
   const linkedStudents = parentData?.linkedStudents || user?.linkedEntity?.linkedStudents || [];
 
   return (
-    <ParentLayout title="My Profile" subtitle="Account & contact info">
+    <ParentLayout >
 
       {/* Alert */}
       {msg && (

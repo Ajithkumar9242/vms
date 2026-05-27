@@ -74,7 +74,7 @@ const FacultyProfile = () => {
   };
 
   return (
-    <FacultyLayout title="My Profile" subtitle="Faculty account">
+    <FacultyLayout>
       {/* Avatar with upload */}
       <div style={{ textAlign: 'center', padding: '8px 0 20px' }}>
         <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Card, Form, Input, Button, Typography, Alert,
-  Steps, Divider, Modal, ConfigProvider,
+  Steps, Divider, ConfigProvider,
 } from 'antd';
 import {
   UserOutlined, SafetyCertificateOutlined,
@@ -56,6 +56,7 @@ const FacultyLogin = () => {
   const [resendCd, setResendCd] = useState(0);
   const [otp, setOtp]       = useState(['', '', '', '', '', '']);
   const otpRefs = useRef([]);
+  const isSending = useRef(false);
 
   // Timer countdown
   useEffect(() => {
@@ -82,24 +83,17 @@ const FacultyLogin = () => {
   };
 
   const handleSendOtp = async () => {
-    if (loading) return;
+    if (isSending.current || loading) return;
     const digits = phone.replace(/\D/g, '');
     if (digits.length !== 10) { setError('Please enter a valid 10-digit mobile number'); return; }
     setError('');
+    isSending.current = true;
     setLoading(true);
     console.log(`[OTP] OTP request start for faculty phone: ${digits}`);
     try {
       const res = await authAPI.sendFacultyOtp(digits);
       const data = res.data || res;
       console.log(`[OTP] OTP request success:`, data);
-      if (data.message && data.message.toLowerCase().includes('demo')) {
-        Modal.info({
-          title: 'Demo Mode Enabled',
-          content: data.message,
-          okText: 'Got it',
-          centered: true,
-        });
-      }
       setStep(1);
       startCountdown();
     } catch (e) {
@@ -107,13 +101,15 @@ const FacultyLogin = () => {
       console.error(`[OTP] OTP request failure:`, errMsg);
       setError(errMsg);
     } finally {
+      isSending.current = false;
       setLoading(false);
     }
   };
 
   const handleVerifyOtp = async () => {
-    if (otpValue.length !== 6 || loading) return;
+    if (otpValue.length !== 6 || isSending.current || loading) return;
     setError('');
+    isSending.current = true;
     setLoading(true);
     console.log(`[OTP] Verification request start`);
     try {
@@ -139,14 +135,16 @@ const FacultyLogin = () => {
       setOtp(['', '', '', '', '', '']);
       otpRefs.current[0]?.focus();
     } finally {
+      isSending.current = false;
       setLoading(false);
     }
   };
 
   const handleResend = async () => {
-    if (resendCd > 0 || loading) return;
+    if (resendCd > 0 || isSending.current || loading) return;
     setError('');
     setOtp(['', '', '', '', '', '']);
+    isSending.current = true;
     setLoading(true);
     const digits = phone.replace(/\D/g, '');
     console.log(`[OTP] OTP resend request start for faculty phone: ${digits}`);
@@ -154,20 +152,13 @@ const FacultyLogin = () => {
       const res = await authAPI.sendFacultyOtp(digits);
       const data = res.data || res;
       console.log(`[OTP] OTP resend request success:`, data);
-      if (data.message && data.message.toLowerCase().includes('demo')) {
-        Modal.info({
-          title: 'Demo Mode Enabled',
-          content: data.message,
-          okText: 'Got it',
-          centered: true,
-        });
-      }
       startCountdown();
     } catch (e) {
       const errMsg = e.response?.data?.message || e.message || 'Failed to resend';
       console.error(`[OTP] OTP resend request failure:`, errMsg);
       setError(errMsg);
     } finally {
+      isSending.current = false;
       setLoading(false);
     }
   };

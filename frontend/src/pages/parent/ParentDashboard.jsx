@@ -3,6 +3,7 @@ import ParentLayout from '@/components/mobile/ParentLayout';
 import { feesAPI, notificationAPI, studentAPI, materialAPI, hostelAPI } from '@/services/api';
 import useAuthStore from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
+import { Avatar } from 'antd';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 dayjs.extend(relativeTime);
@@ -21,7 +22,10 @@ const ParentDashboard = () => {
   const [retryCount, setRetryCount] = useState(0);
   // Multi-child support
   const [linkedStudents, setLinkedStudents] = useState([]);
-  const [selectedChildIdx, setSelectedChildIdx] = useState(0);
+  const [selectedChildIdx, setSelectedChildIdx] = useState(() => {
+    const val = parseInt(localStorage.getItem('vms_selected_child_idx') || '0', 10);
+    return isNaN(val) ? 0 : val;
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -34,14 +38,16 @@ const ParentDashboard = () => {
         // ── Step 1: resolve student + classId ──────────────
         let sid = null;
         let cid = null;
+        let resolvedStudent = null;
 
         const allLinked = user?.linkedEntity?.linkedStudents || [];
         if (allLinked.length > 0) {
           setLinkedStudents(allLinked);
-          const safeIdx = Math.min(selectedChildIdx, allLinked.length - 1);
+          const safeIdx = Math.min(Math.max(0, selectedChildIdx), allLinked.length - 1);
           const linked = allLinked[safeIdx];
           sid = linked?._id;
           cid = linked?.classId?._id || linked?.classId || null;
+          resolvedStudent = linked;
         } else {
           sid = user?.studentId || user?.metadata?.studentId || null;
           cid = user?.classId || user?.metadata?.classId || null;
@@ -53,6 +59,19 @@ const ParentDashboard = () => {
           if (s) {
             sid = s._id;
             cid = s.classId?._id || s.classId || null;
+            resolvedStudent = s;
+            setLinkedStudents([s]);
+          }
+        } else if (!resolvedStudent) {
+          try {
+            const r = await studentAPI.getById(sid);
+            const s = r?.data?.data || r?.data || r;
+            if (s) {
+              resolvedStudent = s;
+              setLinkedStudents([s]);
+            }
+          } catch (e) {
+            console.error('Failed to fetch student details:', e);
           }
         }
 
@@ -109,6 +128,36 @@ const ParentDashboard = () => {
   const summary = feeData?.summary;
   const feeConfigured = summary && summary.totalFee > 0;
 
+  // Resolve child details for hero section
+  const safeIdx = Math.min(Math.max(0, selectedChildIdx), linkedStudents.length - 1);
+  const currentChild = linkedStudents[safeIdx] || null;
+
+  // Debug logging
+  console.log('Hero student:', currentChild);
+
+  const studentName = currentChild?.name || user?.name || 'Student';
+  const studentEmail = currentChild?.email || currentChild?.userId?.email;
+  const studentClass = currentChild?.classId?.name || (currentChild?.classId && (typeof currentChild.classId === 'object' ? currentChild.classId.name : null));
+  const studentSection = currentChild?.sectionId?.name || (currentChild?.sectionId && (typeof currentChild.sectionId === 'object' ? currentChild.sectionId.name : null));
+
+  const formattedClass = studentClass 
+    ? (/^class/i.test(studentClass) ? studentClass : `Class ${studentClass}`)
+    : '';
+  const studentSubtitle = studentEmail || (
+    formattedClass 
+      ? `${formattedClass}${studentSection ? ` • ${studentSection}` : ''}`
+      : 'Student'
+  );
+
+  const studentPhotoUrl = currentChild?.studentPhoto || 
+                          currentChild?.avatar || 
+                          currentChild?.photo ||
+                          currentChild?.admissionId?.studentPhoto || 
+                          currentChild?.admissionId?.avatar || 
+                          currentChild?.admission?.studentPhoto || 
+                          currentChild?.admission?.avatar || 
+                          null;
+
   const quickLinks = [
     { label: 'Pay Fees', icon: '₹', to: '/parent/fees', color: 'var(--color-primary-light)' },
     { label: 'Attendance', icon: '📅', to: '/parent/attendance', color: '#F0FDF4' },
@@ -140,7 +189,11 @@ const ParentDashboard = () => {
                 {linkedStudents.map((child, idx) => (
                   <button
                     key={child._id || idx}
-                    onClick={() => setSelectedChildIdx(idx)}
+                    onClick={() => {
+                      setSelectedChildIdx(idx);
+                      localStorage.setItem('vms_selected_child_idx', idx);
+                      window.location.reload();
+                    }}
                     style={{
                       padding: '6px 14px', borderRadius: 20, border: 'none',
                       fontSize: 12, fontWeight: 600, cursor: 'pointer',
@@ -162,12 +215,27 @@ const ParentDashboard = () => {
           {/* Hero */}
           <div className="m-hero" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div className="m-avatar">
-                {(user?.name || 'P')[0].toUpperCase()}
-              </div>
+              <Avatar
+                size={64}
+                src={studentPhotoUrl || undefined}
+                style={{
+                  backgroundColor: 'var(--erp-primary-light)',
+                  color: 'var(--erp-primary)',
+                  fontSize: 24,
+                  fontWeight: 700,
+                  border: '2px solid #fff',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                {studentName?.[0]?.toUpperCase() || 'S'}
+              </Avatar>
               <div>
-                <div className="m-hero-name">{user?.name || 'Parent'}</div>
-                <div className="m-hero-sub">{user?.email}</div>
+                <div className="m-hero-name">{studentName}</div>
+                <div className="m-hero-sub">{studentSubtitle}</div>
                 <div className="m-hero-sub" style={{ marginTop: 2 }}>
                   {dayjs().format('dddd, DD MMM YYYY')}
                 </div>

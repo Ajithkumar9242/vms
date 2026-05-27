@@ -29,7 +29,10 @@ const ParentExams = () => {
   const resolveStudent = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const linked = user?.linkedEntity?.linkedStudents?.[0];
+    const allLinked = user?.linkedEntity?.linkedStudents || [];
+    const storedIdx = parseInt(localStorage.getItem('vms_selected_child_idx') || '0', 10);
+    const safeIdx = allLinked.length > 0 ? Math.min(Math.max(0, storedIdx), allLinked.length - 1) : 0;
+    const linked = allLinked[safeIdx];
     const sid = linked?._id || user?.studentId || user?.metadata?.studentId;
     if (sid) {
       setStudentId(sid);

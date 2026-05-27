@@ -55,17 +55,73 @@ const ParentLayout = ({ title, subtitle, children }) => {
 
   const navItems = PARENT_NAV(unread);
 
+  // Retrieve active selected child details
+  const allLinked = user?.linkedEntity?.linkedStudents || [];
+  const storedIdx = parseInt(localStorage.getItem('vms_selected_child_idx') || '0', 10);
+  const safeIdx = allLinked.length > 0 ? Math.min(Math.max(0, storedIdx), allLinked.length - 1) : 0;
+  const activeChild = allLinked[safeIdx];
+  const activeChildName = activeChild?.name || user?.studentName || 'Student';
+  const activeChildClass = activeChild?.classId?.name || '';
+
   return (
     <div className="mobile-shell">
       <MobileSplash open={showSplash} label="VMS School ERP — Parent" />
 
-      <header className="mobile-header">
-        <div>
-          <div className="mobile-header-title">{title || 'Parent Portal'}</div>
-          <div className="mobile-header-sub">
-            {subtitle || `Welcome, ${user?.name?.split(' ')[0] || 'Parent'}`}
+      <header className="mobile-header" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div>
+            {/* Prominently show child name first */}
+            <div className="mobile-header-title" style={{ fontSize: '16px', fontWeight: 800, color: '#fff', textTransform: 'uppercase' }}>
+              {activeChildName}
+            </div>
+            {/* Parent name and Class info secondary */}
+            <div className="mobile-header-sub" style={{ fontSize: '11px', opacity: 0.85 }}>
+              {activeChildClass ? `Class: ${activeChildClass} · ` : ''}Parent: {user?.name || 'Parent'}
+            </div>
           </div>
+
+          {/* Child Switcher dropdown if multiple children exist */}
+          {allLinked.length > 1 && (
+            <select
+              value={safeIdx}
+              onChange={(e) => {
+                localStorage.setItem('vms_selected_child_idx', e.target.value);
+                window.location.reload();
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '5px 10px',
+                fontSize: '12px',
+                fontWeight: 600,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {allLinked.map((c, idx) => (
+                <option key={c._id || idx} value={idx} style={{ color: '#0F172A' }}>
+                  {c.name?.split(' ')[0] || `Child ${idx + 1}`}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
+
+        {/* If page specific title is passed, display it as secondary indicator */}
+        {title && title !== 'Parent Portal' && (
+          <div style={{
+            fontSize: '13px',
+            fontWeight: 700,
+            borderTop: '1px solid rgba(255, 255, 255, 0.15)',
+            paddingTop: '6px',
+            marginTop: '2px',
+            color: '#fff'
+          }}>
+            {title} {subtitle && <span style={{ fontWeight: 400, fontSize: '11px', opacity: 0.8 }}> — {subtitle}</span>}
+          </div>
+        )}
       </header>
 
       <main className="mobile-content m-fade-in">{children}</main>

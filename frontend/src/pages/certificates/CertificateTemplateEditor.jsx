@@ -211,11 +211,16 @@ const CertificateTemplateEditor = () => {
     principalName: '',
     principalDesignation: 'Principal',
     signatureUrl: null,
+    signaturePublicId: null,
     letterheadUrl: null,
+    letterheadPublicId: null,
+    logoUrl: null,
+    logoPublicId: null,
   });
 
   const [uploadingSig, setUploadingSig] = useState(false);
   const [uploadingLh, setUploadingLh] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // Load existing template if editing
   useEffect(() => {
@@ -307,7 +312,7 @@ const CertificateTemplateEditor = () => {
   };
 
   // Image Upload handler (customRequest)
-  const handleUpload = async (options, setUrlField, setUploading) => {
+  const handleUpload = async (options, type, setUploading) => {
     const { file, onSuccess, onError } = options;
     const formData = new FormData();
     formData.append('file', file);
@@ -318,10 +323,23 @@ const CertificateTemplateEditor = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const url = res.data?.data?.url || res.data?.url;
+      const publicId = res.data?.data?.publicId || res.data?.publicId;
       if (!url) throw new Error('Upload returned empty URL');
 
-      form.setFieldValue(setUrlField, url);
-      setPreviewState((prev) => ({ ...prev, [setUrlField]: url }));
+      if (type === 'letterhead') {
+        form.setFieldValue('letterheadUrl', url);
+        form.setFieldValue('letterheadPublicId', publicId);
+        setPreviewState((prev) => ({ ...prev, letterheadUrl: url, letterheadPublicId: publicId }));
+      } else if (type === 'signature') {
+        form.setFieldValue('signatureUrl', url);
+        form.setFieldValue('signaturePublicId', publicId);
+        setPreviewState((prev) => ({ ...prev, signatureUrl: url, signaturePublicId: publicId }));
+      } else if (type === 'logo') {
+        form.setFieldValue('logoUrl', url);
+        form.setFieldValue('logoPublicId', publicId);
+        form.setFieldValue('customLogoUrl', url);
+        setPreviewState((prev) => ({ ...prev, logoUrl: url, logoPublicId: publicId, customLogoUrl: url }));
+      }
       onSuccess(url);
       message.success('Image uploaded successfully');
     } catch (err) {
@@ -414,6 +432,15 @@ const CertificateTemplateEditor = () => {
         onFinish={handleSave}
         onValuesChange={(changed, all) => setPreviewState({ ...all })}
       >
+        {/* Hidden inputs to track and submit Cloudinary images and their public IDs */}
+        <Form.Item name="letterheadUrl" style={{ display: 'none' }}><Input type="hidden" /></Form.Item>
+        <Form.Item name="letterheadPublicId" style={{ display: 'none' }}><Input type="hidden" /></Form.Item>
+        <Form.Item name="signatureUrl" style={{ display: 'none' }}><Input type="hidden" /></Form.Item>
+        <Form.Item name="signaturePublicId" style={{ display: 'none' }}><Input type="hidden" /></Form.Item>
+        <Form.Item name="logoUrl" style={{ display: 'none' }}><Input type="hidden" /></Form.Item>
+        <Form.Item name="logoPublicId" style={{ display: 'none' }}><Input type="hidden" /></Form.Item>
+        <Form.Item name="customLogoUrl" style={{ display: 'none' }}><Input type="hidden" /></Form.Item>
+
         <Row gutter={20}>
           {/* ── Left Editor Sidebar Panel (Form Controls) ── */}
           <Col xs={24} xl={10}>
@@ -635,19 +662,45 @@ const CertificateTemplateEditor = () => {
                       <Upload
                         accept="image/*"
                         showUploadList={false}
-                        customRequest={(opts) => handleUpload(opts, 'letterheadUrl', setUploadingLh)}
+                        customRequest={(opts) => handleUpload(opts, 'letterhead', setUploadingLh)}
                       >
                         <Button icon={<UploadOutlined />} loading={uploadingLh}>Upload Image</Button>
                       </Upload>
                       {previewState.letterheadUrl && (
                         <Button danger icon={<DeleteOutlined />} onClick={() => {
                           form.setFieldValue('letterheadUrl', null);
-                          setPreviewState(prev => ({ ...prev, letterheadUrl: null }));
+                          form.setFieldValue('letterheadPublicId', null);
+                          setPreviewState(prev => ({ ...prev, letterheadUrl: null, letterheadPublicId: null }));
                         }}>Remove</Button>
                       )}
                     </div>
                     {previewState.letterheadUrl && (
                       <img src={previewState.letterheadUrl} alt="Lh Preview" style={{ maxWidth: '100%', maxHeight: 40, marginTop: 8, objectFit: 'contain', border: '1px solid #cbd5e1', padding: 2 }} />
+                    )}
+                  </div>
+
+                  {/* Logo Upload */}
+                  <div style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Custom Logo Image</Text>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <Upload
+                        accept="image/*"
+                        showUploadList={false}
+                        customRequest={(opts) => handleUpload(opts, 'logo', setUploadingLogo)}
+                      >
+                        <Button icon={<UploadOutlined />} loading={uploadingLogo}>Upload Image</Button>
+                      </Upload>
+                      {(previewState.logoUrl || previewState.customLogoUrl) && (
+                        <Button danger icon={<DeleteOutlined />} onClick={() => {
+                          form.setFieldValue('logoUrl', null);
+                          form.setFieldValue('logoPublicId', null);
+                          form.setFieldValue('customLogoUrl', null);
+                          setPreviewState(prev => ({ ...prev, logoUrl: null, logoPublicId: null, customLogoUrl: null }));
+                        }}>Remove</Button>
+                      )}
+                    </div>
+                    {(previewState.logoUrl || previewState.customLogoUrl) && (
+                      <img src={previewState.logoUrl || previewState.customLogoUrl} alt="Logo Preview" style={{ maxHeight: 35, marginTop: 8, objectFit: 'contain', border: '1px solid #cbd5e1', padding: 2 }} />
                     )}
                   </div>
 
@@ -658,14 +711,15 @@ const CertificateTemplateEditor = () => {
                       <Upload
                         accept="image/*"
                         showUploadList={false}
-                        customRequest={(opts) => handleUpload(opts, 'signatureUrl', setUploadingSig)}
+                        customRequest={(opts) => handleUpload(opts, 'signature', setUploadingSig)}
                       >
                         <Button icon={<UploadOutlined />} loading={uploadingSig}>Upload Image</Button>
                       </Upload>
                       {previewState.signatureUrl && (
                         <Button danger icon={<DeleteOutlined />} onClick={() => {
                           form.setFieldValue('signatureUrl', null);
-                          setPreviewState(prev => ({ ...prev, signatureUrl: null }));
+                          form.setFieldValue('signaturePublicId', null);
+                          setPreviewState(prev => ({ ...prev, signatureUrl: null, signaturePublicId: null }));
                         }}>Remove</Button>
                       )}
                     </div>
@@ -751,16 +805,28 @@ const CertificateTemplateEditor = () => {
                       <img src={previewState.letterheadUrl} alt="Lh Preview" style={{ width: '100%', maxHeight: 80, objectFit: 'contain' }} />
                     </div>
                   ) : previewState.useSchoolLetterhead !== false ? (
-                    <div style={{ textAlign: 'center', marginBottom: 20, paddingBottom: 12, borderBottom: '2px solid #cbd5e1' }}>
-                      <Text style={{ fontSize: 16, fontWeight: 700, color: previewState.textColor || '#c2410c', display: 'block' }}>
-                        VIKRAMASILA MODEL SCHOOL
-                      </Text>
-                      <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>
-                        12, Mahatma Gandhi Road, Bangalore, Karnataka - 560001
-                      </Text>
-                      <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>
-                        Phone: +91 80 2345 6789 | Email: contact@vms.edu.in
-                      </Text>
+                    <div style={{ textAlign: 'center', marginBottom: 20, paddingBottom: 12, borderBottom: `2px solid ${previewState.textColor || '#cbd5e1'}` }}>
+                      {(previewState.logoUrl || previewState.customLogoUrl) && (
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+                          <img
+                            src={previewState.logoUrl || previewState.customLogoUrl}
+                            alt="Logo"
+                            style={{ height: 50, objectFit: 'contain' }}
+                          />
+                        </div>
+                      )}
+                      <div style={{ fontSize: 16, fontWeight: 700, color: previewState.textColor || '#c2410c', textTransform: 'uppercase', fontFamily: '"Times New Roman", Times, serif', display: 'block' }}>
+                        V.S.S. ENGLISH MEDIUM SCHOOL MUDDUR
+                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#0f172a', margin: '2px 0', display: 'block' }}>
+                        (Affiliated to CBSE- No :831481)
+                      </div>
+                      <div style={{ fontSize: 9, color: '#64748b', display: 'block' }}>
+                        Muddur, Nalkur Post & Village, Brahmavara Taluk
+                      </div>
+                      <div style={{ fontSize: 9, color: '#64748b', display: 'block' }}>
+                        Udupi District, Karnataka-576234
+                      </div>
                     </div>
                   ) : (
                     <div style={{ height: 15 }} />

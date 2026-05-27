@@ -318,6 +318,15 @@ const CertificatePreviewPane = ({ data }) => {
               textAlign: 'center', marginBottom: 24, paddingBottom: 16,
               borderBottom: '2px solid #e2e8f0',
             }}>
+              {(template.logoUrl || template.customLogoUrl) && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+                  <img
+                    src={template.logoUrl || template.customLogoUrl}
+                    alt="School Logo"
+                    style={{ height: 50, objectFit: 'contain' }}
+                  />
+                </div>
+              )}
               <Text style={{ fontSize: 18, fontWeight: 700, color: primaryColor, display: 'block' }}>
                 {variables.schoolName}
               </Text>

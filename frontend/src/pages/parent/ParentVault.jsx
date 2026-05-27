@@ -22,7 +22,10 @@ const ParentVault = () => {
 
   // Extract student ID from user's linked entity
   useEffect(() => {
-    const linked = user?.linkedEntity?.linkedStudents?.[0] || user?.linkedStudents?.[0];
+    const allLinked = user?.linkedEntity?.linkedStudents || user?.linkedStudents || [];
+    const storedIdx = parseInt(localStorage.getItem('vms_selected_child_idx') || '0', 10);
+    const safeIdx = allLinked.length > 0 ? Math.min(Math.max(0, storedIdx), allLinked.length - 1) : 0;
+    const linked = allLinked[safeIdx];
     const sid = typeof linked === 'string' ? linked : linked?._id || null;
     if (sid) {
       setStudentId(sid);

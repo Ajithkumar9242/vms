@@ -53,8 +53,9 @@ const OtpLogin = () => {
   const [error, setError] = useState('');
   const [resendCd, setResendCd] = useState(0);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false); // kept for compat, not shown to user
   const otpRefs = useRef([]);
+  const isSending = useRef(false);
 
   // Role-aware redirect if already logged in
   useEffect(() => {
@@ -88,13 +89,14 @@ const OtpLogin = () => {
   };
 
   const handleSendOtp = async () => {
-    if (loading || storeLoading) return;
+    if (isSending.current || loading || storeLoading) return;
     const digits = phone.replace(/\D/g, '');
     if (digits.length !== 10) {
       setError('Please enter a valid 10-digit mobile number');
       return;
     }
     setError('');
+    isSending.current = true;
     setLoading(true);
     console.log(`[OTP] OTP request start for phone: ${digits}`);
 
@@ -106,6 +108,7 @@ const OtpLogin = () => {
       if (!checkData.user_found) {
         setError('This phone number is not registered in the system.');
         console.error(`[OTP] OTP request failure: Number not registered`);
+        isSending.current = false;
         setLoading(false);
         return;
       }
@@ -115,14 +118,7 @@ const OtpLogin = () => {
       const resData = res.data || res;
       console.log(`[OTP] OTP request success:`, resData);
       
-      if (resData.message && resData.message.toLowerCase().includes('demo')) {
-        setIsDemoMode(true);
-        message.info('Demo mode: Use test OTP 123456');
-      } else {
-        setIsDemoMode(false);
-        message.success('OTP sent successfully');
-      }
-
+      message.success('OTP sent successfully');
       setStep(1);
       startCountdown();
     } catch (e) {
@@ -130,13 +126,15 @@ const OtpLogin = () => {
       console.error(`[OTP] OTP request failure:`, errMsg);
       setError(errMsg);
     } finally {
+      isSending.current = false;
       setLoading(false);
     }
   };
 
   const handleVerifyOtp = async () => {
-    if (otpValue.length !== 6 || loading || storeLoading) return;
+    if (otpValue.length !== 6 || isSending.current || loading || storeLoading) return;
     setError('');
+    isSending.current = true;
     setLoading(true);
     console.log(`[OTP] Verification request start`);
 
@@ -163,14 +161,16 @@ const OtpLogin = () => {
       setOtp(['', '', '', '', '', '']);
       otpRefs.current[0]?.focus();
     } finally {
+      isSending.current = false;
       setLoading(false);
     }
   };
 
   const handleResend = async () => {
-    if (resendCd > 0 || loading || storeLoading) return;
+    if (resendCd > 0 || isSending.current || loading || storeLoading) return;
     setError('');
     setOtp(['', '', '', '', '', '']);
+    isSending.current = true;
     setLoading(true);
     const digits = phone.replace(/\D/g, '');
     console.log(`[OTP] OTP resend request start for phone: ${digits}`);
@@ -179,20 +179,14 @@ const OtpLogin = () => {
       const resData = res.data || res;
       console.log(`[OTP] OTP resend request success:`, resData);
       
-      if (resData.message && resData.message.toLowerCase().includes('demo')) {
-        setIsDemoMode(true);
-        message.info('Demo mode: Use test OTP 123456');
-      } else {
-        setIsDemoMode(false);
-        message.success('OTP resent successfully');
-      }
-      
+      message.success('OTP resent successfully');
       startCountdown();
     } catch (e) {
       const errMsg = e.response?.data?.message || e.message || 'Failed to resend OTP';
       console.error(`[OTP] OTP resend request failure:`, errMsg);
       setError(errMsg);
     } finally {
+      isSending.current = false;
       setLoading(false);
     }
   };
@@ -234,15 +228,6 @@ const OtpLogin = () => {
           </Steps>
 
           {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />}
-          {isDemoMode && (
-            <Alert 
-              type="info" 
-              message="Demo Mode Enabled" 
-              description="Use static test OTP: 123456 to login."
-              showIcon 
-              style={{ marginBottom: 16 }} 
-            />
-          )}
 
           {/* Step 0: Input mobile */}
           {step === 0 && (
