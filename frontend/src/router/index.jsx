@@ -46,6 +46,7 @@ const OnlineAdmissionPage = React.lazy(() => import('@/pages/admissions/OnlineAd
 const ApplicationStatusPage = React.lazy(() => import('@/pages/admissions/ApplicationStatus'));
 const ParentLoginPage = React.lazy(() => import('@/pages/auth/ParentLogin'));
 const FacultyLoginPage = React.lazy(() => import('@/pages/auth/FacultyLogin'));
+const OtpLoginPage = React.lazy(() => import('@/pages/auth/OtpLogin'));
 
 // ─── Parent Mobile App ─────────────────────────────────────
 const ParentDashboard = React.lazy(() => import('@/pages/parent/ParentDashboard'));
@@ -66,6 +67,11 @@ const StudentVaultAdmin = React.lazy(() => import('@/pages/vault/StudentVaultAdm
 const PosItemCatalogAdmin = React.lazy(() => import('@/pages/pos/PosItemCatalogAdmin'));
 const PosBilling = React.lazy(() => import('@/pages/pos/PosBilling'));
 const InvoiceRegistry = React.lazy(() => import('@/pages/invoices/InvoiceRegistry'));
+
+// ─── Certificate Module ────────────────────────────────────────
+const CertificateTemplates = React.lazy(() => import('@/pages/certificates/CertificateTemplates'));
+const CertificateTemplateEditor = React.lazy(() => import('@/pages/certificates/CertificateTemplateEditor'));
+const PrintCertificate = React.lazy(() => import('@/pages/certificates/PrintCertificate'));
 
 // ─── Faculty Mobile App ────────────────────────────────────
 const FacultyAttendance = React.lazy(() => import('@/pages/faculty/FacultyAttendance'));
@@ -131,6 +137,8 @@ const AppRouter = () => (
         <Route path="/faculty/login" element={<FacultyLoginPage />} />
         <Route path="/online-admission" element={<OnlineAdmissionPage />} />
         <Route path="/admission-status" element={<ApplicationStatusPage />} />
+        <Route path="/otp-login" element={<OtpLoginPage />} />
+        <Route path="/login/otp" element={<OtpLoginPage />} />
 
         {/* ── Parent Mobile App ──────────────────────────── */}
         {/* Safety: non-parent users hitting /parent/* get redirected to login */}
@@ -243,6 +251,16 @@ const AppRouter = () => (
             element={<RoleRoute roles={HIGH_PRIV}><DocumentCatalogAdmin /></RoleRoute>} />
           <Route path="/vault/students"
             element={<RoleRoute roles={HIGH_PRIV}><StudentVaultAdmin /></RoleRoute>} />
+
+          {/* ── Certificate Module ───────────────────────────── */}
+          <Route path="/certificates/templates"
+            element={<RoleRoute roles={HIGH_PRIV}><CertificateTemplates /></RoleRoute>} />
+          <Route path="/certificates/templates/new"
+            element={<RoleRoute roles={['super_admin','admin','principal']}><CertificateTemplateEditor /></RoleRoute>} />
+          <Route path="/certificates/templates/:id/edit"
+            element={<RoleRoute roles={['super_admin','admin','principal']}><CertificateTemplateEditor /></RoleRoute>} />
+          <Route path="/certificates/print"
+            element={<RoleRoute roles={HIGH_PRIV}><PrintCertificate /></RoleRoute>} />
 
           {/* ── Setup — SETUP_ROLES only (super_admin + admin) ── */}
           <Route path="/setup"

@@ -137,6 +137,10 @@ export const authAPI = {
   // Faculty OTP login
   sendFacultyOtp: (phone) => api.post('/auth/faculty/otp/send', { phone }),
   verifyFacultyOtp: (phone, otp) => api.post('/auth/faculty/otp/verify', { phone, otp }),
+  // General OTP login (Parent, Admin, Faculty)
+  checkUser: (identifier) => api.get('/auth/check-user', { params: { identifier } }),
+  sendOtpGeneral: (phone) => api.post('/auth/send-otp', { phone }),
+  verifyOtpGeneral: (phone, otp) => api.post('/auth/verify-otp', { phone, otp }),
   // Token management
   refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
   logout: () => api.post('/auth/logout'),
@@ -609,6 +613,24 @@ export const timetableAPI = {
   create:       (data)      => api.post('/timetable', data),
   update:       (id, data)  => api.put(`/timetable/${id}`, data),
   remove:       (id)        => api.delete(`/timetable/${id}`),
+};
+
+// ─── Certificates ─────────────────────────────────────────────
+export const certificateAPI = {
+  // Templates
+  getTemplates:   ()          => api.get('/certificates/templates'),
+  getTemplate:    (id)        => api.get(`/certificates/templates/${id}`),
+  createTemplate: (data)      => api.post('/certificates/templates', data),
+  updateTemplate: (id, data)  => api.patch(`/certificates/templates/${id}`, data),
+  deleteTemplate: (id)        => api.delete(`/certificates/templates/${id}`),
+  // Preview (returns resolved variable data as JSON)
+  preview:        (templateId, studentId) =>
+    api.get('/certificates/preview', { params: { templateId, studentId } }),
+  // PDF download URL (with auth token so streaming works)
+  getPdfUrl: (templateId, studentId) => {
+    const token = localStorage.getItem('vms_token');
+    return `${API_BASE_URL}/certificates/pdf?templateId=${templateId}&studentId=${studentId}${token ? '&token=' + encodeURIComponent(token) : ''}`;
+  },
 };
 
 export default api;

@@ -140,6 +140,17 @@ const Login = () => {
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
           </Form.Item>
+
+          <div style={{ textAlign: 'center', marginTop: 12 }}>
+            <Button
+              type="link"
+              onClick={() => navigate('/otp-login')}
+              style={{ padding: 0, color: ERP_COLORS.primary }}
+              id="btn-switch-otp-login"
+            >
+              Sign in with OTP / Mobile
+            </Button>
+          </div>
         </Form>
 
         {/* Other Portals Divider */}

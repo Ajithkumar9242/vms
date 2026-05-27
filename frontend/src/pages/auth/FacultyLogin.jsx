@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Card, Form, Input, Button, Typography, Alert,
   Steps, Divider, Modal, ConfigProvider,
@@ -57,22 +57,14 @@ const FacultyLogin = () => {
   const [otp, setOtp]       = useState(['', '', '', '', '', '']);
   const otpRefs = useRef([]);
 
-  const otpValue = otp.join('');
-
-  // ─── Demo popup (once per session) ─────────────────────────
+  // Timer countdown
   useEffect(() => {
-    const key = 'vms_otp_demo_shown_faculty';
-    if (!sessionStorage.getItem(key)) {
-      sessionStorage.setItem(key, '1');
-      Modal.info({
-        title: 'Demo mode enabled',
-        content: 'Demo mode enabled. Use test OTP: 123456',
-        okText: 'Got it',
-        centered: true,
-      });
-    }
-  }, []);
-
+    if (resendCd <= 0) return;
+    const timer = setTimeout(() => {
+      setResendCd(prev => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [resendCd]);
 
   const handleOtpChange = (index, value) => {
     if (!/^\d?$/.test(value)) return;
@@ -83,42 +75,51 @@ const FacultyLogin = () => {
     if (!value && index > 0) otpRefs.current[index - 1]?.focus();
   };
 
+  const otpValue = otp.join('');
+
   const startCountdown = () => {
     setResendCd(30);
-    const interval = setInterval(() => {
-      setResendCd(p => { if (p <= 1) { clearInterval(interval); return 0; } return p - 1; });
-    }, 1000);
   };
 
   const handleSendOtp = async () => {
+    if (loading) return;
     const digits = phone.replace(/\D/g, '');
     if (digits.length !== 10) { setError('Please enter a valid 10-digit mobile number'); return; }
     setError('');
     setLoading(true);
+    console.log(`[OTP] OTP request start for faculty phone: ${digits}`);
     try {
-      Modal.info({
-        title: 'Demo mode enabled',
-        content: 'Demo mode enabled. Use test OTP: 123456',
-        okText: 'Got it',
-        centered: true,
-      });
-      await authAPI.sendFacultyOtp(digits);
+      const res = await authAPI.sendFacultyOtp(digits);
+      const data = res.data || res;
+      console.log(`[OTP] OTP request success:`, data);
+      if (data.message && data.message.toLowerCase().includes('demo')) {
+        Modal.info({
+          title: 'Demo Mode Enabled',
+          content: data.message,
+          okText: 'Got it',
+          centered: true,
+        });
+      }
       setStep(1);
       startCountdown();
     } catch (e) {
-      setError(e.response?.data?.message || e.message || 'Failed to send OTP');
+      const errMsg = e.response?.data?.message || e.message || 'Failed to send OTP';
+      console.error(`[OTP] OTP request failure:`, errMsg);
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
   };
 
   const handleVerifyOtp = async () => {
-    if (otpValue.length !== 6) { setError('Please enter the complete 6-digit OTP'); return; }
+    if (otpValue.length !== 6 || loading) return;
     setError('');
     setLoading(true);
+    console.log(`[OTP] Verification request start`);
     try {
       const res  = await authAPI.verifyFacultyOtp(phone.replace(/\D/g, ''), otpValue);
       const data = res.data || res;
+      console.log(`[OTP] Verification request success`);
       const token = data.token || data.accessToken;
       if (!token) throw new Error('Token missing from verify response');
 
@@ -132,7 +133,9 @@ const FacultyLogin = () => {
       // Redirect to faculty app
       navigate('/faculty-app/dashboard', { replace: true });
     } catch (e) {
-      setError(e.response?.data?.message || e.message || 'Invalid OTP');
+      const verifyError = e.response?.data?.message || e.message || 'Invalid OTP';
+      console.error(`[OTP] Verification request failure:`, verifyError);
+      setError(verifyError);
       setOtp(['', '', '', '', '', '']);
       otpRefs.current[0]?.focus();
     } finally {
@@ -141,21 +144,29 @@ const FacultyLogin = () => {
   };
 
   const handleResend = async () => {
-    if (resendCd > 0) return;
+    if (resendCd > 0 || loading) return;
     setError('');
     setOtp(['', '', '', '', '', '']);
     setLoading(true);
+    const digits = phone.replace(/\D/g, '');
+    console.log(`[OTP] OTP resend request start for faculty phone: ${digits}`);
     try {
-      Modal.info({
-        title: 'Demo mode enabled',
-        content: 'Demo mode enabled. Use test OTP: 123456',
-        okText: 'Got it',
-        centered: true,
-      });
-      await authAPI.sendFacultyOtp(phone.replace(/\D/g, ''));
+      const res = await authAPI.sendFacultyOtp(digits);
+      const data = res.data || res;
+      console.log(`[OTP] OTP resend request success:`, data);
+      if (data.message && data.message.toLowerCase().includes('demo')) {
+        Modal.info({
+          title: 'Demo Mode Enabled',
+          content: data.message,
+          okText: 'Got it',
+          centered: true,
+        });
+      }
       startCountdown();
     } catch (e) {
-      setError(e.response?.data?.message || e.message || 'Failed to resend');
+      const errMsg = e.response?.data?.message || e.message || 'Failed to resend';
+      console.error(`[OTP] OTP resend request failure:`, errMsg);
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
@@ -231,6 +242,7 @@ const FacultyLogin = () => {
                 block
                 size="large"
                 loading={loading}
+                disabled={loading}
                 style={{
                   borderRadius: 10, height: 48, fontSize: 15, fontWeight: 600,
                   background: `linear-gradient(135deg, ${ERP_COLORS.primaryActive}, ${ERP_COLORS.primary})`,
@@ -306,7 +318,7 @@ const FacultyLogin = () => {
               size="large"
               loading={loading}
               onClick={handleVerifyOtp}
-              disabled={otpValue.length < 6}
+              disabled={otpValue.length < 6 || loading}
               style={{
                 borderRadius: 10, height: 48, fontSize: 15, fontWeight: 600,
                 background: `linear-gradient(135deg, ${ERP_COLORS.primaryActive}, ${ERP_COLORS.primary})`,
@@ -321,7 +333,7 @@ const FacultyLogin = () => {
               <Button
                 type="link"
                 icon={<ReloadOutlined />}
-                disabled={resendCd > 0}
+                disabled={resendCd > 0 || loading}
                 onClick={handleResend}
                 loading={loading}
               >

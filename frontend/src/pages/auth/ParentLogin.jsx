@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Card, Form, Input, Button, Typography, Alert,
   Steps, Divider, Modal, ConfigProvider,
@@ -53,20 +53,15 @@ const ParentLogin = () => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const otpRefs = useRef([]);
 
-  // ─── Demo popup (once per session) ─────────────────────────
-  useEffect(() => {
-    const key = 'vms_otp_demo_shown_parent';
-    if (!sessionStorage.getItem(key)) {
-      sessionStorage.setItem(key, '1');
-      Modal.info({
-        title: 'Demo mode enabled',
-        content: 'Demo mode enabled. Use test OTP: 123456',
-        okText: 'Got it',
-        centered: true,
-      });
-    }
-  }, []);
 
+  // Timer countdown
+  useEffect(() => {
+    if (resendCd <= 0) return;
+    const timer = setTimeout(() => {
+      setResendCd(prev => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [resendCd]);
 
   // ─── OTP input handling ─────────────────────────────────
   const handleOtpChange = (index, value) => {
@@ -83,29 +78,34 @@ const ParentLogin = () => {
   // ─── Start resend countdown ──────────────────────────────
   const startCountdown = () => {
     setResendCd(30);
-    const interval = setInterval(() => {
-      setResendCd(p => { if (p <= 1) { clearInterval(interval); return 0; } return p - 1; });
-    }, 1000);
   };
 
   // ─── Send OTP ────────────────────────────────────────────
   const handleSendOtp = async () => {
+    if (loading) return;
     const digits = phone.replace(/\D/g, '');
     if (digits.length !== 10) { setError('Please enter a valid 10-digit mobile number'); return; }
     setError('');
     setLoading(true);
+    console.log(`[OTP] OTP request start for parent phone: ${digits}`);
     try {
-      Modal.info({
-        title: 'Demo mode enabled',
-        content: 'Demo mode enabled. Use test OTP: 123456',
-        okText: 'Got it',
-        centered: true,
-      });
-      await authAPI.sendOtp(digits);
+      const res = await authAPI.sendOtp(digits);
+      const data = res.data || res;
+      console.log(`[OTP] OTP request success:`, data);
+      if (data.message && data.message.toLowerCase().includes('demo')) {
+        Modal.info({
+          title: 'Demo Mode Enabled',
+          content: data.message,
+          okText: 'Got it',
+          centered: true,
+        });
+      }
       setStep(1);
       startCountdown();
     } catch (e) {
-      setError(e.response?.data?.message || e.message || 'Failed to send OTP');
+      const errMsg = e.response?.data?.message || e.message || 'Failed to send OTP';
+      console.error(`[OTP] OTP request failure:`, errMsg);
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
@@ -113,12 +113,14 @@ const ParentLogin = () => {
 
   // ─── Verify OTP ───────────────────────────────────────────
   const handleVerifyOtp = async () => {
-    if (otpValue.length !== 6) { setError('Please enter the complete 6-digit OTP'); return; }
+    if (otpValue.length !== 6 || loading) return;
     setError('');
     setLoading(true);
+    console.log(`[OTP] Verification request start`);
     try {
       const res = await authAPI.verifyOtp(phone.replace(/\D/g, ''), otpValue);
       const data = res.data || res;
+      console.log(`[OTP] Verification request success`);
 
       const token = data.token || data.accessToken;
       if (!token) throw new Error('Token missing from OTP verify response');
@@ -132,11 +134,10 @@ const ParentLogin = () => {
       sessionStorage.removeItem('erp_parent_splash_session_seen');
 
       navigate('/parent/dashboard', { replace: true });
-      // // Update auth store
-      // if (data.user) setUser(data.user);
-      // navigate('/parent/dashboard');
     } catch (e) {
-      setError(e.response?.data?.message || e.message || 'Invalid OTP');
+      const verifyError = e.response?.data?.message || e.message || 'Invalid OTP';
+      console.error(`[OTP] Verification request failure:`, verifyError);
+      setError(verifyError);
       setOtp(['', '', '', '', '', '']);
       otpRefs.current[0]?.focus();
     } finally {
@@ -146,21 +147,29 @@ const ParentLogin = () => {
 
   // ─── Resend OTP ───────────────────────────────────────────
   const handleResend = async () => {
-    if (resendCd > 0) return;
+    if (resendCd > 0 || loading) return;
     setError('');
     setOtp(['', '', '', '', '', '']);
     setLoading(true);
+    const digits = phone.replace(/\D/g, '');
+    console.log(`[OTP] OTP resend request start for parent phone: ${digits}`);
     try {
-      Modal.info({
-        title: 'Demo mode enabled',
-        content: 'Demo mode enabled. Use test OTP: 123456',
-        okText: 'Got it',
-        centered: true,
-      });
-      await authAPI.sendOtp(phone.replace(/\D/g, ''));
+      const res = await authAPI.sendOtp(digits);
+      const data = res.data || res;
+      console.log(`[OTP] OTP resend request success:`, data);
+      if (data.message && data.message.toLowerCase().includes('demo')) {
+        Modal.info({
+          title: 'Demo Mode Enabled',
+          content: data.message,
+          okText: 'Got it',
+          centered: true,
+        });
+      }
       startCountdown();
     } catch (e) {
-      setError(e.response?.data?.message || e.message || 'Failed to resend');
+      const errMsg = e.response?.data?.message || e.message || 'Failed to resend';
+      console.error(`[OTP] OTP resend request failure:`, errMsg);
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
@@ -235,6 +244,7 @@ const ParentLogin = () => {
                 block
                 size="large"
                 loading={loading}
+                disabled={loading}
                 style={{ borderRadius: 10, height: 48, fontSize: 15, fontWeight: 600 }}
                 id="btn-send-otp"
               >
@@ -304,7 +314,7 @@ const ParentLogin = () => {
               size="large"
               loading={loading}
               onClick={handleVerifyOtp}
-              disabled={otpValue.length < 6}
+              disabled={otpValue.length < 6 || loading}
               style={{ borderRadius: 10, height: 48, fontSize: 15, fontWeight: 600 }}
               id="btn-verify-otp"
             >
@@ -315,7 +325,7 @@ const ParentLogin = () => {
               <Button
                 type="link"
                 icon={<ReloadOutlined />}
-                disabled={resendCd > 0}
+                disabled={resendCd > 0 || loading}
                 onClick={handleResend}
                 loading={loading}
               >

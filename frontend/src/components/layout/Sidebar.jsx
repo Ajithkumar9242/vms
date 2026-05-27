@@ -24,6 +24,7 @@ import {
   FileSearchOutlined,
   EditOutlined,
   TableOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '@/store/authStore';
@@ -164,6 +165,21 @@ const allMenuItems = [
     key: '/vault/students',
     icon: <FolderOpenOutlined />,
     label: 'Student Vault',
+    roles: HIGH_PRIV,
+  },
+
+  // ── Certificates ─────────────────────────────────────
+  { type: 'divider', roles: HIGH_PRIV },
+  {
+    key: '/certificates/templates',
+    icon: <SafetyCertificateOutlined />,
+    label: 'Certificates',
+    roles: HIGH_PRIV,
+  },
+  {
+    key: '/certificates/print',
+    icon: <FileTextOutlined />,
+    label: 'Print Certificate',
     roles: HIGH_PRIV,
   },
 

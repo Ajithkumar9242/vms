@@ -27,6 +27,24 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
+  loginWithOtp: async (phone, otp) => {
+    set({ loading: true });
+    try {
+      const res = await authAPI.verifyOtpGeneral(phone, otp);
+      const data = res.data || res;
+      const { user, token, refreshToken } = data;
+      get().setAuth(user, token);
+      if (refreshToken) {
+        localStorage.setItem('vms_refresh_token', refreshToken);
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error.message };
+    } finally {
+      set({ loading: false });
+    }
+  },
+
   fetchMe: async () => {
     try {
       const res = await authAPI.getMe();
